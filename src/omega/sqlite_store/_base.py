@@ -24,6 +24,41 @@ from ._types import (
 logger = logging.getLogger("omega.sqlite_store")
 
 
+# Free-tier capacity gates. Module-level so a runtime monkey-patch of a
+# SQLiteStore instance attribute cannot raise the cap; the property on
+# SQLiteStoreBase always re-reads these unless an explicit override field
+# is set (tests only).
+#
+# Pro path: when omega_platform.license.is_pro() returns True the
+# OMEGA_MAX_NODES env var is honored (default 50000). Pro users keep the
+# existing env-tunable behavior.
+#
+# Free path: the env var is IGNORED. The hard write cap is _CORE_HARD_LIMIT
+# (5000). Per-instance grandfathering on the property lifts the ceiling to
+# the current count for installs that already exceed 5K, so existing Free
+# users do not suddenly hit a write wall after upgrading omega-memory.
+_CORE_HARD_LIMIT = 5000
+
+
+def _get_effective_max_nodes() -> int:
+    """Hard write cap for this process.
+
+    Pro: ``OMEGA_MAX_NODES`` env (default 50000). Free: ``_CORE_HARD_LIMIT``;
+    the env var is ignored so a free user cannot set ``OMEGA_MAX_NODES=99999``
+    to bypass the cap.
+    """
+    try:
+        from omega_platform.license import is_pro
+
+        if is_pro():
+            return int(os.environ.get("OMEGA_MAX_NODES", "50000"))
+    except ImportError:
+        pass
+    except Exception as e:
+        logger.debug("is_pro() check failed in _get_effective_max_nodes: %s", e)
+    return _CORE_HARD_LIMIT
+
+
 class SQLiteStoreBase:
     """SQLite-backed memory store with sqlite-vec for vector search.
 
@@ -233,8 +268,51 @@ class SQLiteStoreBase:
     DEFAULT_JACCARD_DEDUP_THRESHOLD = 0.80
 
     # Input size limits (configurable via env vars)
-    _MAX_NODES = int(os.environ.get("OMEGA_MAX_NODES", "50000"))
     _MAX_CONTENT_SIZE = int(os.environ.get("OMEGA_MAX_CONTENT_SIZE", "1000000"))  # 1MB
+
+    @property
+    def _MAX_NODES(self) -> int:
+        """Effective hard write cap. Re-reads license state per access.
+
+        Pro: ``OMEGA_MAX_NODES`` env (default 50000).
+        Free: ``_CORE_HARD_LIMIT`` (5000); the env var is ignored so a free
+        user cannot set ``OMEGA_MAX_NODES=99999`` to bypass the cap.
+
+        Grandfathering for Free installs that already exceed the Free cap
+        is applied at the capacity-check site in ``_store.py`` (see
+        ``_apply_grandfather`` and the store() write path). It lives there
+        instead of inside this property so the existing capacity-check
+        COUNT(*) query can be reused — running two sequential COUNT(*)
+        queries inside a single store() call upset older SQLite libraries
+        (Ubuntu CI 3.40-class) by leaving a prepared statement in
+        progress between them.
+
+        Test override: set ``self._max_nodes_override = <int>`` on the
+        instance to force a specific cap value (bypasses the Pro check).
+        Production callers should not set this attribute.
+        """
+        override = getattr(self, "_max_nodes_override", None)
+        if override is not None:
+            return override
+        return _get_effective_max_nodes()
+
+    def _apply_grandfather(self, base_max: int, count: int) -> int:
+        """Return the effective per-instance cap, raising the Free ceiling
+        for installs that already exceed _CORE_HARD_LIMIT. Caches the
+        result on the instance so subsequent writes don't keep growing
+        the ceiling — the intent is "your existing memories stay
+        writable, but you do not get new growth headroom on Free."
+        Pro callers (base_max != _CORE_HARD_LIMIT) get base_max
+        unchanged. ``count`` is passed in by the caller's already-needed
+        capacity-check query so this method does no I/O.
+        """
+        if base_max != _CORE_HARD_LIMIT:
+            return base_max
+        grand = getattr(self, "_grandfather_max", None)
+        if grand is None:
+            grand = max(base_max, count)
+            self._grandfather_max = grand
+        return grand
 
     def __init__(self, db_path=None, decompose_queries: bool = True):
         omega_home = Path(os.environ.get("OMEGA_HOME", str(Path.home() / ".omega")))

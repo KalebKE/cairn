@@ -84,20 +84,63 @@ class StoreMixin:
                 logger.debug("Embedding dedup pre-check failed: %s", e)
 
         with self._lock:
-            # Capacity check (inside lock — queries shared connection)
+            # Capacity check (inside lock — queries shared connection).
+            # _MAX_NODES re-reads license state per access via the property
+            # on SQLiteStoreBase, so a mid-session Pro activation lifts the
+            # cap within the is_pro() TTL window. Error/warning copy splits
+            # Pro vs Free so the message is actionable on the right path.
+            #
+            # ONE COUNT(*) query — the count is reused for both the
+            # capacity check and the grandfather computation, so we do not
+            # leave two prepared statements in flight on older SQLite.
+            #
+            # Defensive coercion of the COUNT row: on Python 3.12 + older
+            # SQLite (Ubuntu CI 3.40-class), this cursor occasionally
+            # yields a None first column even though COUNT(*) cannot
+            # legitimately return NULL. Treating the result as 0 fails
+            # safe: the capacity check below skips, no write block, and
+            # the next store() retries the probe. A latent failure that
+            # only surfaced after Sprint 0 (PR #59) unblocked CI past
+            # the prior import_from_file stop point.
             self._capacity_warning = None
-            if self._MAX_NODES > 0:
-                count = self._exec("SELECT COUNT(*) FROM memories").fetchone()[0]
-                if count >= self._MAX_NODES:
+            base_max = self._MAX_NODES
+            if base_max > 0:
+                row = self._exec("SELECT COUNT(*) FROM memories").fetchone()
+                count = row[0] if row and row[0] is not None else 0
+                max_nodes = self._apply_grandfather(base_max, count)
+                is_pro_user = False
+                try:
+                    from omega_platform.license import is_pro
+                    is_pro_user = is_pro()
+                except ImportError:
+                    pass
+                except Exception as e:
+                    logger.debug("is_pro() check failed in capacity: %s", e)
+                if count >= max_nodes:
+                    if is_pro_user:
+                        raise StorageError(
+                            f"Node count ({count:,}) has reached the limit ({max_nodes:,}). "
+                            "Run omega_consolidate to prune, or raise OMEGA_MAX_NODES env var."
+                        )
                     raise StorageError(
-                        f"Node count ({count:,}) has reached the limit ({self._MAX_NODES:,}). "
-                        "Run omega_consolidate to prune, or raise OMEGA_MAX_NODES env var."
+                        f"Free tier write cap reached ({count:,}/{max_nodes:,} memories). "
+                        "Existing memories remain queryable. "
+                        "Upgrade to Pro for unlimited memories + full retrieval quality: "
+                        "https://omegamax.co/pro?ref=core-hard-cap"
                     )
-                if count >= int(self._MAX_NODES * 0.9):
-                    self._capacity_warning = (
-                        f"Memory store is at {count:,}/{self._MAX_NODES:,} ({count*100//self._MAX_NODES}% capacity). "
-                        "Consider running omega_consolidate or omega_compact to free space."
-                    )
+                if count >= int(max_nodes * 0.9):
+                    if is_pro_user:
+                        self._capacity_warning = (
+                            f"Memory store is at {count:,}/{max_nodes:,} "
+                            f"({count*100//max_nodes}% capacity). "
+                            "Consider running omega_consolidate or omega_compact to free space."
+                        )
+                    else:
+                        self._capacity_warning = (
+                            f"Free tier near write cap ({count:,}/{max_nodes:,}). "
+                            "Upgrade to Pro to remove the cap: "
+                            "https://omegamax.co/pro?ref=core-cap-warning"
+                        )
                     logger.warning(self._capacity_warning)
             self._invalidate_query_cache(new_content=content)
             # Canonical dedup (#6): catch reformatted duplicates
