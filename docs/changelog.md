@@ -7,14 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-06-09
+
 ### Added
+- **Free-tier conversion funnel**: Milestone CTAs surfaced at 500 / 1,000 / 1,500 / 2,000
+  captured memories with upgrade links to `omegamax.co/pro`. License-aware: Pro users see
+  clean celebration messages without the upgrade suffix.
+- **Tier-aware memory cap**: Free tier soft cap at 2,000 (retrieval quality degrades) and
+  hard write cap at 5,000 with grandfathering for existing larger DBs. `OMEGA_MAX_NODES`
+  env honored for Pro only. `omega status` exposes `tier` / `soft_cap` / `hard_cap` for
+  Free users.
+- **`OMEGA_AUTO_RELATE` env opt-out**: Parity with `OMEGA_ENTITY_EXTRACTION` — set to
+  `0` / `false` / `off` to disable the auto-relate background thread entirely.
 - **Code review (`omega_review`)**: Multi-agent specialist review panel with 5 agents
   (correctness, security, performance, consistency, blast radius). Hybrid static+LLM
   analysis: 12 deterministic pattern checks (zero false positives) plus LLM for novel
   issues. Memory-powered: uses OMEGA conventions, past incidents, and team preferences
   for context. Confidence gating with strict/normal/verbose modes. Fast `summarize_only`
   mode for risk assessment without LLM. Pre-commit hook at `hooks/pre_review.py`.
-  Standalone engine available separately (see revue).
+
+### Fixed
+- **Concurrent `store()` SIGSEGV** (#58): `find_similar` and `_vec_query` now acquire
+  `self._lock` before touching the sqlite-vec virtual table. Without it, bridge's
+  auto-relate daemon thread raced main-thread writes at the sqlite-vec C-level state,
+  producing reliable `_pysqlite_query_execute` crashes on macOS Python 3.12 / 3.14
+  under concurrent load.
+- **`import_from_file` "SQL statements in progress"** (#59, #61): clear-existing now
+  runs under `self._lock` and forces cursor finalization via `gc.collect()` before the
+  atomic `executescript`. Eliminates the Ubuntu CI 3.40-class SQLite cursor race
+  between the deferred-startup thread and the import path.
+- **MCP Pro tool discovery**: now correctly references the `omega_platform` namespace.
+
+### Tests
+- New `tests/test_concurrent_store_no_sigsegv.py`: subprocess-isolated regression
+  coverage for #58 (8 workers × 40 stores). Subprocess wrapper is required because
+  SIGSEGV is uncatchable in-process.
 
 ## [1.2.0] - 2026-03-04
 
