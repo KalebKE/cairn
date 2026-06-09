@@ -1303,21 +1303,39 @@ class MaintenanceMixin:
         nodes = data.get("nodes", [])
 
         if clear_existing:
-            # Atomic clear+import: use EXCLUSIVE transaction to prevent
-            # concurrent queries from seeing empty DB between clear and import
-            self._conn.execute("BEGIN EXCLUSIVE")
+            # Atomic clear via executescript. WAL mode + isolation_level
+            # ="IMMEDIATE" on the connection (see _base.py:_connect) give
+            # readers a consistent pre-clear snapshot until the COMMIT
+            # inside the script — the original "BEGIN EXCLUSIVE" intent
+            # is satisfied without taking an exclusive lock.
+            #
+            # Why executescript instead of per-statement execute(): older
+            # SQLite libraries (Ubuntu CI ships 3.40-class, local dev
+            # tends to be 3.52+) are stricter about "SQL statements in
+            # progress" at commit time. Per-execute() returns a Cursor
+            # whose prepared statement may stay in PROGRESS until
+            # garbage collection, and the commit then fails with:
+            #
+            #   sqlite3.OperationalError: cannot commit transaction -
+            #     SQL statements in progress
+            #
+            # (omega-public CI failures 2026-05-19 through 2026-06-09.)
+            # executescript batches through SQLite's sqlite3_exec, which
+            # finalizes each prepared statement before the next runs, so
+            # the BEGIN/COMMIT pair inside the script lands atomically
+            # across every supported SQLite version.
+            script = ["BEGIN;", "DELETE FROM memories;"]
+            if self._vec_available:
+                script.append("DELETE FROM memories_vec;")
+            script.extend(["DELETE FROM edges;", "COMMIT;"])
             try:
-                self._conn.execute("DELETE FROM memories")
-                if self._vec_available:
-                    try:
-                        self._conn.execute("DELETE FROM memories_vec")
-                    except Exception as e:
-                        logger.debug("Vec table clear during import failed: %s", e)
-                self._conn.execute("DELETE FROM edges")
-                self._conn.execute("COMMIT")
+                self._conn.executescript(" ".join(script))
             except Exception as e:
                 logger.debug("Import clear failed, rolling back: %s", e)
-                self._conn.execute("ROLLBACK")
+                try:
+                    self._conn.executescript("ROLLBACK;")
+                except Exception:
+                    pass
                 raise
 
         imported = 0
