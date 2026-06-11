@@ -1,8 +1,6 @@
 """Tests for omega.milestones module."""
 
-import os
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -76,6 +74,32 @@ class TestCaptureThresholds:
         msg = check_capture_milestones(100)
         assert msg is not None
         assert "100" in msg
+
+    @pytest.mark.parametrize(
+        ("count", "ref"),
+        [
+            (500, "milestone-500"),
+            (1000, "milestone-1000"),
+            (1500, "milestone-1500"),
+            (2000, "milestone-2000"),
+        ],
+    )
+    def test_free_tier_conversion_milestones_include_upgrade_cta(self, count, ref):
+        from omega.milestones import check_capture_milestones
+
+        msg = check_capture_milestones(count)
+        assert msg is not None
+        assert "omegamax.co/pro" in msg
+        assert ref in msg
+
+    def test_pro_users_do_not_get_conversion_cta(self):
+        from omega.milestones import check_capture_milestones
+
+        msg = check_capture_milestones(2000, is_pro_user=True)
+        assert msg is not None
+        assert "Free-tier soft cap reached" in msg
+        assert "omegamax.co/pro" not in msg
+        assert "Upgrade" not in msg
 
     def test_no_milestone_below_first_threshold(self):
         from omega.milestones import check_capture_milestones

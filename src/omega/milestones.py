@@ -80,10 +80,8 @@ def check_capture_milestones(count: int, *, is_pro_user: bool = False) -> Option
     Iterates descending so the highest crossed threshold fires first.
     Uses >= so thresholds crossed between checks are still caught.
 
-    `is_pro_user` suppresses the Free-tier upgrade CTA suffix. The base
-    celebratory message stays the same so Pro users still see "1,500
-    memories — approaching the Free-tier soft cap" without the upgrade
-    URL. Callers pass `is_pro()` from omega_platform.license.
+    `is_pro_user` suppresses the Free-tier upgrade CTA suffix. Core callers
+    should pass extension capability state here, not local license state.
     """
     for threshold in reversed(CAPTURE_THRESHOLDS):
         if count >= threshold:

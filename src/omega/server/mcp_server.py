@@ -50,11 +50,10 @@ HANDLERS = dict(_CORE_HANDLERS)
 
 # Built-in optional modules (coordination, router, profile, knowledge, entity,
 # oracle, typed memory, audit, federation, dreaming, stores, ingest).
-# These require a Pro license and live in the `omega_platform` namespace
-# distributed as the paid wheel via omegamax.co (Supabase). In the open-core
-# distribution they are gated behind license.is_pro(); the imports below fail
-# cleanly (caught by `except ImportError: pass`) when omega_platform is not
-# installed, so free PyPI users see zero pro behavior.
+# These live in the private `omega_platform` namespace distributed via the
+# private Pro delivery path. Core only loads them when an installed extension
+# advertises the `pro_tools` capability; it does not trust a local license
+# function for entitlement.
 _BUILTIN_MODULES = [
     ("omega_platform.server.coord_schemas", "COORD_TOOL_SCHEMAS", "omega_platform.server.coord_handlers", "COORD_HANDLERS"),
     ("omega_platform.router.tool_schemas", "ROUTER_TOOL_SCHEMAS", "omega_platform.router.handlers", "ROUTER_HANDLERS"),
@@ -72,16 +71,16 @@ _BUILTIN_MODULES = [
 
 import importlib
 
-# Check Pro license before loading commercial modules
-_pro_licensed = False
+# Check extension capabilities before loading commercial modules
+_pro_tools_available = False
 try:
-    from omega_platform.license import is_pro
-    _pro_licensed = is_pro()
+    from omega.plugins import has_capability
+    _pro_tools_available = has_capability("pro_tools")
 except Exception as e:
-    logging.getLogger("omega.mcp_server").debug("License check failed, defaulting to non-pro: %s", e)
-    _pro_licensed = False
+    logging.getLogger("omega.mcp_server").debug("Capability check failed, defaulting to non-pro: %s", e)
+    _pro_tools_available = False
 
-if _pro_licensed:
+if _pro_tools_available:
     for _schema_mod, _schema_attr, _handler_mod, _handler_attr in _BUILTIN_MODULES:
         try:
             _sm = importlib.import_module(_schema_mod)

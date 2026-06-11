@@ -29,9 +29,9 @@ logger = logging.getLogger("omega.sqlite_store")
 # SQLiteStoreBase always re-reads these unless an explicit override field
 # is set (tests only).
 #
-# Pro path: when omega_platform.license.is_pro() returns True the
-# OMEGA_MAX_NODES env var is honored (default 50000). Pro users keep the
-# existing env-tunable behavior.
+# Extension path: when an installed plugin advertises the ``unlimited_memory``
+# capability, OMEGA_MAX_NODES is honored (default 50000). Core does not trust
+# a local license function to unlock this behavior.
 #
 # Free path: the env var is IGNORED. The hard write cap is _CORE_HARD_LIMIT
 # (5000). Per-instance grandfathering on the property lifts the ceiling to
@@ -43,19 +43,17 @@ _CORE_HARD_LIMIT = 5000
 def _get_effective_max_nodes() -> int:
     """Hard write cap for this process.
 
-    Pro: ``OMEGA_MAX_NODES`` env (default 50000). Free: ``_CORE_HARD_LIMIT``;
-    the env var is ignored so a free user cannot set ``OMEGA_MAX_NODES=99999``
-    to bypass the cap.
+    Extension: ``OMEGA_MAX_NODES`` env (default 50000). Free:
+    ``_CORE_HARD_LIMIT``; the env var is ignored so a free user cannot set
+    ``OMEGA_MAX_NODES=99999`` to bypass the cap.
     """
     try:
-        from omega_platform.license import is_pro
+        from omega.plugins import has_capability
 
-        if is_pro():
+        if has_capability("unlimited_memory"):
             return int(os.environ.get("OMEGA_MAX_NODES", "50000"))
-    except ImportError:
-        pass
     except Exception as e:
-        logger.debug("is_pro() check failed in _get_effective_max_nodes: %s", e)
+        logger.debug("Capability check failed in _get_effective_max_nodes: %s", e)
     return _CORE_HARD_LIMIT
 
 
@@ -272,9 +270,9 @@ class SQLiteStoreBase:
 
     @property
     def _MAX_NODES(self) -> int:
-        """Effective hard write cap. Re-reads license state per access.
+        """Effective hard write cap. Re-reads extension capabilities per access.
 
-        Pro: ``OMEGA_MAX_NODES`` env (default 50000).
+        Extension: ``OMEGA_MAX_NODES`` env (default 50000).
         Free: ``_CORE_HARD_LIMIT`` (5000); the env var is ignored so a free
         user cannot set ``OMEGA_MAX_NODES=99999`` to bypass the cap.
 

@@ -62,10 +62,10 @@ def _is_coord_status_checked(session_id: str | None = None, max_age_sec: int = 1
 
 
 def _is_pro_available() -> bool:
-    """Check if pro modules are available."""
+    """Check if an installed extension advertises Pro capabilities."""
     try:
-        from omega_platform.license import is_pro
-        return is_pro()
+        from omega.plugins import has_capability
+        return has_capability("pro_tools")
     except Exception:
         return False
 
@@ -103,11 +103,11 @@ def _maybe_nag() -> str:
     if _tool_call_count % _NAG_INTERVAL != 0:
         return ""
     try:
-        from omega.server.mcp_server import _pro_licensed
-        if _pro_licensed:
+        from omega.plugins import has_capability
+        if has_capability("pro_tools"):
             return ""
     except Exception:
-        return ""
+        pass
     try:
         from omega.telemetry import track_nag
         track_nag("periodic")
@@ -128,11 +128,11 @@ def _maybe_nag() -> str:
     return msg
 
 
-def _pro_licensed_check() -> bool:
-    """Check if Pro is licensed (cached import)."""
+def _full_retrieval_available() -> bool:
+    """Check whether a full-retrieval extension capability is available."""
     try:
-        from omega.server.mcp_server import _pro_licensed
-        return _pro_licensed
+        from omega.plugins import has_capability
+        return has_capability("full_retrieval")
     except Exception:
         return False
 
@@ -426,7 +426,7 @@ async def handle_omega_store(arguments: dict) -> dict:
     # Quality degradation notice for free users over 2,000 memories
     # (stores still allowed, but search degrades to keyword-only after 2,000)
     _degraded_notice = ""
-    if not _pro_licensed_check():
+    if not _full_retrieval_available():
         try:
             from omega.bridge import _get_store
             _store = _get_store()
@@ -533,7 +533,7 @@ async def handle_omega_store(arguments: dict) -> dict:
             result = result + nag
 
         # Memory-count-based upgrade nudge -- graduated urgency as user approaches limit
-        if not _pro_licensed_check():
+        if not _full_retrieval_available():
             try:
                 from omega.bridge import _get_store
                 _store = _get_store()
@@ -700,7 +700,7 @@ async def handle_omega_query(arguments: dict) -> dict:
 
     # Quality degradation: free users over 2,000 memories get keyword-only search
     _search_degraded = False
-    if not _pro_licensed_check():
+    if not _full_retrieval_available():
         try:
             from omega.bridge import _get_store
             _store = _get_store()
@@ -974,8 +974,8 @@ async def handle_omega_welcome(arguments: dict) -> dict:
 
         # GitHub star ask + Pro upgrade nudge for free users
         try:
-            from omega.server.mcp_server import _pro_licensed
-            if not _pro_licensed:
+            from omega.plugins import has_capability
+            if not has_capability("pro_tools"):
                 # Star ask -- show on every 5th session
                 show_star = False
                 try:

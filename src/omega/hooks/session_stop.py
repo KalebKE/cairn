@@ -197,13 +197,13 @@ def _print_activity_report(session_id: str):
 
     # Pro upgrade nudge -- frequency scales with memory count (closer to limit = more frequent)
     try:
-        pro_licensed = False
+        pro_available = False
         try:
-            from omega_platform.license import is_pro
-            pro_licensed = is_pro()
+            from omega.plugins import has_capability
+            pro_available = has_capability("pro_tools")
         except Exception:
             pass
-        if not pro_licensed:
+        if not pro_available:
             mem_count = 0
             try:
                 from omega.bridge import _get_store

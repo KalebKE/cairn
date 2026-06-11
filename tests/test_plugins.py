@@ -1,10 +1,10 @@
 """Tests for omega.plugins discovery and OmegaPlugin base class."""
 
+import sys
+import types
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from omega.plugins import OmegaPlugin, discover_plugins
+from omega.plugins import OmegaPlugin, discover_plugins, get_capabilities, has_capability
 
 
 class TestOmegaPluginBase:
@@ -17,6 +17,7 @@ class TestOmegaPluginBase:
         assert plugin.HOOKS_JSON == {}
         assert plugin.RETRIEVAL_PROFILES == {}
         assert plugin.SCORE_MODIFIERS == []
+        assert plugin.CAPABILITIES == set()
 
     def test_subclass_inherits(self):
         class MyPlugin(OmegaPlugin):
@@ -49,6 +50,65 @@ class TestDiscoverPlugins:
         result = discover_plugins()
         assert len(result) == 1
         assert isinstance(result[0], GoodPlugin)
+
+
+class TestPluginCapabilities:
+    @patch("importlib.metadata.entry_points")
+    def test_get_capabilities_from_plugin_attribute(self, mock_ep):
+        class CapPlugin(OmegaPlugin):
+            CAPABILITIES = {"unlimited_memory", "full_retrieval"}
+
+        ep = MagicMock()
+        ep.name = "cap_plugin"
+        ep.load.return_value = CapPlugin
+        mock_ep.return_value = [ep]
+
+        assert get_capabilities() == {"unlimited_memory", "full_retrieval"}
+        assert has_capability("unlimited_memory") is True
+        assert has_capability("pro_tools") is False
+
+    @patch("importlib.metadata.entry_points")
+    def test_get_capabilities_from_plugin_method(self, mock_ep):
+        class CapPlugin(OmegaPlugin):
+            def CAPABILITIES(self):
+                return ["pro_tools"]
+
+        ep = MagicMock()
+        ep.name = "cap_method_plugin"
+        ep.load.return_value = CapPlugin
+        mock_ep.return_value = [ep]
+
+        assert get_capabilities() == {"pro_tools"}
+
+    @patch("importlib.metadata.entry_points")
+    def test_fake_license_module_does_not_unlock_memory_cap(self, mock_ep, monkeypatch):
+        """Core ignores omega_platform.license.is_pro() for cap unlocks."""
+        from omega.sqlite_store import _base
+
+        omega_platform = types.ModuleType("omega_platform")
+        license_mod = types.ModuleType("omega_platform.license")
+        license_mod.is_pro = lambda: True
+        monkeypatch.setitem(sys.modules, "omega_platform", omega_platform)
+        monkeypatch.setitem(sys.modules, "omega_platform.license", license_mod)
+        monkeypatch.setenv("OMEGA_MAX_NODES", "99999")
+        mock_ep.return_value = []
+
+        assert _base._get_effective_max_nodes() == _base._CORE_HARD_LIMIT
+
+    @patch("importlib.metadata.entry_points")
+    def test_capability_plugin_unlocks_memory_cap_env(self, mock_ep, monkeypatch):
+        from omega.sqlite_store import _base
+
+        class CapPlugin(OmegaPlugin):
+            CAPABILITIES = {"unlimited_memory"}
+
+        ep = MagicMock()
+        ep.name = "cap_plugin"
+        ep.load.return_value = CapPlugin
+        mock_ep.return_value = [ep]
+        monkeypatch.setenv("OMEGA_MAX_NODES", "12345")
+
+        assert _base._get_effective_max_nodes() == 12345
 
     @patch("importlib.metadata.entry_points")
     def test_invalid_plugin_skipped(self, mock_ep):

@@ -1127,11 +1127,11 @@ def cmd_setup(args):
         print(f"\n  Storage: {OMEGA_DIR}")
         print("  Run 'omega doctor' to verify.")
 
-        # Pro upgrade CTA on first install (skip if already licensed)
+        # Pro upgrade CTA on first install (skip when a Pro extension is installed)
         _show_pro = True
         try:
-            from omega_platform.license import is_pro
-            if is_pro():
+            from omega.plugins import has_capability
+            if has_capability("pro_tools"):
                 _show_pro = False
         except Exception:
             pass
@@ -1161,20 +1161,16 @@ def cmd_status(args):
     use_json = _use_json(args)
     data = {}
 
-    # Resolve Pro vs Free once. is_pro() is TTL-cached so the call is
-    # cheap, and we use the result for both the tier badge and the cap
-    # values. Missing omega_platform (standalone Free install) drops to
-    # Free tier silently.
-    is_pro_user = False
+    # Resolve installed extension capabilities once. Core never trusts a local
+    # license function to unlock Free-tier behavior.
+    has_unlimited_memory = False
     try:
-        from omega_platform.license import is_pro
-        is_pro_user = is_pro()
-    except ImportError:
-        pass
+        from omega.plugins import has_capability
+        has_unlimited_memory = has_capability("unlimited_memory")
     except Exception as e:
-        logger.debug("is_pro() check failed in status: %s", e)
-    data["tier"] = "pro" if is_pro_user else "free"
-    if not is_pro_user:
+        logger.debug("Capability check failed in status: %s", e)
+    data["tier"] = "pro" if has_unlimited_memory else "free"
+    if not has_unlimited_memory:
         data["soft_cap"] = 2000
         data["hard_cap"] = 5000
 
@@ -1325,13 +1321,13 @@ def cmd_status(args):
 
     # Pro upgrade nudge for free users
     if not use_json:
-        pro_licensed = False
+        pro_available = False
         try:
-            from omega_platform.license import is_pro
-            pro_licensed = is_pro()
+            from omega.plugins import has_capability
+            pro_available = has_capability("pro_tools")
         except Exception:
             pass
-        if not pro_licensed:
+        if not pro_available:
             mem_count = data.get("memories", 0)
             if mem_count >= 1500:
                 print(f"\n  You have {mem_count:,} memories (limit: 2,000). Pro removes limits.")
@@ -2695,8 +2691,8 @@ def cmd_doctor(args):
     # Pro upgrade nudge for free users
     if not use_json:
         try:
-            from omega_platform.license import is_pro
-            if not is_pro():
+            from omega.plugins import has_capability
+            if not has_capability("pro_tools"):
                 print("\n  Upgrade to Pro: 98 more tools. Run 'omega upgrade' or visit https://omegamax.co/pro?ref=cli-doctor")
         except Exception:
             print("\n  Upgrade to Pro: 98 more tools. Run 'omega upgrade' or visit https://omegamax.co/pro?ref=cli-doctor")

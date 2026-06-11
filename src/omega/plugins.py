@@ -26,6 +26,8 @@ class OmegaPlugin:
     - ``HOOKS_JSON``: dict matching the hooks.json manifest format (optional)
     - ``RETRIEVAL_PROFILES``: dict mapping event_type → (vec, text, word, ctx, graph) phase weights
     - ``SCORE_MODIFIERS``: list of fn(node_id, score, metadata) → score callables
+    - ``CAPABILITIES``: set/list of capability strings provided by the plugin,
+      for example ``{"unlimited_memory", "full_retrieval", "pro_tools"}``
     """
 
     TOOL_SCHEMAS: list[dict[str, Any]] = []
@@ -35,6 +37,7 @@ class OmegaPlugin:
     HOOKS_JSON: dict[str, Any] = {}
     RETRIEVAL_PROFILES: dict[str, tuple] = {}
     SCORE_MODIFIERS: list[Callable] = []
+    CAPABILITIES: set[str] = set()
 
 
 def discover_plugins() -> list[OmegaPlugin]:
@@ -63,3 +66,33 @@ def discover_plugins() -> list[OmegaPlugin]:
     except Exception as e:
         logger.debug("Plugin discovery unavailable: %s", e)
     return plugins
+
+
+def get_capabilities() -> set[str]:
+    """Return capabilities advertised by installed OMEGA plugins.
+
+    Core uses capabilities for feature availability, not payment entitlement.
+    A private extension may register capabilities; public Core never trusts a
+    local license function to unlock behavior by itself.
+    """
+    capabilities: set[str] = set()
+    for plugin in discover_plugins():
+        raw = getattr(plugin, "CAPABILITIES", None)
+        if callable(raw):
+            raw = raw()
+        if not raw:
+            raw = getattr(plugin, "capabilities", None)
+            if callable(raw):
+                raw = raw()
+        if not raw:
+            continue
+        try:
+            capabilities.update(str(cap) for cap in raw)
+        except TypeError:
+            logger.warning("Plugin %s returned invalid capabilities", plugin.__class__.__name__)
+    return capabilities
+
+
+def has_capability(name: str) -> bool:
+    """Return True when an installed plugin provides ``name``."""
+    return name in get_capabilities()

@@ -85,10 +85,9 @@ class StoreMixin:
 
         with self._lock:
             # Capacity check (inside lock — queries shared connection).
-            # _MAX_NODES re-reads license state per access via the property
-            # on SQLiteStoreBase, so a mid-session Pro activation lifts the
-            # cap within the is_pro() TTL window. Error/warning copy splits
-            # Pro vs Free so the message is actionable on the right path.
+            # _MAX_NODES re-reads extension capabilities per access via the
+            # property on SQLiteStoreBase. Core never trusts a local license
+            # function to unlock the Free cap.
             #
             # ONE COUNT(*) query — the count is reused for both the
             # capacity check and the grandfather computation, so we do not
@@ -108,16 +107,14 @@ class StoreMixin:
                 row = self._exec("SELECT COUNT(*) FROM memories").fetchone()
                 count = row[0] if row and row[0] is not None else 0
                 max_nodes = self._apply_grandfather(base_max, count)
-                is_pro_user = False
+                unlimited_memory = False
                 try:
-                    from omega_platform.license import is_pro
-                    is_pro_user = is_pro()
-                except ImportError:
-                    pass
+                    from omega.plugins import has_capability
+                    unlimited_memory = has_capability("unlimited_memory")
                 except Exception as e:
-                    logger.debug("is_pro() check failed in capacity: %s", e)
+                    logger.debug("Capability check failed in capacity: %s", e)
                 if count >= max_nodes:
-                    if is_pro_user:
+                    if unlimited_memory:
                         raise StorageError(
                             f"Node count ({count:,}) has reached the limit ({max_nodes:,}). "
                             "Run omega_consolidate to prune, or raise OMEGA_MAX_NODES env var."
@@ -129,7 +126,7 @@ class StoreMixin:
                         "https://omegamax.co/pro?ref=core-hard-cap"
                     )
                 if count >= int(max_nodes * 0.9):
-                    if is_pro_user:
+                    if unlimited_memory:
                         self._capacity_warning = (
                             f"Memory store is at {count:,}/{max_nodes:,} "
                             f"({count*100//max_nodes}% capacity). "

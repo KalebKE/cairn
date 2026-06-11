@@ -37,8 +37,9 @@ def test_no_stale_omega_license_imports() -> None:
 
     assert not offenders, (
         "Found stale imports of the removed `omega.license` module. "
-        "This module was replaced by `omega_platform.license` (shipped in the "
-        "Pro wheel) in the Mar 2026 architecture restructure (commit b3edc0a). "
-        "Use `from omega_platform.license import ...` instead.\n\n"
+        "This module was replaced by explicit Pro activation/status helpers in "
+        "`omega_platform.license` (shipped in the Pro wheel) in the Mar 2026 "
+        "architecture restructure (commit b3edc0a). Do not use local license "
+        "checks to unlock Core behavior; use plugin capabilities instead.\n\n"
         "Offenders:\n" + "\n".join(f"  {o}" for o in offenders)
     )

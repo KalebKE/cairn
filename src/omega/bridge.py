@@ -1417,23 +1417,18 @@ def auto_capture(
         output += f" | conflicts: {', '.join(parts)}"
 
     # Milestone check (cheap: one node_count query + file existence check).
-    # is_pro_user gates the Free-tier upgrade CTA suffix — Pro callers get
-    # a clean celebratory message; Free callers get the same message plus
-    # a tracking URL to omegamax.co/pro. is_pro() comes from the Pro-only
-    # omega_platform namespace which is absent in standalone Free installs;
-    # missing import gracefully degrades to Free behavior.
+    # A full-retrieval extension capability suppresses Free-tier upgrade CTA
+    # suffixes. Core never trusts a local license function for entitlement.
     try:
         from omega.milestones import check_capture_milestones
-        is_pro_user = False
+        full_retrieval = False
         try:
-            from omega_platform.license import is_pro
-            is_pro_user = is_pro()
-        except ImportError:
-            pass
+            from omega.plugins import has_capability
+            full_retrieval = has_capability("full_retrieval")
         except Exception as e:
-            logger.debug("is_pro() check failed in milestone: %s", e)
+            logger.debug("Capability check failed in milestone: %s", e)
         count = store.node_count()
-        milestone_msg = check_capture_milestones(count, is_pro_user=is_pro_user)
+        milestone_msg = check_capture_milestones(count, is_pro_user=full_retrieval)
         if milestone_msg:
             output += f" | {milestone_msg}"
     except Exception as e:

@@ -193,6 +193,33 @@ class TestOmegaQuery:
         # Should have some content (even if "no results" message)
         assert len(text) > 0
 
+    def test_free_tier_query_degrades_after_soft_cap(self, monkeypatch):
+        """Free users at 2,000+ memories get keyword-only search + upgrade CTA."""
+        import omega.bridge as bridge
+        from omega.server import handlers
+        from omega.server.handlers import handle_omega_query
+
+        class StoreStub:
+            def count_memories(self):
+                return 2000
+
+        monkeypatch.setattr(handlers, "_full_retrieval_available", lambda: False)
+        monkeypatch.setattr(bridge, "_get_store", lambda: StoreStub())
+        monkeypatch.setattr(
+            bridge,
+            "phrase_search",
+            lambda **kwargs: f"keyword search for {kwargs['phrase']}",
+        )
+
+        result = run_async(handle_omega_query({"query": "database migration"}))
+
+        assert not _is_error(result)
+        text = _text(result)
+        assert "keyword search for database migration" in text
+        assert "keyword-only mode" in text
+        assert "OMEGA Pro restores full semantic search" in text
+        assert "omega upgrade" in text
+
     def test_query_missing_query_error(self):
         from omega.server.handlers import handle_omega_query
         result = run_async(handle_omega_query({}))
