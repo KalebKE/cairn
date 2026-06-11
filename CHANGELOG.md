@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-06-11
+
+### Fixed
+- **Core/Pro boundary hardening**: Core no longer trusts local
+  `omega_platform.license.is_pro()` checks to unlock memory caps, full
+  retrieval, Pro tool loading, or upgrade-message suppression. Core now uses
+  plugin capabilities (`pro_tools`, `full_retrieval`, `unlimited_memory`) for
+  extension-provided behavior.
+
 ## [1.5.1] - 2026-06-11
 
 ### Fixed
