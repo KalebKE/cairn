@@ -8,7 +8,7 @@
 
 #define MyAppName "OMEGA Memory"
 #define MyAppVersion "1.0.0"
-#define MyAppPublisher "Kokyo Keisho Zaidan Stichting"
+#define MyAppPublisher "OMEGA Memory Maintainers"
 #define MyAppURL "https://omegamax.co"
 
 [Setup]

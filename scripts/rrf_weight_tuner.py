@@ -16,7 +16,7 @@ Output: Precision@5 comparison table for all tested configurations.
 import sys
 import os
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 # Ensure omega is importable
@@ -113,7 +113,7 @@ EVAL_QUERIES: List[EvalQuery] = [
     # --- Temporal ---
     EvalQuery(
         query="what happened with the project migration convergence",
-        expected_keywords=["migration", "convergence", "orchestrator", "consolidate"],
+        expected_keywords=["migration", "convergence", "consolidate", "merge"],
         description="Temporal/project: migration convergence",
     ),
 
@@ -399,9 +399,6 @@ class Patcher:
 
     def _make_fusion_patch(self, original_fusion, temporal_w, word_coeff):
         """Create a patched _query_phase_fusion that uses custom temporal weight and word coeff."""
-        from omega.sqlite_store._query import QueryMixin
-        from omega.sqlite_store._types import _RRF_K, _canonicalize
-
         def patched_fusion(self_inner, query_text, all_results, node_scores,
                            vec_ranked, text_ranked, temporal_ranked,
                            pw_vec, pw_text, pw_word, pw_ctx, perspective):

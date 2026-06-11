@@ -23,7 +23,7 @@ omega_entity_add_relationship(source_entity_id="holdco", target_entity_id="acme"
 omega_entity_tree(entity_id="holdco")
 
 # Store entity-scoped data
-omega_store(content="Acme uses Stripe for payment processing", event_type="decision", entity_id="acme")
+omega_store(content="Acme uses a hosted payment provider", event_type="decision", entity_id="acme")
 ```
 
 ## Entity Types

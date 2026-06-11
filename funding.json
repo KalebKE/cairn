@@ -3,9 +3,9 @@
   "entity": {
     "type": "organisation",
     "role": "owner",
-    "name": "Kokyo Keisho Zaidan Stichting",
-    "email": "jason@omegamax.co",
-    "description": "Dutch foundation stewarding OMEGA, an open-source persistent memory system for AI agents. Apache 2.0 licensed, local-first, privacy-respecting.",
+    "name": "OMEGA Memory Maintainers",
+    "email": "hello@omega-memory.dev",
+    "description": "Maintainers stewarding OMEGA, an open-source persistent memory system for AI agents. Apache 2.0 licensed, local-first, privacy-respecting.",
     "webpageUrl": {
       "url": "https://omegamax.co"
     }
@@ -37,14 +37,7 @@
     }
   ],
   "funding": {
-    "channels": [
-      {
-        "guid": "bitcoin",
-        "type": "other",
-        "description": "Bitcoin (BTC)",
-        "address": "3Lh99fU3fAbg8TLQ5DojHyAsHHYvKmYZkV"
-      }
-    ],
+    "channels": [],
     "plans": [
       {
         "guid": "one-time",
@@ -54,9 +47,7 @@
         "amount": 0,
         "currency": "USD",
         "frequency": "one-time",
-        "channels": [
-          "bitcoin"
-        ]
+        "channels": []
       },
       {
         "guid": "monthly",
@@ -66,9 +57,7 @@
         "amount": 0,
         "currency": "USD",
         "frequency": "monthly",
-        "channels": [
-          "bitcoin"
-        ]
+        "channels": []
       }
     ]
   }

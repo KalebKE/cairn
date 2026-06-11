@@ -1,10 +1,10 @@
-# Copyright 2025-2026 Kokyo Keisho Zaidan Stichting
+# Copyright 2025-2026 OMEGA Memory Maintainers
 # SPDX-License-Identifier: Apache-2.0
 """Tests for the retrieval evaluation pipeline."""
 
 import json
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 

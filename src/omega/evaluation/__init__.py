@@ -1,4 +1,4 @@
-# Copyright 2025-2026 Kokyo Keisho Zaidan Stichting
+# Copyright 2025-2026 OMEGA Memory Maintainers
 # SPDX-License-Identifier: Apache-2.0
 """Retrieval quality evaluation tools for OMEGA."""
 

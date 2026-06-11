@@ -12,12 +12,12 @@ The Oracle works with any prediction domain (crypto markets, project outcomes, h
 # Record a prediction
 omega_oracle_record(
     record_type="prediction",
-    content="BTC will close above 70k by end of March",
-    data={"market_id": "btc-70k-march", "our_probability": 0.72, "market_price": 0.65, "edge": 0.07}
+    content="The beta launch will reach 100 signups by end of March",
+    data={"market_id": "beta-100-signups-march", "our_probability": 0.72, "market_price": 0.65, "edge": 0.07}
 )
 
 # Later, resolve it
-omega_oracle_resolve(market_id="btc-70k-march", outcome="yes")
+omega_oracle_resolve(market_id="beta-100-signups-march", outcome="yes")
 
 # Analyze your calibration
 omega_oracle_analyze(view="calibration")

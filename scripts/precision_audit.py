@@ -18,7 +18,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 # ---------------------------------------------------------------------------
 # Bootstrap: ensure src/ is importable
@@ -146,7 +146,7 @@ TEST_QUERIES: List[Tuple[str, str, List[str]]] = [
     (
         "conversational",
         "the convergence decision",
-        ["convergence", "orchestrator", "merge", "consolidate", "absorb"],
+        ["convergence", "migration", "merge", "consolidate", "absorb"],
     ),
     (
         "conversational",

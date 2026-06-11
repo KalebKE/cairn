@@ -5216,3 +5216,26 @@ __all__ = [
     "dismiss_reminder",
     "get_due_reminders",
 ]
+
+
+def _install_bridge_submodule_aliases() -> None:
+    """Expose 1.5.1-style bridge submodules for Pro compatibility.
+
+    Core 1.5.0 shipped `omega.bridge` as a flat module. Some Pro 1.5.x builds
+    import helpers from `omega.bridge._core`, `omega.bridge._ingest`, and
+    `omega.bridge._query`. Until Core fully moves to a package layout, alias
+    those submodules to this module so the published flat layout remains
+    import-compatible.
+    """
+    import sys
+
+    module = sys.modules[__name__]
+    if not hasattr(module, "__path__"):
+        module.__path__ = []  # type: ignore[attr-defined]
+    for name in ("_core", "_ingest", "_query"):
+        fullname = f"{__name__}.{name}"
+        sys.modules.setdefault(fullname, module)
+        setattr(module, name, module)
+
+
+_install_bridge_submodule_aliases()

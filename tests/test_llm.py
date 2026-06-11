@@ -1,7 +1,5 @@
 """Tests for omega.llm provider abstraction."""
 
-import json
-import os
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -160,9 +158,9 @@ class TestGetApiKey:
         assert _get_api_key("anthropic") == "ak-123"
 
     def test_openai_key(self, monkeypatch):
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-123")
+        monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
         from omega.llm import _get_api_key
-        assert _get_api_key("openai") == "sk-123"
+        assert _get_api_key("openai") == "test-openai-key"
 
     def test_compat_key(self, monkeypatch):
         monkeypatch.setenv("OMEGA_LLM_API_KEY", "local-key")

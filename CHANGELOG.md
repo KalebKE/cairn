@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-06-11
+
+### Fixed
+- **Core/Pro compatibility for Pro 1.5.x**: added compatibility imports for
+  `omega.bridge._core`, `omega.bridge._ingest`, and `omega.bridge._query` so
+  Pro modules expecting the split bridge layout can run against public Core.
+- **MCP server PID registry**: restored `omega.server.pid_registry` for local
+  lock diagnostics, orphaned stdio server cleanup, and session registration
+  startup paths.
+
 ## [1.4.14] - 2026-05-19
 
 ### Fixed
@@ -79,7 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Schema v13**: Unique index on forgetting_log to prevent duplicate entries
 - **Coordination upgrades**: File claim gap closed with read tracking, peer-claimed commit
   blocking, auto-handoff on session stop, message priority
-- **Admin dashboard**: Projects tab, LLM Usage tab, Entities tab, Conductor Console,
+- **Admin dashboard**: Projects tab, LLM Usage tab, Entities tab, coordination console,
   Growth tab, Settings expansion (Profile, Agent, Memory, Projects, Integrations)
 - **Website**: Next.js 16.1.6, homepage restructure, /pro page redesign, 6 new blog posts,
   HeroGraph visualization
@@ -118,7 +128,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Intelligence cards — compact [OMEGA] cards for memory, decision, and learning events
   at NORMAL+ transparency
 - Entity graph relationships wired into retrieval scoring
-- Campaign Orchestrator v3.0 (Layers 1-3) with automation modules and proposal feed
+- Campaign automation v3.0 (Layers 1-3) with automation modules and proposal feed
 - MCP server instructions for automatic memory usage by connected agents
 - Session awareness and agent discipline protocol sections (v1.3.0)
 - Admin dashboard: 3D Memory Graph visualization with bloom and clustering
@@ -126,7 +136,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Admin dashboard: Skills Graph 3D visualization with manifest and API
 - Admin dashboard: KnowledgeBase rewrite with folder tree, markdown preview,
   and breadcrumb navigation
-- Admin dashboard: Orchestrator proposals feed, ambient awareness layer,
+- Admin dashboard: proposals feed, ambient awareness layer,
   historical coordination view
 - Admin dashboard: Recharts-based Insights tab with memory sparklines and
   project charts
@@ -168,7 +178,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - License: MIT → Apache-2.0
-- Author: → Kokyō Keishō Zaidan Stichting
+- Author: OMEGA Memory Maintainers
 - Hook server: conditional coordination handler registration
 - CLI: graceful "requires omega-pro" messages for commercial modules
 - MCP server: commercial tool schemas loaded only when modules available

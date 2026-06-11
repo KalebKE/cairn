@@ -65,7 +65,7 @@ omega status --json
 Activate a Pro license key.
 
 ```bash
-omega activate OMEGA-PRO-XXXX-XXXX-XXXX
+omega activate <your-license-key>
 ```
 
 ### `omega license`

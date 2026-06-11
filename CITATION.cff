@@ -3,9 +3,7 @@ message: "If you use OMEGA in your research, please cite it as below."
 title: "OMEGA: Persistent Memory for AI Coding Agents"
 type: software
 authors:
-  - family-names: Sosa
-    given-names: Jason
-    affiliation: "Kokyō Keishō Zaidan Stichting"
+  - name: "OMEGA Memory Maintainers"
 repository-code: "https://github.com/omega-memory/omega-memory"
 url: "https://omegamax.co"
 license: Apache-2.0

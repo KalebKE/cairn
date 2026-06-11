@@ -132,11 +132,11 @@ If you installed `omega-memory[router]`, configure API keys in `~/.omega/secrets
 
 ```json
 {
-  "anthropic_api_key": "sk-ant-...",
-  "openai_api_key": "sk-...",
-  "google_api_key": "...",
-  "groq_api_key": "gsk_...",
-  "xai_api_key": "xai-..."
+  "anthropic_api_key": "<anthropic-api-key>",
+  "openai_api_key": "<openai-api-key>",
+  "google_api_key": "<google-api-key>",
+  "groq_api_key": "<groq-api-key>",
+  "xai_api_key": "<xai-api-key>"
 }
 ```
 
@@ -146,11 +146,11 @@ If you installed `omega-memory[router]`, configure API keys in `~/.omega/secrets
 You can also set API keys as environment variables:
 
 ```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
-export OPENAI_API_KEY="sk-..."
-export GOOGLE_API_KEY="..."
-export GROQ_API_KEY="gsk_..."
-export XAI_API_KEY="xai-..."
+export ANTHROPIC_API_KEY="<anthropic-api-key>"
+export OPENAI_API_KEY="<openai-api-key>"
+export GOOGLE_API_KEY="<google-api-key>"
+export GROQ_API_KEY="<groq-api-key>"
+export XAI_API_KEY="<xai-api-key>"
 ```
 
 ## Cloud sync configuration (optional)

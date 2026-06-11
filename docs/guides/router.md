@@ -73,18 +73,18 @@ Store API keys in `~/.omega/secrets.json` (file is chmod 600):
 
 ```json
 {
-  "anthropic_api_key": "sk-ant-...",
-  "openai_api_key": "sk-...",
-  "google_api_key": "...",
-  "groq_api_key": "gsk_...",
-  "xai_api_key": "xai-..."
+  "anthropic_api_key": "<anthropic-api-key>",
+  "openai_api_key": "<openai-api-key>",
+  "google_api_key": "<google-api-key>",
+  "groq_api_key": "<groq-api-key>",
+  "xai_api_key": "<xai-api-key>"
 }
 ```
 
 You can also set keys via environment variables in `~/.zshrc`:
 ```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
-export OPENAI_API_KEY="sk-..."
+export ANTHROPIC_API_KEY="<anthropic-api-key>"
+export OPENAI_API_KEY="<openai-api-key>"
 ```
 
 Verify setup:

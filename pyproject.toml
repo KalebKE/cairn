@@ -1,12 +1,12 @@
 [project]
 name = "omega-memory"
-version = "1.5.0"
+version = "1.5.1"
 description = "Cross-model memory for AI agents. Local-first, works with Claude, GPT, Gemini, Cursor, Claw Code, and any MCP client"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 authors = [
-    {name = "Kokyō Keishō Zaidan Stichting", email = "hello@omega-memory.dev"},
+    {name = "OMEGA Memory Maintainers", email = "hello@omega-memory.dev"},
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
