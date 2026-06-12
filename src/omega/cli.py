@@ -3015,16 +3015,68 @@ def _activate_license(key: str) -> bool:
     Self-contained: uses only stdlib so activation works from the public
     omega-memory package without requiring the Pro wheel.
     """
+    import hashlib
     import json as _json
+    import platform
     import socket
     import urllib.error
     import urllib.request
+    import uuid
 
     activate_url = "https://admin.omegamax.co/api/activate"
     cache_days = 7
     timeout = min(int(os.environ.get("OMEGA_LICENSE_TIMEOUT", "30")), 120)
+    omega_dir = Path.home() / ".omega"
+    device_file = omega_dir / "device.json"
 
-    data = _json.dumps({"key": key}).encode()
+    try:
+        omega_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(f"Could not create {omega_dir}: {e}")
+        return False
+
+    try:
+        if device_file.exists():
+            device_data = _json.loads(device_file.read_text())
+            device_id = str(device_data.get("device_id") or "")
+        else:
+            device_id = ""
+    except (OSError, _json.JSONDecodeError):
+        device_id = ""
+
+    if not device_id:
+        device_id = str(uuid.uuid4())
+        try:
+            device_file.write_text(_json.dumps({
+                "device_id": device_id,
+                "created_at": time.time(),
+            }))
+            device_file.chmod(0o600)
+        except OSError as e:
+            print(f"Could not write device file at {device_file}: {e}")
+            return False
+
+    fingerprint_parts = [
+        device_id,
+        platform.system(),
+        platform.machine(),
+        platform.node(),
+        str(uuid.getnode()),
+    ]
+    device_fingerprint_hash = hashlib.sha256(
+        "\n".join(fingerprint_parts).encode()
+    ).hexdigest()
+    device_label = (
+        f"{platform.system() or 'Unknown'} {platform.machine() or 'machine'} "
+        f"({(platform.node() or 'device')[:64]})"
+    )
+
+    data = _json.dumps({
+        "key": key,
+        "device_id": device_id,
+        "device_fingerprint_hash": device_fingerprint_hash,
+        "device_label": device_label,
+    }).encode()
     req = urllib.request.Request(
         activate_url,
         data=data,
@@ -3075,13 +3127,7 @@ def _activate_license(key: str) -> bool:
         valid_until = time.time() + (cache_days * 86400)
 
     # Write license file
-    omega_dir = Path.home() / ".omega"
     license_file = omega_dir / "license.json"
-    try:
-        omega_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as e:
-        print(f"Could not create {omega_dir}: {e}")
-        return False
 
     license_data: dict = {
         "key": key,
@@ -3091,6 +3137,10 @@ def _activate_license(key: str) -> bool:
     signature = result.get("signature")
     if signature:
         license_data["signature"] = signature
+    if result.get("device_id"):
+        license_data["device_id"] = result["device_id"]
+    if result.get("device_fingerprint_hash"):
+        license_data["device_fingerprint_hash"] = result["device_fingerprint_hash"]
 
     try:
         license_file.write_text(_json.dumps(license_data))
