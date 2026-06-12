@@ -1,0 +1,47 @@
+name: Build Windows Installer
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --no-progress -y
+
+      - name: Prepare embedded Python
+        working-directory: installer
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path build\python | Out-Null
+          Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.12.8/python-3.12.8-embed-amd64.zip" -OutFile build\python.zip
+          Expand-Archive build\python.zip -DestinationPath build\python -Force
+          Remove-Item build\python.zip
+          Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile build\get-pip.py
+
+      - name: Build installer
+        working-directory: installer
+        shell: powershell
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" omega-setup.iss'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OMEGA-Memory-1.5.4-Windows
+          path: installer/dist/omega-setup.exe
+
+      - name: Attach to GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: installer/dist/omega-setup.exe

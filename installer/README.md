@@ -11,7 +11,7 @@ One-click installers for non-technical Claude Desktop users.
 
 ## What it does
 
-1. Installs bundled Python 3.12 (python-build-standalone) + omega-memory to `~/Library/OMEGA`
+1. Installs bundled Python 3.12 (python-build-standalone) + a pinned `omega-memory[server]` release to `~/Library/OMEGA`
 2. Configures Claude Desktop to use OMEGA as an MCP server
 3. No admin privileges required (per-user install)
 
@@ -34,14 +34,17 @@ One-click installers for non-technical Claude Desktop users.
 
 ```bash
 cd installer
-./build-macos-pkg.sh
+./build-macos-pkg.sh 1.5.4
 ```
 
 Output: `build/macos/dist/OMEGA-Memory.pkg`
 
 ### Automated build
 
-Push a release tag or trigger the `Build macOS Installer` workflow manually in GitHub Actions. The workflow runs on `macos-latest` and handles everything automatically.
+Push a release tag or trigger the `Build macOS Installer` workflow manually in GitHub Actions. The workflow runs on `macos-latest`, builds `OMEGA-Memory.pkg`, verifies the packaged `omega.__version__`, uploads an artifact, and attaches it to `v*` GitHub releases.
+
+The installer is intentionally version-pinned. A `v1.5.4` installer should
+install `omega-memory[server]==1.5.4`, not whatever PyPI latest is later.
 
 ## Testing checklist
 
@@ -82,7 +85,7 @@ One-click installer (.exe) for non-technical Claude Desktop users on Windows.
 
 ## What it does
 
-1. Installs a bundled Python 3.12 + omega-memory to `%LOCALAPPDATA%\OMEGA`
+1. Installs a bundled Python 3.12 + pinned `omega-memory[server]` to `%LOCALAPPDATA%\OMEGA`
 2. Configures Claude Desktop to use OMEGA as an MCP server
 3. No admin privileges required
 
@@ -120,7 +123,10 @@ Output: `dist\omega-setup.exe`
 
 ### Automated build
 
-Push a release tag or trigger the `Build Windows Installer` workflow manually in GitHub Actions. The workflow handles all download and build steps automatically.
+Push a release tag or trigger the `Build Windows Installer` workflow manually in GitHub Actions. The workflow installs Inno Setup, downloads embedded Python + `get-pip.py`, builds `omega-setup.exe`, uploads an artifact, and attaches it to `v*` GitHub releases.
+
+The Inno script pins the package version in its `pip install` step. Update
+`installer/omega-setup.iss` before each new installer release.
 
 ## Testing checklist
 
@@ -133,6 +139,22 @@ Push a release tag or trigger the `Build Windows Installer` workflow manually in
 - [ ] Say "hello" to Claude, verify `omega_welcome` works
 - [ ] Run uninstaller, verify `omega-memory` entry removed from Claude Desktop config
 - [ ] Verify `%USERPROFILE%\.omega` data directory is preserved after uninstall
+
+---
+
+# Release checklist
+
+1. Publish and verify `omega-memory` on PyPI.
+2. Update installer pins and metadata:
+   - `installer/build-macos-pkg.sh` default version
+   - `installer/omega-setup.iss` `MyAppVersion`
+   - `installer/omega-setup.iss` pinned `pip install omega-memory[server]==...`
+3. Build macOS and Windows installers from a `v*` tag or manual workflow.
+4. Smoke test both installers on clean machines or VMs.
+5. Attach artifacts to the matching GitHub release:
+   - `OMEGA-Memory.pkg`
+   - `omega-setup.exe`
+6. Update website `INSTALLER_VERSION` only after both artifact URLs return 200.
 
 ## Architecture
 

@@ -1,0 +1,59 @@
+name: Build macOS Installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "omega-memory version to package"
+        required: true
+        default: "1.5.4"
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build package
+        working-directory: installer
+        run: ./build-macos-pkg.sh "${{ steps.version.outputs.version }}"
+
+      - name: Verify packaged omega version
+        run: |
+          installer/build/macos/payload/python/bin/python3 - <<'PY'
+          import omega
+          expected = "${{ steps.version.outputs.version }}"
+          actual = omega.__version__
+          if actual != expected:
+              raise SystemExit(f"omega version mismatch: {actual} != {expected}")
+          print(f"omega {actual}")
+          PY
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OMEGA-Memory-${{ steps.version.outputs.version }}-macOS
+          path: installer/build/macos/dist/OMEGA-Memory.pkg
+
+      - name: Attach to GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: installer/build/macos/dist/OMEGA-Memory.pkg

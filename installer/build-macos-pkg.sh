@@ -1,10 +1,10 @@
 #!/bin/bash
 # OMEGA Memory -- macOS .pkg build script
-# Downloads python-build-standalone, installs omega-memory[server],
+# Downloads python-build-standalone, installs a pinned omega-memory[server],
 # and produces a .pkg installer.
 #
 # Usage: ./build-macos-pkg.sh [VERSION]
-#   VERSION: package version string (default: 1.0.0)
+#   VERSION: package and omega-memory version string (default: 1.5.4)
 
 set -euo pipefail
 
@@ -12,7 +12,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="$SCRIPT_DIR/build/macos"
 PAYLOAD_DIR="$BUILD_DIR/payload"
 PKG_ID="com.omega.memory"
-PKG_VERSION="${1:-1.0.0}"
+PKG_VERSION="${1:-1.5.4}"
+OMEGA_VERSION="$PKG_VERSION"
 PYTHON_VERSION="3.12"
 PYTHON_RELEASE="20250212"
 
@@ -48,9 +49,9 @@ rm "$TARBALL"
 echo "  Extracted to $PAYLOAD_DIR/python/"
 
 # --- Step 3: Install omega-memory[server] ---
-echo "Step 3: Installing omega-memory[server]..."
-"$PAYLOAD_DIR/python/bin/python3" -m pip install --quiet --no-cache-dir "omega-memory[server]"
-echo "  Installed omega-memory"
+echo "Step 3: Installing omega-memory[server]==$OMEGA_VERSION..."
+"$PAYLOAD_DIR/python/bin/python3" -m pip install --quiet --no-cache-dir "omega-memory[server]==$OMEGA_VERSION"
+echo "  Installed omega-memory==$OMEGA_VERSION"
 
 # --- Step 4: Copy support files ---
 echo "Step 4: Copying support files..."

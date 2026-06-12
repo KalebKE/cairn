@@ -7,7 +7,7 @@
 ; Requires: build\python\ (embeddable Python), build\get-pip.py
 
 #define MyAppName "OMEGA Memory"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.5.4"
 #define MyAppPublisher "OMEGA Memory Maintainers"
 #define MyAppURL "https://omegamax.co"
 
@@ -67,7 +67,7 @@ Filename: "{app}\python\python.exe"; \
 
 ; Step 3: Install omega-memory with server dependencies
 Filename: "{app}\python\python.exe"; \
-  Parameters: "-m pip install omega-memory[server] --no-warn-script-location"; \
+  Parameters: "-m pip install omega-memory[server]==1.5.4 --no-warn-script-location"; \
   StatusMsg: "Installing OMEGA Memory (this may take a minute)..."; \
   Flags: runhidden waituntilterminated
 
