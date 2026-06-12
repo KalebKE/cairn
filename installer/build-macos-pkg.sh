@@ -61,6 +61,22 @@ cp "$SCRIPT_DIR/macos/setup-instructions.sh" "$PAYLOAD_DIR/"
 cp "$SCRIPT_DIR/macos/scripts/postinstall" "$BUILD_DIR/scripts/"
 cp "$SCRIPT_DIR/macos/resources/"* "$BUILD_DIR/resources/"
 cp "$SCRIPT_DIR/macos/Distribution.xml" "$BUILD_DIR/"
+python3 - "$BUILD_DIR/Distribution.xml" "$PKG_VERSION" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+version = sys.argv[2]
+text = path.read_text()
+text = re.sub(
+    r'(<pkg-ref id="com\.omega\.memory"\s+version=")[^"]+(")',
+    rf'\g<1>{version}\2',
+    text,
+    count=1,
+)
+path.write_text(text)
+PY
 
 # --- Step 5: Build component package ---
 echo "Step 5: Building component package..."

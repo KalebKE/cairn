@@ -30,7 +30,7 @@
     </choice>
 
     <pkg-ref id="com.omega.memory"
-             version="1.0.0"
+             version="1.5.4"
              onConclusion="none"
              auth="none">omega-memory.pkg</pkg-ref>
 </installer-gui-script>
