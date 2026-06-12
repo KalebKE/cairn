@@ -62,6 +62,16 @@ def _default_data() -> dict:
             "tool_gate_shown": 0,
             "upgrade_clicked": 0,
         },
+        "context_packets": {
+            "total": 0,
+            "with_memories": 0,
+            "with_chains": 0,
+            "warnings": 0,
+            "tokens": 0,
+            "tokens_saved": 0,
+            "by_mode": {},
+            "by_surface": {},
+        },
         "last_active": now,
     }
 
@@ -187,6 +197,48 @@ def track_nag(nag_type: str) -> None:
         pass
 
 
+def track_context_packet(metrics: dict | None, surface: str = "unknown") -> None:
+    """Track aggregate context packet usage without content or memory IDs."""
+    try:
+        metrics = metrics or {}
+        mode = str(metrics.get("mode") or "unknown")
+        surface = str(surface or "unknown")
+        memories_used = int(metrics.get("memories_used") or 0)
+        chain_count = int(metrics.get("chain_count") or 0)
+        warnings_count = int(metrics.get("warnings_count") or 0)
+        estimated_tokens = int(metrics.get("estimated_tokens") or 0)
+        tokens_saved = int(metrics.get("estimated_tokens_saved") or 0)
+
+        with _lock:
+            data = _load()
+            data["last_active"] = datetime.now(timezone.utc).isoformat()
+            packets = data.setdefault("context_packets", {
+                "total": 0,
+                "with_memories": 0,
+                "with_chains": 0,
+                "warnings": 0,
+                "tokens": 0,
+                "tokens_saved": 0,
+                "by_mode": {},
+                "by_surface": {},
+            })
+            packets["total"] = int(packets.get("total") or 0) + 1
+            if memories_used > 0:
+                packets["with_memories"] = int(packets.get("with_memories") or 0) + 1
+            if chain_count > 0:
+                packets["with_chains"] = int(packets.get("with_chains") or 0) + 1
+            packets["warnings"] = int(packets.get("warnings") or 0) + warnings_count
+            packets["tokens"] = int(packets.get("tokens") or 0) + estimated_tokens
+            packets["tokens_saved"] = int(packets.get("tokens_saved") or 0) + tokens_saved
+            packets.setdefault("by_mode", {})
+            packets["by_mode"][mode] = int(packets["by_mode"].get(mode) or 0) + 1
+            packets.setdefault("by_surface", {})
+            packets["by_surface"][surface] = int(packets["by_surface"].get(surface) or 0) + 1
+            _save(data)
+    except Exception:
+        pass
+
+
 def get_summary() -> dict:
     """Return telemetry summary for local display (e.g. ``omega status``)."""
     try:
@@ -204,6 +256,7 @@ def get_summary() -> dict:
             "memories": data.get("memories", {}),
             "tool_calls": data.get("tool_calls", {}),
             "nag_events": data.get("nag_events", {}),
+            "context_packets": data.get("context_packets", {}),
             "last_active": data.get("last_active"),
         }
     except Exception:

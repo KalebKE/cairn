@@ -3426,5 +3426,9 @@ HANDLERS: Dict[str, Any] = {
     "omega_call": handle_omega_call,
 }
 
+# Harness-agnostic structured-context wire contract -- see context_handlers.py.
+from omega.server.context_handlers import CONTEXT_HANDLERS  # noqa: E402
+HANDLERS.update(CONTEXT_HANDLERS)
+
 # Wire _ALL_HANDLERS so omega_call can dispatch to any handler.
 _ALL_HANDLERS.update(HANDLERS)

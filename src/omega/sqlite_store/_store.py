@@ -33,6 +33,7 @@ class StoreMixin:
         derived_from: Optional[str] = None,
         source_uri: Optional[str] = None,
         status: Optional[str] = None,
+        sensitivity: Optional[str] = None,
     ) -> str:
         """Store a memory. Returns the node ID."""
         _t0_agency = _time.monotonic()
@@ -45,6 +46,8 @@ class StoreMixin:
                 "Override with OMEGA_MAX_CONTENT_SIZE env var."
             )
         meta = dict(metadata or {})
+        if sensitivity:
+            meta["sensitivity"] = sensitivity
         if session_id:
             meta["session_id"] = session_id
 

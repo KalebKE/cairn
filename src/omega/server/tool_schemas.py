@@ -1,6 +1,6 @@
-"""OMEGA MCP Tool Schemas -- 15 tools for memory management.
+"""OMEGA MCP Tool Schemas -- 16 tools for memory management.
 
-Consolidated into 15 action-discriminated composites.
+Consolidated into 15 action-discriminated composites plus context_packet.
 All original capabilities preserved; low-frequency operations grouped by intent.
 omega_briefing and omega_habits remain as backward-compat aliases in handlers.
 omega_lessons removed — cross-session lessons auto-surface via hooks on file edits.
@@ -574,6 +574,23 @@ CONDENSED_TOOL_SCHEMAS = [
         },
     },
 ]
+
+# Harness-agnostic context wire contract. Gate the lower-level generic
+# context_assemble alias behind an env var, but expose context_packet by
+# default because it is the task-aware memory packet used by current hook and
+# daemon surfaces.
+import os as _os
+from omega.server.context_tool_schemas import CONTEXT_TOOL_SCHEMAS  # noqa: E402
+
+TOOL_SCHEMAS.extend(
+    schema for schema in CONTEXT_TOOL_SCHEMAS
+    if schema.get("name") == "context_packet"
+)
+if _os.environ.get("OMEGA_CONTEXT_WIRE", "").lower() in ("1", "true", "yes"):
+    TOOL_SCHEMAS.extend(
+        schema for schema in CONTEXT_TOOL_SCHEMAS
+        if schema.get("name") != "context_packet"
+    )
 
 
 def get_condensed_schemas(all_schemas: list[dict]) -> list[dict]:

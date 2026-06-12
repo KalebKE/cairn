@@ -1028,14 +1028,14 @@ class MaintenanceMixin:
             for node_id in frontier:
                 # Query edges in both directions (undirected graph)
                 rows = self._conn.execute(
-                    """SELECT source_id, target_id, edge_type, weight
+                    """SELECT source_id, target_id, edge_type, weight, metadata
                        FROM edges
                        WHERE (source_id = ? OR target_id = ?)
                        AND weight >= ?""",
                     (node_id, node_id, min_weight),
                 ).fetchall()
 
-                for source, target, etype, weight in rows:
+                for source, target, etype, weight, edge_meta_raw in rows:
                     neighbor = target if source == node_id else source
                     if neighbor == start_id or neighbor in visited or neighbor in skip:
                         continue
@@ -1052,6 +1052,10 @@ class MaintenanceMixin:
                         continue
 
                     result = self._row_to_result(mem_row)
+                    try:
+                        edge_metadata = json.loads(edge_meta_raw) if edge_meta_raw else {}
+                    except Exception:
+                        edge_metadata = {}
                     entry = {
                         "node_id": neighbor,
                         "content": result.content,
@@ -1060,6 +1064,7 @@ class MaintenanceMixin:
                         "hop": hop,
                         "weight": weight,
                         "edge_type": etype,
+                        "edge_metadata": edge_metadata,
                     }
                     if _include_results:
                         entry["_result"] = result

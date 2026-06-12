@@ -20,6 +20,33 @@ def _use_json(args) -> bool:
     return getattr(args, "json", False) or os.environ.get("OMEGA_JSON") == "1"
 
 
+def _is_pro_licensed() -> bool:
+    try:
+        from omega_platform.license import is_pro
+        return bool(is_pro())
+    except Exception:
+        return False
+
+
+def _require_pro_cli(args, feature: str) -> None:
+    if _is_pro_licensed():
+        return
+    message = f"{feature} requires OMEGA Pro."
+    if _use_json(args):
+        print(json.dumps({"error": message, "requires_pro": True}))
+    else:
+        print(message, file=sys.stderr)
+    raise SystemExit(1)
+
+
+def _parse_event_types_arg(value) -> list[str] | None:
+    if not value:
+        return None
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [part.strip() for part in str(value).split(",") if part.strip()]
+
+
 OMEGA_DIR = Path.home() / ".omega"
 OMEGA_CACHE = Path.home() / ".cache" / "omega"
 MAGMA_DIR = Path.home() / ".magma"
@@ -3332,6 +3359,114 @@ def cmd_export_obsidian(args):
     print(f"Index file: {result['index_file']}")
 
 
+def cmd_eval_context_packet(args):
+    """Evaluate task-aware context packet quality."""
+    from dataclasses import asdict
+    from omega.evaluation.context_packet_eval import (
+        format_packet_report,
+        run_context_packet_evaluation,
+    )
+
+    report = run_context_packet_evaluation(
+        sample_size=args.sample_size,
+        budget_tokens=args.budget_tokens,
+        mode=args.mode,
+        seed=args.seed,
+        output_path=args.output,
+        probe_cache_path=getattr(args, "probe_cache", None),
+    )
+    if _use_json(args):
+        print(json.dumps(asdict(report), indent=2, default=str))
+    else:
+        print(format_packet_report(report))
+        if args.output:
+            print(f"\nSaved JSON report to {args.output}")
+
+
+def cmd_backfill_context_packet(args):
+    """Backfill graph edges from context packet misses."""
+    if getattr(args, "apply", False):
+        _require_pro_cli(args, "backfill-context-packet --apply")
+
+    from omega.bridge import _get_store
+    from omega.evaluation.context_packet_eval import backfill_packet_miss_report
+
+    manifest = backfill_packet_miss_report(
+        _get_store(),
+        args.report,
+        similarity_threshold=args.threshold,
+        max_connections_per_source=args.max_connections_per_source,
+        max_edges=args.max_edges,
+        dry_run=not getattr(args, "apply", False),
+        output_path=args.output,
+        event_types=_parse_event_types_arg(getattr(args, "event_types", None)),
+    )
+    if _use_json(args):
+        print(json.dumps(manifest, indent=2, default=str))
+    else:
+        action = "Would create" if manifest.get("dry_run") else "Created"
+        print(
+            f"{action} {manifest.get('created', 0)} packet-miss edge(s) "
+            f"from {manifest.get('eligible_misses', 0)} eligible miss(es)."
+        )
+        if args.output:
+            print(f"Saved manifest to {args.output}")
+
+
+def cmd_diagnose_context_packet(args):
+    """Explain context packet eval misses without mutating memory state."""
+    from omega.bridge import _get_store
+    from omega.evaluation.context_packet_eval import (
+        diagnose_context_packet_report,
+        format_packet_diagnosis,
+    )
+
+    result = diagnose_context_packet_report(
+        _get_store(),
+        args.report,
+        limit=args.limit,
+        include_hits=getattr(args, "include_hits", False),
+        output_path=args.output,
+    )
+    if _use_json(args):
+        print(json.dumps(result, indent=2, default=str))
+    else:
+        print(format_packet_diagnosis(result))
+        if args.output:
+            print(f"\nSaved diagnosis JSON to {args.output}")
+
+
+def cmd_maintain_context_packet(args):
+    """Run eval plus capped packet-miss maintenance."""
+    _require_pro_cli(args, "maintain-context-packet")
+
+    from omega.bridge import _get_store
+    from omega.evaluation.context_packet_eval import run_context_packet_maintenance_loop
+
+    result = run_context_packet_maintenance_loop(
+        _get_store(),
+        artifact_prefix=args.artifact_prefix,
+        sample_size=args.sample_size,
+        budget_tokens=args.budget_tokens,
+        mode=args.mode,
+        seed=args.seed,
+        probe_cache_path=getattr(args, "probe_cache", None),
+        similarity_threshold=args.threshold,
+        max_connections_per_source=args.max_connections_per_source,
+        max_edges=args.max_edges,
+        event_types=_parse_event_types_arg(getattr(args, "event_types", None)),
+        apply=getattr(args, "apply", False),
+        re_eval=getattr(args, "re_eval", False),
+    )
+    if _use_json(args):
+        print(json.dumps(result, indent=2, default=str))
+    else:
+        print(f"Before report: {result.get('before_report')}")
+        print(f"Backfill manifest: {result.get('backfill_manifest')}")
+        if result.get("after_report"):
+            print(f"After report: {result.get('after_report')}")
+
+
 def cmd_eval_retrieval(args):
     """Evaluate retrieval quality with probe queries."""
     from omega.evaluation.retrieval_eval import format_report, run_evaluation
@@ -3584,6 +3719,47 @@ def main():
     eval_parser.add_argument("--output", help="Save JSON report to this path")
     eval_parser.add_argument("--json", action="store_true", help="Output as JSON to stdout (also: OMEGA_JSON=1)")
 
+    packet_eval_parser = subparsers.add_parser("eval-context-packet", help="Evaluate task-aware context packet quality")
+    packet_eval_parser.add_argument("--sample-size", type=int, default=20, help="Number of memories to probe (default: 20)")
+    packet_eval_parser.add_argument("--budget-tokens", type=int, default=800, help="Packet budget in approximate tokens")
+    packet_eval_parser.add_argument("--mode", default="before_edit", choices=["before_edit", "planning", "debug", "review", "command"])
+    packet_eval_parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducible sampling")
+    packet_eval_parser.add_argument("--output", help="Save JSON report to this path")
+    packet_eval_parser.add_argument("--probe-cache", help="Load/save fixed packet probe cache")
+    packet_eval_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
+    packet_backfill_parser = subparsers.add_parser("backfill-context-packet", help="Preview or apply context packet miss edge backfill")
+    packet_backfill_parser.add_argument("--report", required=True, help="Context packet eval JSON report")
+    packet_backfill_parser.add_argument("--threshold", type=float, default=0.72, help="Similarity threshold")
+    packet_backfill_parser.add_argument("--max-connections-per-source", type=int, default=1)
+    packet_backfill_parser.add_argument("--max-edges", type=int, default=10)
+    packet_backfill_parser.add_argument("--event-types", help="Comma-separated source event types to consider")
+    packet_backfill_parser.add_argument("--apply", action="store_true", help="Write edges. Requires OMEGA Pro.")
+    packet_backfill_parser.add_argument("--output", help="Save backfill manifest JSON")
+    packet_backfill_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
+    packet_diag_parser = subparsers.add_parser("diagnose-context-packet", help="Explain context packet misses from an eval report")
+    packet_diag_parser.add_argument("--report", required=True, help="Context packet eval JSON report")
+    packet_diag_parser.add_argument("--limit", type=int, default=10, help="Max probes to diagnose")
+    packet_diag_parser.add_argument("--include-hits", action="store_true", help="Diagnose hits as well as misses")
+    packet_diag_parser.add_argument("--output", help="Save diagnosis JSON")
+    packet_diag_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
+    packet_maint_parser = subparsers.add_parser("maintain-context-packet", help="Run packet eval plus capped miss backfill. Requires OMEGA Pro.")
+    packet_maint_parser.add_argument("--artifact-prefix", required=True, help="Prefix for before/backfill/after artifacts")
+    packet_maint_parser.add_argument("--sample-size", type=int, default=20)
+    packet_maint_parser.add_argument("--budget-tokens", type=int, default=800)
+    packet_maint_parser.add_argument("--mode", default="before_edit", choices=["before_edit", "planning", "debug", "review", "command"])
+    packet_maint_parser.add_argument("--seed", type=int, default=42)
+    packet_maint_parser.add_argument("--probe-cache", help="Load/save fixed packet probe cache")
+    packet_maint_parser.add_argument("--threshold", type=float, default=0.72)
+    packet_maint_parser.add_argument("--max-connections-per-source", type=int, default=1)
+    packet_maint_parser.add_argument("--max-edges", type=int, default=10)
+    packet_maint_parser.add_argument("--event-types", help="Comma-separated source event types to consider")
+    packet_maint_parser.add_argument("--apply", action="store_true", help="Write edges")
+    packet_maint_parser.add_argument("--re-eval", action="store_true", help="Run an after eval when --apply is used")
+    packet_maint_parser.add_argument("--json", action="store_true", help="Output as JSON")
+
     args = parser.parse_args()
 
     commands = {
@@ -3617,6 +3793,10 @@ def main():
         "cloud": cmd_cloud,
         "mobile": cmd_mobile,
         "eval-retrieval": cmd_eval_retrieval,
+        "eval-context-packet": cmd_eval_context_packet,
+        "backfill-context-packet": cmd_backfill_context_packet,
+        "diagnose-context-packet": cmd_diagnose_context_packet,
+        "maintain-context-packet": cmd_maintain_context_packet,
         "export-obsidian": cmd_export_obsidian,
     }
 

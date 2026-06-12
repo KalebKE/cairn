@@ -20,7 +20,7 @@ def test_tool_schemas_valid():
         assert "name" in schema
         assert "description" in schema
         assert "inputSchema" in schema
-        assert schema["name"].startswith("omega_")
+        assert schema["name"].startswith("omega_") or schema["name"] == "context_packet"
 
 def test_handler_count():
     """Should have a handler for every tool schema (plus backward-compat aliases)."""
@@ -503,4 +503,4 @@ def test_tool_schemas_docstring_count():
         assert int(match.group(1)) == len(TOOL_SCHEMAS), (
             f"Docstring says {match.group(1)} tools, actually has {len(TOOL_SCHEMAS)}"
         )
-    assert len(TOOL_SCHEMAS) >= 13  # at least 13 consolidated action-discriminated composites (omega_lessons removed)
+    assert len(TOOL_SCHEMAS) >= 16  # 15 omega_* composites plus context_packet
