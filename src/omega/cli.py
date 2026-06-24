@@ -2271,9 +2271,10 @@ def _jp_restore_config(args):
 def cmd_embed_daemon(args):
     """Manage the shared embedding daemon."""
     try:
-        from omega.embedding_daemon import is_daemon_running, get_daemon_pid, stop_daemon, main as daemon_main
+        from omega_platform.embedding_daemon import is_daemon_running, get_daemon_pid, stop_daemon, main as daemon_main
     except ImportError:
-        print("Embedding daemon requires omega-pro.")
+        print("Embedding daemon requires OMEGA Pro.")
+        print("Run 'omega upgrade' or visit https://omegamax.co/pro")
         sys.exit(1)
 
     subcmd = args.embed_command
@@ -2733,10 +2734,10 @@ def cmd_doctor(args):
 def cmd_knowledge(args):
     """Knowledge base management."""
     try:
-        from omega.knowledge.engine import scan_directory, list_documents, search_documents  # noqa: F401
+        from omega_platform.knowledge.engine import scan_directory, list_documents, search_documents  # noqa: F401
     except ImportError:
-        print("Knowledge base requires omega-pro.")
-        print("Install: pip install omega-pro")
+        print("Knowledge base requires OMEGA Pro.")
+        print("Run 'omega upgrade' or visit https://omegamax.co/pro")
         return
 
     subcmd = getattr(args, "kb_command", None)
@@ -2756,9 +2757,10 @@ def cmd_knowledge(args):
 
     elif subcmd == "sync-kb":
         try:
-            from omega.knowledge.cloud_sync import sync_kb_queue
+            from omega_platform.knowledge.cloud_sync import sync_kb_queue
         except ImportError:
-            print("Knowledge cloud sync requires omega-pro.")
+            print("Knowledge cloud sync requires OMEGA Pro.")
+            print("Run 'omega upgrade' or visit https://omegamax.co/pro")
             return
         result = sync_kb_queue(batch_size=args.batch_size)
         print(result)
@@ -2774,10 +2776,10 @@ def cmd_knowledge(args):
 def cmd_cloud(args):
     """Cloud sync and Supabase management."""
     try:
-        from omega.cloud.sync import get_sync  # noqa: F401
+        from omega_platform.cloud.sync import get_sync  # noqa: F401
     except ImportError:
-        print("Cloud sync requires omega-pro.")
-        print("Install: pip install omega-pro")
+        print("Cloud sync requires OMEGA Pro.")
+        print("Run 'omega upgrade' or visit https://omegamax.co/pro")
         return
 
     from omega.cli_ui import print_header
@@ -2793,9 +2795,10 @@ def cmd_cloud(args):
             print("\nGet these from: Supabase Dashboard → Settings → API")
             return
         try:
-            from omega.cloud.setup import setup_supabase
+            from omega_platform.cloud.setup import setup_supabase
         except ImportError:
-            print("Cloud setup requires omega-pro.")
+            print("Cloud setup requires OMEGA Pro.")
+            print("Run 'omega upgrade' or visit https://omegamax.co/pro")
             return
 
         result = setup_supabase(url, key, service_key)
@@ -2821,18 +2824,20 @@ def cmd_cloud(args):
 
     elif subcmd == "schema":
         try:
-            from omega.cloud.setup import get_schema_sql
+            from omega_platform.cloud.setup import get_schema_sql
         except ImportError:
-            print("Cloud setup requires omega-pro.")
+            print("Cloud setup requires OMEGA Pro.")
+            print("Run 'omega upgrade' or visit https://omegamax.co/pro")
             return
 
         print(get_schema_sql())
 
     elif subcmd == "verify":
         try:
-            from omega.cloud.setup import verify_connection
+            from omega_platform.cloud.setup import verify_connection
         except ImportError:
-            print("Cloud verify requires omega-pro.")
+            print("Cloud verify requires OMEGA Pro.")
+            print("Run 'omega upgrade' or visit https://omegamax.co/pro")
             return
 
         print(verify_connection())
@@ -2858,10 +2863,10 @@ def cmd_cloud(args):
 def cmd_mobile(args):
     """Mobile access setup and mcp-proxy management."""
     try:
-        from omega.cloud.sync import get_sync  # noqa: F401
+        from omega_platform.cloud.sync import get_sync  # noqa: F401
     except ImportError:
-        print("Mobile access requires omega-pro (cloud sync).")
-        print("Install: pip install omega-pro")
+        print("Mobile access requires OMEGA Pro (cloud sync).")
+        print("Run 'omega upgrade' or visit https://omegamax.co/pro")
         return
 
     subcmd = getattr(args, "mobile_command", None)

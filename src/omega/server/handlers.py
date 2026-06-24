@@ -622,7 +622,7 @@ async def handle_omega_query(arguments: dict) -> dict:
             results.append({"source": "memory", "error": str(e)})
         # Knowledge document search
         try:
-            from omega.knowledge.engine import search_documents
+            from omega_platform.knowledge.engine import search_documents
             doc_result = search_documents(query=query_text, limit=limit, entity_id=entity_id)
             results.append({"source": "document", "data": doc_result})
         except ImportError:
