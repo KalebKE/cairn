@@ -478,7 +478,7 @@ class MaintenanceMixin:
         """
         stats: Dict[str, int] = {"merged": 0}
         try:
-            from omega.entity.engine import get_entity_manager
+            from omega_platform.entity.engine import get_entity_manager
             em = get_entity_manager(Path(self.db_path) if hasattr(self, 'db_path') else None)
         except Exception as e:
             logger.debug("Entity engine unavailable for merge: %s", e)

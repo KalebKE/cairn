@@ -952,7 +952,7 @@ class QueryMixin:
             return
 
         try:
-            from omega.entity.engine import EntityManager
+            from omega_platform.entity.engine import EntityManager
             mgr = EntityManager(db_path=self.db_path)
             related_ids = mgr.get_related_entity_ids(entity_id, max_hops=1)
             if not related_ids:

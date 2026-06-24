@@ -72,7 +72,7 @@ def main():
     _kill_orphaned_mcp_servers()
 
     try:
-        from omega.coordination import get_manager
+        from omega_platform.orchestrator.coordination import get_manager
         mgr = get_manager()
         mgr.list_sessions()  # Force-clean stale sessions (bypasses rate limit)
         result = mgr.register_session(

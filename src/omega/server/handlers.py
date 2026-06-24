@@ -281,7 +281,7 @@ def _validate_memory_write(content: str, event_type: str, metadata: Any) -> tupl
 def _broadcast_decision(session_id: str, project: str, content: str):
     """Best-effort broadcast of a stored decision to active peers."""
     try:
-        from omega.coordination import get_manager
+        from omega_platform.orchestrator.coordination import get_manager
         mgr = get_manager()
 
         # Only broadcast if there are active peers
@@ -465,7 +465,7 @@ async def handle_omega_store(arguments: dict) -> dict:
         # Auto-register decisions in coordination (Part C of utilization boost)
         if event_type == "decision" and session_id:
             try:
-                from omega.coordination import get_manager
+                from omega_platform.orchestrator.coordination import get_manager
                 mgr = get_manager()
                 _auto_register_decision(mgr, session_id, project, content, entity_id)
             except Exception:
@@ -515,7 +515,7 @@ async def handle_omega_store(arguments: dict) -> dict:
         # Attach finding to active intent ("already explored" signal)
         if event_type in ("decision", "lesson_learned") and session_id:
             try:
-                from omega.coordination import get_manager
+                from omega_platform.orchestrator.coordination import get_manager
                 mgr = get_manager()
                 mgr.attach_finding(session_id, content[:300])
             except Exception as e:
@@ -788,7 +788,7 @@ async def handle_omega_trace(arguments: dict) -> dict:
         return mcp_error("session_id is required for trace mode")
 
     try:
-        from omega.coordination import CoordinationManager
+        from omega_platform.orchestrator.coordination import CoordinationManager
 
         mgr = CoordinationManager.get_instance()
         rows = mgr.query_audit(session_id=session_id, limit=500)
@@ -897,7 +897,7 @@ async def handle_omega_welcome(arguments: dict) -> dict:
     # timeout, correct PID).  The coord_session_start hook often times out
     # under SQLite contention with many concurrent agents.
     try:
-        from omega.coordination import get_manager
+        from omega_platform.orchestrator.coordination import get_manager
         import os as _os
 
         mgr = get_manager()
@@ -1954,7 +1954,7 @@ async def handle_omega_protocol(arguments: dict) -> dict:
     # Detect peer count for auto-mode selection
     peer_count = 0
     try:
-        from omega.coordination import get_manager
+        from omega_platform.orchestrator.coordination import get_manager
 
         mgr = get_manager()
         sessions = mgr.list_sessions(auto_clean=True)

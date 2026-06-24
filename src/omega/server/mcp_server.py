@@ -175,7 +175,7 @@ def _close_on_exit():
         pass
     # Close CoordinationManager (omega.db connection)
     try:
-        from omega.coordination import close_manager
+        from omega_platform.orchestrator.coordination import close_manager
         close_manager()
     except Exception:
         pass
@@ -495,7 +495,7 @@ def _run_coordination_tick():
     global _coord_tick_count
     _coord_tick_count += 1
     try:
-        from omega.coordination import get_manager
+        from omega_platform.orchestrator.coordination import get_manager
         from omega.server.hook_server import (
             _last_deadlock_push,
             DEADLOCK_PUSH_DEBOUNCE_S,
@@ -604,7 +604,7 @@ def _cleanup_dead_sessions():
     Uses a short busy_timeout and skips gracefully if the DB is locked.
     """
     try:
-        from omega.coordination import get_manager
+        from omega_platform.orchestrator.coordination import get_manager
         mgr = get_manager()
         conn = mgr.get_read_connection()
 

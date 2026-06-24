@@ -8,7 +8,13 @@ from pathlib import Path
 # Core source that imports them from ``omega.<module>`` is the issue #64 bug:
 # the path does not exist in either wheel, so the import silently fails and the
 # feature degrades (CLI prints a bogus upgrade hint; MCP/hook paths no-op).
-_PRO_ONLY_TOP_LEVEL = {"cloud", "knowledge", "embedding_daemon"}
+_PRO_ONLY_TOP_LEVEL = {
+    "cloud",
+    "coordination",
+    "embedding_daemon",
+    "entity",
+    "knowledge",
+}
 _CORE_SRC = Path(__file__).resolve().parent.parent / "src" / "omega"
 
 
@@ -37,7 +43,7 @@ def test_pid_registry_imports_and_formats_diagnostics(tmp_path, monkeypatch):
 
 
 def test_core_never_imports_pro_features_from_omega_namespace():
-    """Issue #64 regression: Core must reference Pro code as ``omega_platform.*``.
+    """Core/Pro boundary regression: Pro code is never under ``omega.*``.
 
     Scans every Core source file for ``from omega.<pro> import ...`` or
     ``import omega.<pro>`` where ``<pro>`` is a Pro-only top-level module. Those

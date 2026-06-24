@@ -54,7 +54,7 @@ def _fresh_state(tmp_omega_dir):
     from omega.bridge import reset_memory
     reset_memory()
     try:
-        import omega.coordination as coord
+        import omega_platform.orchestrator.coordination as coord
         coord._manager = None
     except (ImportError, AttributeError):
         pass

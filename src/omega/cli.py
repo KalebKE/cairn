@@ -167,7 +167,7 @@ def _inject_claude_md(*, dry_run: bool = False):
 def _has_commercial_modules() -> bool:
     """Check if commercial/coordination modules are available."""
     try:
-        import omega.coordination  # noqa: F401
+        import omega_platform.orchestrator.coordination  # noqa: F401
 
         return True
     except ImportError:
