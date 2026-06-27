@@ -11,10 +11,80 @@ dirty worktree changes from other agents or prior sessions.
 import json
 import os
 import re
+import shlex
 import time
 import traceback
 from datetime import datetime
 from pathlib import Path
+
+
+_COMMIT_VALUE_OPTIONS = {
+    "-m",
+    "-F",
+    "-C",
+    "-c",
+    "-t",
+    "--message",
+    "--file",
+    "--author",
+    "--date",
+    "--fixup",
+    "--squash",
+}
+
+
+def _token_starts_unclosed_quote(token: str) -> bool:
+    return bool(token) and token[0] in {"'", '"'} and token.count(token[0]) % 2 == 1
+
+
+def _commit_tokens(command: str) -> list[str]:
+    try:
+        return shlex.split(command)
+    except ValueError:
+        try:
+            return shlex.split(command, posix=False)
+        except ValueError:
+            return command.split()
+
+
+def _token_carries_commit_all_flag(token: str) -> bool:
+    if token == "--all":
+        return True
+    if token.startswith("--"):
+        return False
+    return token.startswith("-") and "a" in token[1:]
+
+
+def _commit_has_all_flag(command: str) -> bool:
+    tokens = _commit_tokens(command)
+    for i in range(len(tokens) - 1):
+        if tokens[i] == "git" and tokens[i + 1] == "commit":
+            args = tokens[i + 2 :]
+            break
+    else:
+        return False
+
+    skip_next = False
+    for token in args:
+        if skip_next:
+            if _token_starts_unclosed_quote(token):
+                return False
+            skip_next = False
+            continue
+        if token == "--":
+            return False
+        if token in _COMMIT_VALUE_OPTIONS:
+            skip_next = True
+            continue
+        if any(
+            token.startswith(f"{option}=")
+            for option in _COMMIT_VALUE_OPTIONS
+            if option.startswith("--")
+        ):
+            continue
+        if _token_carries_commit_all_flag(token):
+            return True
+    return False
 
 
 def _log_hook_error(hook_name, error):
@@ -53,8 +123,8 @@ def _is_broad_add(command):
     # git add . or git add -A or git add --all
     if re.search(r"\bgit\s+add\s+(\.\s*$|-A\b|--all\b)", command):
         return True
-    # git commit -a / git commit -am
-    if re.search(r"\bgit\s+commit\s+.*-[a-zA-Z]*a", command):
+    # git commit -a / git commit -am / git commit --all
+    if _commit_has_all_flag(command):
         return True
     return False
 
@@ -90,7 +160,7 @@ def main():
 
     # Only trigger on git add or git commit -a
     is_git_add = re.search(r"\bgit\s+add\b", command)
-    is_commit_a = re.search(r"\bgit\s+commit\s+.*-[a-zA-Z]*a", command)
+    is_commit_a = _commit_has_all_flag(command)
     if not is_git_add and not is_commit_a:
         return
 
