@@ -93,6 +93,23 @@ def get_capabilities() -> set[str]:
     return capabilities
 
 
+# Fork modification (self-hosted): unlock the capabilities that gate CORE
+# data-ownership behavior — full semantic retrieval and the write-count cap —
+# so this self-maintained install is not degraded to keyword-only search past
+# 2,000 memories or write-capped at 5,000. These flags gate Apache-2.0 core
+# logic (retrieval quality in server/handlers.py, the cap in sqlite_store); the
+# closed Pro *modules* (coordination/router/knowledge/entity/profile/oracle)
+# remain genuinely absent and are NOT unlocked here — ``pro_tools`` stays gated
+# so the server does not try to load modules that don't exist.
+_FORK_UNLOCKED_CAPABILITIES = frozenset({"full_retrieval", "unlimited_memory"})
+
+
 def has_capability(name: str) -> bool:
-    """Return True when an installed plugin provides ``name``."""
+    """Return True when an installed plugin provides ``name``.
+
+    Self-hosted fork: the core data-ownership capabilities in
+    ``_FORK_UNLOCKED_CAPABILITIES`` are always available (see note above).
+    """
+    if name in _FORK_UNLOCKED_CAPABILITIES:
+        return True
     return name in get_capabilities()
