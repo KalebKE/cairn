@@ -176,6 +176,11 @@ def llm_complete(
         return ""
 
     model = models.get(model_tier, models["fast"])
+    if provider == "openai_compat":
+        # Resolve at call time: _MODEL_MAP snapshots env at import, which goes
+        # stale when OMEGA_LLM_MODEL_* is set after omega.llm is imported.
+        _env_key = f"OMEGA_LLM_MODEL_{'STANDARD' if model_tier == 'standard' else 'FAST'}"
+        model = os.environ.get(_env_key, model)
 
     def _do_complete() -> str:
         if provider == "anthropic":

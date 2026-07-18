@@ -1642,6 +1642,7 @@ class QueryMixin:
     # that keeps getting recalled is load-bearing knowledge, not aging exhaust.
     _ACCESS_AWARE_DECAY_TYPES = frozenset({
         "decision", "lesson_learned", "advisor_insight", "skill_template",
+        "project_history",
     })
 
     def _metadata_score_factor(self, node) -> float:

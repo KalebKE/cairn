@@ -113,6 +113,7 @@ EVENT_TYPE_TTL: Dict[str, Optional[int]] = {
     AutoCaptureEventType.COORDINATION_SNAPSHOT: TTLCategory.SHORT_TERM,
     AutoCaptureEventType.PROJECT_CONTEXT: TTLCategory.PERMANENT,
     AutoCaptureEventType.PROJECT_STATUS: TTLCategory.PERMANENT,  # Cross-session project continuity
+    "project_history": TTLCategory.PERMANENT,  # LLM rollup syntheses (omega.rollup) — durable history
     # User-facing types (from legacy/migration)
     "user_fact": TTLCategory.PERMANENT,  # Facts about the user (similar to user_preference)
     "user_prompt": TTLCategory.LONG_TERM,  # Captured user prompts

@@ -230,6 +230,7 @@ class MaintenanceMixin:
                 "decision",
                 "lesson_learned",
                 "advisor_insight",
+                "project_history",
             }
         )
         stats = {"pruned_stale": 0, "pruned_summaries": 0, "pruned_edges": 0, "pruned_vec_orphans": 0}
@@ -390,7 +391,7 @@ class MaintenanceMixin:
         protected_types = frozenset({
             "user_preference", "error_pattern", "behavioral_pattern",
             "constraint", "reminder",
-            "decision", "lesson_learned", "advisor_insight",
+            "decision", "lesson_learned", "advisor_insight", "project_history",
         })
         cutoff = (datetime.now(timezone.utc) - timedelta(days=min_age_days)).isoformat()
         stats: Dict[str, int] = {"decayed": 0, "scanned": 0}

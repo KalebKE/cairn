@@ -1477,6 +1477,79 @@ def cmd_reingest(args):
     print(f"\nNode count: {s.get('node_count', 0)}")
 
 
+def cmd_rollup(args):
+    """LLM-assisted episodic rollup: synthesize aging task_completions /
+    session_summaries into durable project_history memories."""
+    from omega.bridge import _get_store
+    from omega.embedding import generate_embedding, is_embedding_degraded
+    from omega.rollup import rollup_pending, find_pending_windows
+
+    # Guard: never roll up while embeddings are degraded — the synthesis memory
+    # would get an unqueryable hash vector.
+    generate_embedding("rollup health probe")
+    if is_embedding_degraded():
+        print("Embedding backend degraded (hash fallback) — rollup skipped.")
+        sys.exit(1)
+
+    db = _get_store()
+    min_age = getattr(args, "min_age_days", 30)
+    dry_run = getattr(args, "dry_run", False)
+
+    pending = find_pending_windows(db, min_age_days=min_age)
+    if not pending:
+        print("No pending rollup windows.")
+        return
+    print(f"Pending windows: {len(pending)}")
+    result = rollup_pending(db, min_age_days=min_age, dry_run=dry_run,
+                            max_windows=getattr(args, "max_windows", 6))
+    for w in result["windows"]:
+        line = f"  {w['window']}  {w['project'] or '(no project)'}  rows={w['count']}  -> {w['status']}"
+        print(line)
+        if dry_run and w.get("synthesis"):
+            print("    --- synthesis preview ---")
+            for ln in w["synthesis"].splitlines():
+                print(f"    {ln}")
+    print(f"{'Would roll' if dry_run else 'Rolled'}: {result['windows_rolled']} window(s), "
+          f"{result['rows_rolled']} row(s); llm-skipped: {result['skipped_llm']}")
+
+
+def cmd_link(args):
+    """Discover and link related memories (vector-similarity edge builder)."""
+    from omega.bridge import discover_connections
+    print(discover_connections(
+        lookback_hours=getattr(args, "hours", 48),
+        dry_run=getattr(args, "dry_run", False),
+    ))
+
+
+def cmd_gc(args):
+    """Storage garbage collection: re-embed hash-tainted rows, drain the
+    write-only cloud_delete_queue, and VACUUM to return freed pages."""
+    from omega.bridge import _get_store
+    db = _get_store()
+
+    r = db.reembed_hash_tainted()
+    if r.get("skipped_degraded"):
+        print("  reembed: skipped (embedding backend degraded)")
+    else:
+        print(f"  reembed: {r['reembedded']} re-embedded, {r['remaining']} remaining")
+
+    with db._lock:
+        drained = db._conn.execute("DELETE FROM cloud_delete_queue").rowcount
+        db._commit()
+    print(f"  cloud_delete_queue drained: {drained} row(s) (no cloud sync in this build)")
+
+    size_before = os.path.getsize(db.db_path) if hasattr(db, "db_path") and os.path.exists(str(db.db_path)) else 0
+    with db._lock:
+        db._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        db._conn.execute("VACUUM")
+    size_after = os.path.getsize(db.db_path) if size_before else 0
+    if size_before:
+        print(f"  VACUUM: {size_before/1048576:.2f} MB -> {size_after/1048576:.2f} MB")
+    else:
+        print("  VACUUM: done")
+
+
 def cmd_consolidate(args):
     """Run memory consolidation: deduplicate and prune old entries."""
     prune_days = getattr(args, "prune_days", 30)
@@ -3715,6 +3788,24 @@ def main():
     consolidate_parser.add_argument(
         "--prune-days", type=int, default=30, help="Prune entries older than N days with 0 access (default: 30)"
     )
+    rollup_parser = subparsers.add_parser(
+        "rollup", help="Synthesize aging episodic memories into durable project_history (LLM)"
+    )
+    rollup_parser.add_argument("--min-age-days", type=int, default=30,
+                               help="Only roll rows older than N days (default: 30)")
+    rollup_parser.add_argument("--max-windows", type=int, default=6,
+                               help="Max project-month windows per run (default: 6)")
+    rollup_parser.add_argument("--dry-run", action="store_true",
+                               help="Print the synthesis without writing anything")
+    link_parser = subparsers.add_parser(
+        "link", help="Discover and link related memories (vector-similarity edges)"
+    )
+    link_parser.add_argument("--hours", type=int, default=48,
+                             help="Lookback window in hours (default: 48)")
+    link_parser.add_argument("--dry-run", action="store_true")
+    subparsers.add_parser(
+        "gc", help="Storage GC: re-embed hash-tainted rows, drain dead queues, VACUUM"
+    )
     subparsers.add_parser("backup", help="Back up omega.db to ~/.omega/backups/ (keeps last 5)")
     compact_parser = subparsers.add_parser("compact", help="Cluster and summarize related memories")
     compact_parser.add_argument(
@@ -3908,6 +3999,9 @@ def main():
         "migrate-db": cmd_migrate_db,
         "reingest": cmd_reingest,
         "consolidate": cmd_consolidate,
+        "rollup": cmd_rollup,
+        "link": cmd_link,
+        "gc": cmd_gc,
         "backup": cmd_backup,
         "compact": cmd_compact,
         "stats": cmd_stats,

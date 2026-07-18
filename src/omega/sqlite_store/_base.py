@@ -73,6 +73,7 @@ class SQLiteStoreBase:
         "lesson_learned": 2.0,
         "error_pattern": 2.0,
         "user_preference": 2.0,
+        "project_history": 1.8,   # rollup syntheses — distilled project memory
         "task_completion": 1.4,
         "reflexion": 1.3,
         "outcome_evaluation": 1.3,
@@ -214,6 +215,7 @@ class SQLiteStoreBase:
         "error_pattern": 0.0,           # No decay — permanent
         "reminder": 0.0,               # No decay — permanent
         "lesson_learned": 0.005,       # 50% at ~139 days
+        "project_history": 0.005,      # rollup syntheses age slowly, like lessons
         "skill_template": 0.01,         # 50% at ~69 days — slower decay than decisions
         "advisor_insight": 0.015,        # 50% at ~46 days — codebase knowledge ages with code
         "decision": 0.015,            # 50% at ~46 days (never-accessed); access reduces decay
