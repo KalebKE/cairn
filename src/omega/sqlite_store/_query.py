@@ -304,7 +304,11 @@ class QueryMixin:
 
         # Phase 2.7: LLM-based query expansion (opt-in, QMD-inspired)
         # Generates semantic variants for vague queries to improve recall.
-        if expand_query:
+        # Skipped for ambient surfacing (surfacing_context set): the surfacing
+        # hook runs on every file edit and must stay in the tens-of-ms range —
+        # an LLM round-trip (600ms-3s) there is the exact latency failure that
+        # got hooks disabled historically. Explicit queries keep expansion.
+        if expand_query and surfacing_context is None:
             self._query_phase_expand(
                 query_text, query_intent, skip_vec, entity_id, limit,
                 all_results, vec_ranked, text_ranked, raw_vec_sims,

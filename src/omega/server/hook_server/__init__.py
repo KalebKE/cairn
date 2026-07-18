@@ -31,6 +31,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any, Dict
@@ -53,7 +54,36 @@ _DEFAULTS: Dict[str, Any] = {
     "preview_chars": 100,    # per-memory preview truncation
     "debounce_s": 20.0,      # same file surfaced at most once per window
     "max_block_chars": 600,  # hard cap on the whole injected block
+    "project_debounce_s": 600.0,  # project-knowledge briefing at most every 10 min
 }
+
+# Per-project debounce for the knowledge-briefing pass (pass 2).
+_last_project_surfaced: Dict[str, float] = {}
+
+# Event types worth surfacing in the project-knowledge briefing — durable
+# knowledge only, never episodic exhaust.
+_KNOWLEDGE_SURFACE_TYPES = frozenset({
+    "decision", "lesson_learned", "constraint", "advisor_insight", "user_preference",
+})
+
+_TOKEN_SPLIT_RE = re.compile(r"[_\-.\s]+")
+_CAMEL_SPLIT_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+
+
+def _natural_tokens(name: str) -> str:
+    """Turn an identifier ("VehicleSpecService.kt", "sync_cursor_race") into
+    natural lowercase words ("vehicle spec service", "sync cursor race").
+
+    Matters because the query pipeline classifies CamelCase/snake_case/paths
+    as keyword-sufficient and SKIPS the vector channel — which is exactly the
+    old failure mode: a filename-lexical query structurally blind to plans,
+    decisions, and lessons that lack file locality.
+    """
+    stem = name.rsplit(".", 1)[0] if "." in name else name
+    words = []
+    for part in _TOKEN_SPLIT_RE.split(stem):
+        words.extend(_CAMEL_SPLIT_RE.sub(" ", part).split())
+    return " ".join(w.lower() for w in words if w)
 
 # Per-file debounce state (process-local; fine for a single long-lived daemon).
 # Bounded: pruned opportunistically on insert so a long-lived daemon that has
@@ -115,58 +145,111 @@ def _file_path_from_payload(payload: Dict[str, Any]) -> str:
     return ""
 
 
+def _format_results(header: str, results, pc: int, seen_ids: set) -> list:
+    """Render one block of surfaced memories as lines (header + entries)."""
+    lines = [header]
+    for r in results:
+        nid_full = r.get("id", "") or ""
+        if nid_full in seen_ids:
+            continue
+        seen_ids.add(nid_full)
+        score = r.get("relevance", 0.0)
+        etype = r.get("event_type", "memory")
+        preview = (r.get("content", "") or "")[:pc].replace("\n", " ").strip()
+        lines.append(f"  [{score:.0%}] {etype}: {preview} (id:{nid_full[:8]})")
+    return lines if len(lines) > 1 else []
+
+
 def _do_surface(payload: Dict[str, Any]) -> str:
-    """Synchronous surfacing query. Runs in the DB executor. Returns a
-    ``[MEMORY]`` block, or ``""`` when there is nothing worth injecting."""
+    """Synchronous surfacing. Runs in the DB executor. Returns a ``[MEMORY]``
+    block, or ``""`` when there is nothing worth injecting.
+
+    Two passes, both semantic (vector channel ON — see _natural_tokens):
+
+    1. File context — what do we know that's relevant to this file?
+       (FILE_EDIT profile, per-file debounce)
+    2. Project knowledge briefing — active decisions/lessons/constraints for
+       this project, regardless of file locality. This is what makes business
+       and technical *plans* reachable from a coding session.
+       (PLANNING profile, knowledge types only, long per-project debounce)
+    """
     cfg = _cfg()
     file_path = _file_path_from_payload(payload)
     if not file_path:
         return ""
 
     now = time.monotonic()
-    last = _last_surfaced.get(file_path, 0.0)
-    if now - last < float(cfg["debounce_s"]):
-        return ""
-
-    from omega.bridge import query_structured
-
-    filename = os.path.basename(file_path)
-    dirname = os.path.basename(os.path.dirname(file_path))
-    results = query_structured(
-        query_text=f"{filename} {dirname} {file_path}",
-        limit=int(cfg["limit"]),
-        session_id=payload.get("session_id") or None,
-        project=payload.get("project") or None,
-        context_file=file_path,
-    ) or []
-
     floor = float(cfg["relevance_floor"])
-    results = [r for r in results if r.get("relevance", 0.0) >= floor]
-
-    # Record the attempt even when empty so we don't re-query the same file
-    # every keystroke-triggered edit within the debounce window.
-    _prune_debounce(now, float(cfg["debounce_s"]))
-    _last_surfaced[file_path] = now
-    if not results:
-        return ""
-
+    limit = int(cfg["limit"])
     pc = int(cfg["preview_chars"])
     budget = int(cfg["max_block_chars"])
-    header = f"[MEMORY] Relevant prior context for {filename}:"
-    lines = [header]
-    used = len(header)
-    for r in results:
-        score = r.get("relevance", 0.0)
-        etype = r.get("event_type", "memory")
-        preview = (r.get("content", "") or "")[:pc].replace("\n", " ").strip()
-        nid = (r.get("id", "") or "")[:8]
-        line = f"  [{score:.0%}] {etype}: {preview} (id:{nid})"
+    project = payload.get("project") or ""
+    session_id = payload.get("session_id") or None
+
+    from omega.bridge import query_structured
+    from omega.sqlite_store._types import SurfacingContext
+
+    lines: list = []
+    seen_ids: set = set()
+
+    # --- Pass 1: file-context recall (per-file debounce) ---
+    if now - _last_surfaced.get(file_path, 0.0) >= float(cfg["debounce_s"]):
+        # Record the attempt even when empty so we don't re-query the same
+        # file for every keystroke-triggered edit within the window.
+        _prune_debounce(now, float(cfg["debounce_s"]))
+        _last_surfaced[file_path] = now
+
+        filename = os.path.basename(file_path)
+        dirname = os.path.basename(os.path.dirname(file_path))
+        qtext = f"{_natural_tokens(filename)} {_natural_tokens(dirname)}".strip()
+        results = query_structured(
+            query_text=qtext or filename,
+            limit=limit,
+            session_id=session_id,
+            project=project or None,
+            context_file=file_path,
+            surfacing_context=SurfacingContext.FILE_EDIT,
+        ) or []
+        results = [r for r in results if r.get("relevance", 0.0) >= floor]
+        lines.extend(_format_results(
+            f"[MEMORY] Relevant prior context for {filename}:", results, pc, seen_ids,
+        ))
+
+    # --- Pass 2: project knowledge briefing (long per-project debounce) ---
+    if project and now - _last_project_surfaced.get(project, 0.0) >= float(cfg["project_debounce_s"]):
+        _last_project_surfaced[project] = now
+        pname = os.path.basename(project.rstrip("/")) or project
+        results = query_structured(
+            query_text=f"{_natural_tokens(pname)} architecture decisions constraints lessons plans",
+            limit=limit,
+            session_id=session_id,
+            project=project,
+            surfacing_context=SurfacingContext.PLANNING,
+        ) or []
+        results = [
+            r for r in results
+            if r.get("event_type") in _KNOWLEDGE_SURFACE_TYPES
+            and r.get("relevance", 0.0) >= floor
+        ]
+        lines.extend(_format_results(
+            f"[MEMORY] Active project knowledge ({pname}):", results, pc, seen_ids,
+        ))
+
+    if not lines:
+        return ""
+
+    # Enforce the overall character budget across both blocks.
+    out: list = []
+    used = 0
+    for line in lines:
         if used + len(line) + 1 > budget:
             break
-        lines.append(line)
+        out.append(line)
         used += len(line) + 1
-
-    return "\n".join(lines) if len(lines) > 1 else ""
+    # Never emit a dangling header with no entries.
+    while out and out[-1].startswith("[MEMORY]"):
+        out.pop()
+    return "\n".join(out) if out else ""
 
 
 async def _dispatch(hook: str, payload: Dict[str, Any]) -> Dict[str, Any]:
