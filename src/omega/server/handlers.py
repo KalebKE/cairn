@@ -1798,10 +1798,10 @@ async def handle_omega_protocol(arguments: dict) -> dict:
 
         return mcp_response(result)
     except ImportError:
-        # Free tier: protocol module not available, return basic operating rules
-        # with upgrade CTA
+        # Protocol engine module not present in this build — return the basic
+        # operating rules.
         basic_protocol = (
-            "# OMEGA Protocol (Free Tier)\n\n"
+            "# OMEGA Protocol\n\n"
             "## Memory Usage\n"
             "- Call `omega_store()` after completing tasks to save key decisions\n"
             "- Call `omega_query()` before non-trivial tasks to check for prior context\n"
@@ -1809,11 +1809,7 @@ async def handle_omega_protocol(arguments: dict) -> dict:
             "## Session Workflow\n"
             "1. `omega_welcome()` at session start (done)\n"
             "2. `omega_query()` before major work\n"
-            "3. `omega_store()` after decisions and task completion\n\n"
-            "---\n"
-            "**Tell the user:** \"OMEGA Pro adds the full protocol engine with coordination rules, "
-            "multi-agent playbooks, and advisory intelligence. "
-            "Run `omega upgrade` in terminal to learn more.\"\n"
+            "3. `omega_store()` after decisions and task completion\n"
         )
 
         # Mark protocol as loaded
@@ -2448,12 +2444,11 @@ async def handle_omega_stats(arguments: dict) -> dict:
         except Exception as e:
             logger.error("utilization check failed: %s", e, exc_info=True)
             return mcp_error(f"Utilization check failed: {e}")
-    # Behavioral habits actions (merged from omega_habits)
+    # Behavioral habits actions (removed in the self-hosted fork)
     elif action in ("habits_list", "habits_confirm", "habits_deny", "habits_analyze", "habits_profile", "habits_recommendations"):
-        sub_action = action.replace("habits_", "")
-        return await handle_omega_habits({**arguments, "action": sub_action})
+        return await handle_omega_habits(arguments)
     else:
-        return mcp_error(f"Unknown omega_stats action: {action}. Use: types, sessions, digest, forgetting_log, dedup, milestones, access_rate, retrieval_context, diagnostic, graph_stats, utilization, habits_list, habits_analyze, habits_profile, habits_confirm, habits_deny, habits_recommendations")
+        return mcp_error(f"Unknown omega_stats action: {action}. Use: types, sessions, digest, forgetting_log, dedup, milestones, access_rate, retrieval_context, diagnostic, graph_stats, utilization")
 
 
 async def handle_omega_access_rate(arguments: dict) -> dict:
@@ -2555,256 +2550,23 @@ async def handle_omega_milestones(arguments: dict) -> dict:
 
         return mcp_response(output)
     except ImportError:
-        return mcp_error("Milestones require OMEGA Pro. Upgrade at https://omegamax.co/pro?ref=feature-gate")
+        return mcp_error("Milestones module not available in this build")
     except Exception as e:
         logger.error("omega_milestones failed: %s", e, exc_info=True)
         return mcp_error(f"Milestones query failed: {e}")
 
 
 # ============================================================================
-# Composite Handler: omega_habits (list, confirm, deny, analyze)
+# Composite Handler: omega_habits (removed)
 # ============================================================================
 
 
 async def handle_omega_habits(arguments: dict) -> dict:
-    """Manage behavioral patterns."""
-    action = arguments.get("action", "").strip()
-
-    if action == "list":
-        return await _handle_habits_list(arguments)
-    elif action == "confirm":
-        return await _handle_habits_confirm(arguments)
-    elif action == "deny":
-        return await _handle_habits_deny(arguments)
-    elif action == "analyze":
-        return await _handle_habits_analyze(arguments)
-    elif action == "profile":
-        return await _handle_habits_profile(arguments)
-    elif action == "recommendations":
-        return await _handle_habits_recommendations(arguments)
-    else:
-        return mcp_error(f"Unknown omega_habits action: {action}. Use: list, confirm, deny, analyze, profile, recommendations")
-
-
-async def _handle_habits_list(arguments: dict) -> dict:
-    """List inferred behavioral patterns with decayed confidence."""
-    try:
-        from omega.behavioral import effective_confidence
-        from omega.bridge import _get_store
-
-        store = _get_store()
-        habits = store.get_by_type("behavioral_pattern", limit=20)
-
-        if not habits:
-            return mcp_response(
-                "# Behavioral Patterns\n\n"
-                "*No patterns detected yet.* Patterns are auto-extracted every 3 days from tool usage, "
-                "git style, session timing, and file co-edits. Use `omega_habits(action='analyze')` to "
-                "run extraction now."
-            )
-
-        lines = ["# Behavioral Patterns\n"]
-        lines.append("| # | Pattern | Confidence | Status | Evidence |")
-        lines.append("|---|---------|------------|--------|----------|")
-
-        for i, h in enumerate(habits, 1):
-            meta = h.metadata or {}
-            if meta.get("suppressed"):
-                continue
-            raw_conf = meta.get("confidence", 0)
-            last_ev = meta.get("last_evidence_at") or meta.get("captured_at", "")
-            eff_conf = effective_confidence(raw_conf, last_ev)
-            if meta.get("user_confirmed") is True:
-                status = "confirmed"
-            elif meta.get("user_confirmed") is False:
-                status = "denied"
-            else:
-                status = "inferred"
-            ev_count = meta.get("evidence_count", 0)
-            ev_sess = meta.get("evidence_sessions", 0)
-            content = h.content[:120].replace("|", "/")
-            lines.append(
-                f"| {i} | {content} | {eff_conf:.0%} | {status} | "
-                f"{ev_count} events, {ev_sess} sessions |"
-            )
-            lines.append(f"|   | `id: {h.id}` | | | |")
-
-        lines.append("\nUse `omega_habits(action='confirm', pattern_id='...')` to confirm a pattern.")
-        lines.append("Use `omega_habits(action='deny', pattern_id='...')` to suppress a wrong inference.")
-
-        return mcp_response("\n".join(lines))
-    except ImportError:
-        return mcp_error("Behavioral patterns require OMEGA Pro. Upgrade at https://omegamax.co/pro?ref=feature-gate")
-    except Exception as e:
-        logger.error("omega_habits list failed: %s", e, exc_info=True)
-        return mcp_error(f"Failed to list habits: {e}")
-
-
-async def _handle_habits_confirm(arguments: dict) -> dict:
-    """Confirm a behavioral pattern as accurate."""
-    pattern_id = (arguments.get("pattern_id") or "").strip()
-    if not pattern_id:
-        return mcp_error("pattern_id is required for confirm action")
-
-    try:
-        from omega.bridge import _get_store
-
-        store = _get_store()
-        node = store.get_node(pattern_id)
-        if node is None:
-            return mcp_error(f"Pattern `{pattern_id}` not found")
-
-        meta = dict(node.metadata or {})
-        if meta.get("event_type") != "behavioral_pattern":
-            return mcp_error(f"Memory `{pattern_id}` is not a behavioral pattern")
-
-        meta["user_confirmed"] = True
-        meta["confidence"] = max(meta.get("confidence", 0), 0.90)
-        from datetime import datetime, timezone
-
-        meta["confirmed_at"] = datetime.now(timezone.utc).isoformat()
-        meta["suppressed"] = False  # Un-suppress if previously denied
-
-        store.update_node(pattern_id, metadata=meta)
-        return mcp_response(
-            f"Confirmed pattern `{pattern_id[:16]}`\n"
-            f"Content: {node.content[:200]}\n"
-            f"Confidence raised to {meta['confidence']:.0%}"
-        )
-    except Exception as e:
-        logger.error("omega_habits confirm failed: %s", e, exc_info=True)
-        return mcp_error(f"Failed to confirm pattern: {e}")
-
-
-async def _handle_habits_deny(arguments: dict) -> dict:
-    """Deny a behavioral pattern and suppress it from future surfacing."""
-    pattern_id = (arguments.get("pattern_id") or "").strip()
-    if not pattern_id:
-        return mcp_error("pattern_id is required for deny action")
-
-    try:
-        from omega.bridge import _get_store
-
-        store = _get_store()
-        node = store.get_node(pattern_id)
-        if node is None:
-            return mcp_error(f"Pattern `{pattern_id}` not found")
-
-        meta = dict(node.metadata or {})
-        if meta.get("event_type") != "behavioral_pattern":
-            return mcp_error(f"Memory `{pattern_id}` is not a behavioral pattern")
-
-        meta["user_confirmed"] = False
-        meta["confidence"] = 0.0
-        meta["suppressed"] = True
-
-        store.update_node(pattern_id, metadata=meta)
-        return mcp_response(
-            f"Denied pattern `{pattern_id[:16]}`\n"
-            f"Content: {node.content[:200]}\n"
-            f"Pattern suppressed from future surfacing. Re-analysis will not re-create it."
-        )
-    except Exception as e:
-        logger.error("omega_habits deny failed: %s", e, exc_info=True)
-        return mcp_error(f"Failed to deny pattern: {e}")
-
-
-async def _handle_habits_analyze(arguments: dict) -> dict:
-    """Run behavioral pattern extraction now."""
-    try:
-        from omega.behavioral import analyze_and_store
-
-        result = analyze_and_store()
-        lines = [
-            "# Behavioral Analysis Complete\n",
-            f"- **Patterns extracted:** {result['total_extracted']}",
-            f"- **New patterns stored:** {result['stored']}",
-            f"- **Existing patterns updated:** {result.get('updated', 0)}",
-            f"- **Skipped (denied):** {result.get('skipped_denied', 0)}",
-            f"- **Skipped (low confidence):** {result['skipped_confidence']}",
-        ]
-        if result["stored"] > 0 or result.get("updated", 0) > 0:
-            lines.append("\nUse `omega_habits(action='list')` to see all patterns.")
-        return mcp_response("\n".join(lines))
-    except ImportError:
-        return mcp_error("Behavioral analysis requires OMEGA Pro. Upgrade at https://omegamax.co/pro?ref=feature-gate")
-    except Exception as e:
-        logger.error("omega_habits analyze failed: %s", e, exc_info=True)
-        return mcp_error(f"Behavioral analysis failed: {e}")
-
-
-async def _handle_habits_profile(arguments: dict) -> dict:
-    """Return composite behavioral profile."""
-    try:
-        from omega.behavioral import BehavioralAnalyzer
-
-        analyzer = BehavioralAnalyzer()
-        profile = analyzer.synthesize_profile()
-
-        lines = ["# Your Behavioral Profile\n"]
-        lines.append(f"**Summary**: {profile['summary']}\n")
-
-        dims = profile.get("dimensions", {})
-        if dims:
-            lines.append(f"## Dimensions ({len(dims)} active patterns)")
-            lines.append("| Dimension | Pattern | Confidence |")
-            lines.append("|-----------|---------|------------|")
-            for dim_name, dim_data in dims.items():
-                pattern_text = dim_data["pattern"][:80].replace("|", "/")
-                lines.append(f"| {dim_name} | {pattern_text} | {dim_data['confidence']:.0%} |")
-            lines.append("")
-
-        insights = profile.get("insights", [])
-        if insights:
-            lines.append("## Cross-Pattern Insights")
-            for insight in insights:
-                lines.append(f"- {insight}")
-            lines.append("")
-
-        recs = profile.get("recommendations", [])
-        if recs:
-            lines.append(f"## Recommendations ({len(recs)})")
-            for i, rec in enumerate(recs, 1):
-                lines.append(f"{i}. **[{rec['category']}]** {rec['recommendation']}")
-            lines.append("")
-
-        lines.append(f"*{profile['pattern_count']} patterns | avg confidence {profile['avg_confidence']:.0%}*")
-
-        return mcp_response("\n".join(lines))
-    except ImportError:
-        return mcp_error("Behavioral profile requires OMEGA Pro. Upgrade at https://omegamax.co/pro?ref=feature-gate")
-    except Exception as e:
-        logger.error("omega_habits profile failed: %s", e, exc_info=True)
-        return mcp_error(f"Profile generation failed: {e}")
-
-
-async def _handle_habits_recommendations(arguments: dict) -> dict:
-    """Return actionable behavioral recommendations."""
-    try:
-        from omega.behavioral import BehavioralAnalyzer
-
-        analyzer = BehavioralAnalyzer()
-        recs = analyzer.generate_recommendations()
-
-        if not recs:
-            return mcp_response(
-                "# Behavioral Recommendations\n\n"
-                "*No recommendations available.* Need more behavioral patterns first. "
-                "Use `omega_habits(action='analyze')` to run extraction."
-            )
-
-        lines = [f"# Behavioral Recommendations ({len(recs)} active)\n"]
-        for i, rec in enumerate(recs, 1):
-            lines.append(f"{i}. **[{rec['category']}]** {rec['recommendation']}")
-            lines.append(f"   Based on: {', '.join(rec['based_on'])}")
-            lines.append("")
-
-        return mcp_response("\n".join(lines))
-    except ImportError:
-        return mcp_error("Behavioral recommendations require OMEGA Pro. Upgrade at https://omegamax.co/pro?ref=feature-gate")
-    except Exception as e:
-        logger.error("omega_habits recommendations failed: %s", e, exc_info=True)
-        return mcp_error(f"Recommendations failed: {e}")
+    """Behavioral pattern analysis was removed in the self-hosted fork."""
+    return mcp_error(
+        "Behavioral pattern analysis (omega_habits) is not available in this "
+        "build — it was removed in the self-hosted fork."
+    )
 
 
 # ============================================================================
@@ -2860,7 +2622,7 @@ async def _handle_reflect_contradictions(arguments: dict) -> dict:
 
         return mcp_response(output)
     except ImportError:
-        return mcp_error("Contradiction analysis requires OMEGA Pro. Upgrade at https://omegamax.co/pro?ref=feature-gate")
+        return mcp_error("Contradiction analysis module not available in this build")
     except Exception as e:
         logger.error("omega_reflect contradictions failed: %s", e, exc_info=True)
         return mcp_error(f"Contradiction audit failed: {e}")
@@ -2910,7 +2672,7 @@ async def _handle_reflect_evolution(arguments: dict) -> dict:
 
         return mcp_response(output)
     except ImportError:
-        return mcp_error("Evolution tracing requires OMEGA Pro. Upgrade at https://omegamax.co/pro?ref=feature-gate")
+        return mcp_error("Evolution tracing module not available in this build")
     except Exception as e:
         logger.error("omega_reflect evolution failed: %s", e, exc_info=True)
         return mcp_error(f"Evolution trace failed: {e}")
@@ -2962,7 +2724,7 @@ async def _handle_reflect_stale(arguments: dict) -> dict:
 
         return mcp_response(output)
     except ImportError:
-        return mcp_error("Stale memory analysis requires OMEGA Pro. Upgrade at https://omegamax.co/pro?ref=feature-gate")
+        return mcp_error("Stale memory analysis module not available in this build")
     except Exception as e:
         logger.error("omega_reflect stale failed: %s", e, exc_info=True)
         return mcp_error(f"Stale audit failed: {e}")
@@ -3086,7 +2848,7 @@ async def handle_omega_review(arguments: dict) -> dict:
         )
         return mcp_response(result)
     except ImportError:
-        return mcp_error("Code review requires OMEGA Pro and the revue package. Install: pip install revue")
+        return mcp_error("Code review requires the revue package. Install: pip install revue")
     except Exception as e:
         logger.error("omega_review failed: %s", e, exc_info=True)
         return mcp_error(f"Review failed: {e}")
@@ -3105,10 +2867,8 @@ _ALL_HANDLERS: dict = {}
 async def handle_omega_tools(args: Dict[str, Any]) -> dict:
     """List available tools or get the full schema for a specific tool."""
     import json
-    from omega.server.tool_schemas import TOOL_CATEGORIES
 
     tool_name = args.get("tool")
-    category = args.get("category", "all")
 
     if tool_name:
         # Return full schema for a specific tool
@@ -3117,46 +2877,25 @@ async def handle_omega_tools(args: Dict[str, Any]) -> dict:
                 return mcp_response(json.dumps(schema["inputSchema"], indent=2))
         return mcp_error(f"Unknown tool: {tool_name}")
 
-    # List all tools, optionally filtered by category
-    # Only show tools that have a registered handler (or are meta-tools)
+    # List all tools that have a registered handler (or are meta-tools)
     meta_tools = {"omega_tools", "omega_call"}
     lines = []
     for schema in _ALL_SCHEMAS:
         name = schema["name"]
         if name not in _ALL_HANDLERS and name not in meta_tools:
             continue
-        cat = TOOL_CATEGORIES.get(name, "other")
-        if category != "all" and cat != category:
-            continue
-        lines.append(f"- **{name}** [{cat}]: {schema['description']}")
+        lines.append(f"- **{name}**: {schema['description']}")
 
-    # Show Pro-only tools (not loaded for free users)
-    pro_lines = []
-    for name, cat in sorted(TOOL_CATEGORIES.items()):
-        if name not in _ALL_HANDLERS and name not in ("omega_tools", "omega_call"):
-            if not category or category == "all" or cat == category:
-                pro_lines.append(f"- **{name}** [{cat}] [PRO] -- requires Pro license")
-
-    if not lines and not pro_lines:
-        return mcp_response(f"No tools found in category '{category}'.")
+    if not lines:
+        return mcp_response("No tools available.")
 
     header = f"Available OMEGA tools ({len(lines)}):\n\n"
     footer = "\n\nUse omega_tools(tool='name') to get the full input schema for any tool."
-    body = "\n".join(lines)
-
-    if pro_lines:
-        body += "\n"
-        body += f"\n**Pro-only tools ({len(pro_lines)})** -- `omega upgrade` to unlock:\n"
-        body += "\n".join(pro_lines)
-        body += "\n\n-> Upgrade: https://omegamax.co/pro?ref=tools-list"
-
-    return mcp_response(header + body + footer)
+    return mcp_response(header + "\n".join(lines) + footer)
 
 
 async def handle_omega_call(args: Dict[str, Any]) -> dict:
     """Execute any OMEGA tool by name with arguments."""
-    from omega.server.tool_schemas import TOOL_CATEGORIES
-
     tool_name = args.get("tool")
     tool_args = args.get("args") or {}
 
@@ -3168,12 +2907,6 @@ async def handle_omega_call(args: Dict[str, Any]) -> dict:
 
     handler = _ALL_HANDLERS.get(tool_name)
     if not handler:
-        if tool_name in TOOL_CATEGORIES:
-            return mcp_error(
-                f"Tool '{tool_name}' belongs to a module not present in this build "
-                "(coordination/oracle/router/knowledge/entity). Use omega_tools() to "
-                "list available tools."
-            )
         return mcp_error(f"Unknown tool: {tool_name}. Use omega_tools() to list available tools.")
 
     return await handler(tool_args)
@@ -3202,7 +2935,7 @@ HANDLERS: Dict[str, Any] = {
     "omega_review": handle_omega_review,
     # === Backward compatibility aliases (old tool names -> new handlers) ===
     "omega_briefing": handle_omega_briefing,  # merged into welcome+protocol
-    "omega_habits": handle_omega_habits,  # merged into omega_stats habits_* actions
+    "omega_habits": handle_omega_habits,  # removed feature — returns explanatory error
     "omega_remember": lambda args: handle_omega_store(
         {**args, "event_type": args.get("event_type", "user_preference")}
     ),

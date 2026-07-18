@@ -13,9 +13,7 @@ Integration points (do not modify other files, wire these up separately):
   - handle_omega_welcome  -> track_event("session_start")
   - handle_omega_store    -> track_tool_call("omega_store")
   - handle_omega_query    -> track_tool_call("omega_query")
-  - _maybe_nag()          -> track_nag("periodic")
   - cmd_setup             -> track_event("setup_complete")
-  - cmd_upgrade           -> track_event("upgrade_opened")
 """
 
 import json
@@ -42,7 +40,6 @@ def _default_data() -> dict:
         "python_version": platform.python_version(),
         "omega_version": _get_omega_version(),
         "client": os.environ.get("OMEGA_CLIENT", "unknown"),
-        "pro_licensed": False,
         "sessions": {
             "total": 0,
             "last_7d": 0,
@@ -54,13 +51,6 @@ def _default_data() -> dict:
         "tool_calls": {
             "total": 0,
             "by_tool": {},
-        },
-        "nag_events": {
-            "welcome_shown": 0,
-            "periodic_shown": 0,
-            "milestone_shown": 0,
-            "tool_gate_shown": 0,
-            "upgrade_clicked": 0,
         },
         "context_packets": {
             "total": 0,
@@ -121,8 +111,7 @@ def _ensure_install_id(data: dict) -> dict:
 def track_event(event: str, metadata: dict | None = None) -> None:
     """Track a telemetry event. Non-blocking, never raises.
 
-    Events: session_start, tool_call, nag_shown, nag_clicked,
-            milestone_hit, setup_complete, upgrade_opened
+    Events: session_start, tool_call, milestone_hit, setup_complete
     """
     try:
         with _lock:
@@ -141,12 +130,6 @@ def track_event(event: str, metadata: dict | None = None) -> None:
                 # Reset per-session counters
                 data.setdefault("memories", {"total": 0, "stored_this_session": 0})
                 data["memories"]["stored_this_session"] = 0
-
-            elif event == "nag_clicked":
-                data.setdefault("nag_events", {})
-                data["nag_events"]["upgrade_clicked"] = (
-                    data["nag_events"].get("upgrade_clicked", 0) + 1
-                )
 
             _save(data)
     except Exception:
@@ -171,26 +154,6 @@ def track_tool_call(tool_name: str) -> None:
                 data.setdefault("memories", {"total": 0, "stored_this_session": 0})
                 data["memories"]["total"] += 1
                 data["memories"]["stored_this_session"] += 1
-
-            _save(data)
-    except Exception:
-        pass
-
-
-def track_nag(nag_type: str) -> None:
-    """Track when an upgrade nag was shown.
-
-    Types: welcome, periodic, milestone, tool_gate
-    """
-    try:
-        with _lock:
-            data = _load()
-            data["last_active"] = datetime.now(timezone.utc).isoformat()
-
-            data.setdefault("nag_events", {})
-            key = f"{nag_type}_shown"
-            if key in data["nag_events"]:
-                data["nag_events"][key] += 1
 
             _save(data)
     except Exception:
@@ -251,11 +214,9 @@ def get_summary() -> dict:
             "python_version": data.get("python_version"),
             "omega_version": data.get("omega_version"),
             "client": data.get("client"),
-            "pro_licensed": data.get("pro_licensed", False),
             "sessions": data.get("sessions", {}),
             "memories": data.get("memories", {}),
             "tool_calls": data.get("tool_calls", {}),
-            "nag_events": data.get("nag_events", {}),
             "context_packets": data.get("context_packets", {}),
             "last_active": data.get("last_active"),
         }

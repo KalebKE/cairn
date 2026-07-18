@@ -20,25 +20,6 @@ def _use_json(args) -> bool:
     return getattr(args, "json", False) or os.environ.get("OMEGA_JSON") == "1"
 
 
-def _is_pro_licensed() -> bool:
-    try:
-        from omega_platform.license import is_pro
-        return bool(is_pro())
-    except Exception:
-        return False
-
-
-def _require_pro_cli(args, feature: str) -> None:
-    if _is_pro_licensed():
-        return
-    message = f"{feature} requires OMEGA Pro."
-    if _use_json(args):
-        print(json.dumps({"error": message, "requires_pro": True}))
-    else:
-        print(message, file=sys.stderr)
-    raise SystemExit(1)
-
-
 def _parse_event_types_arg(value) -> list[str] | None:
     if not value:
         return None
@@ -1154,33 +1135,10 @@ def cmd_setup(args):
         print(f"\n  Storage: {OMEGA_DIR}")
         print("  Run 'omega doctor' to verify.")
 
-        # Pro upgrade CTA on first install (skip when a Pro extension is installed)
-        _show_pro = True
-        try:
-            from omega.plugins import has_capability
-            if has_capability("pro_tools"):
-                _show_pro = False
-        except Exception:
-            pass
         # GitHub star ask -- always show on first setup
         print()
         print("  If OMEGA is useful, please star us on GitHub:")
         print("    https://github.com/omega-memory/omega-memory")
-
-        if _show_pro:
-            print()
-            print("  ┌─────────────────────────────────────────────────────┐")
-            print("  │  Unlock the full platform with OMEGA Pro            │")
-            print("  │                                                     │")
-            print("  │  + 98 Pro tools: coordination, LLM routing,         │")
-            print("  │    knowledge base, entity management, oracle        │")
-            print("  │  + Multi-agent coordination (53 tools)              │")
-            print("  │  + Cloud sync via your own Supabase                 │")
-            print("  │                                                     │")
-            print("  │  $19/mo  ·  14-day money-back guarantee             │")
-            print("  │  Run: omega upgrade                                 │")
-            print("  │  Or visit: https://omegamax.co/pro?ref=cli-setup    │")
-            print("  └─────────────────────────────────────────────────────┘")
 
 
 def cmd_status(args):
@@ -1265,19 +1223,6 @@ def cmd_status(args):
         except Exception:
             pass
 
-    # Cloud
-    secrets_path = OMEGA_DIR / "secrets.json"
-    cloud = {"configured": secrets_path.exists()}
-    if cloud["configured"]:
-        for marker_name, key in [("last-cloud-pull", "last_pull"), ("last-cloud-push", "last_push")]:
-            marker = OMEGA_DIR / marker_name
-            if marker.exists():
-                try:
-                    cloud[key] = marker.read_text().strip()
-                except Exception:
-                    pass
-    data["cloud"] = cloud
-
     if use_json:
         print(json.dumps(data, indent=2, default=str))
         return
@@ -1334,35 +1279,6 @@ def cmd_status(args):
         kv.append(("Version", data["version"]))
 
     print_kv(kv)
-
-    cloud = data.get("cloud", {})
-    if cloud.get("configured"):
-        cloud_kv = [("Cloud", "configured")]
-        if cloud.get("last_pull"):
-            cloud_kv.append(("Last pull", cloud["last_pull"]))
-        if cloud.get("last_push"):
-            cloud_kv.append(("Last push", cloud["last_push"]))
-        print_kv(cloud_kv)
-    else:
-        print_kv([("Cloud", "not configured")])
-
-    # Pro upgrade nudge for free users
-    if not use_json:
-        pro_available = False
-        try:
-            from omega.plugins import has_capability
-            pro_available = has_capability("pro_tools")
-        except Exception:
-            pass
-        if not pro_available:
-            mem_count = data.get("memories", 0)
-            if mem_count >= 1500:
-                print(f"\n  You have {mem_count:,} memories (limit: 2,000). Pro removes limits.")
-            print("  Pro: coordination, routing, knowledge base, and 95 more tools. $19/mo")
-            print("  Run 'omega upgrade' or visit https://omegamax.co/pro?ref=cli-status")
-
-    if not use_json:
-        _offer_email_capture()
 
     print()
 
@@ -2346,8 +2262,7 @@ def cmd_embed_daemon(args):
     try:
         from omega_platform.embedding_daemon import is_daemon_running, get_daemon_pid, stop_daemon, main as daemon_main
     except ImportError:
-        print("Embedding daemon requires OMEGA Pro.")
-        print("Run 'omega upgrade' or visit https://omegamax.co/pro")
+        print("Embedding daemon module (omega_platform.embedding_daemon) is not installed in this build.")
         sys.exit(1)
 
     subcmd = args.embed_command
@@ -2868,683 +2783,7 @@ def cmd_doctor(args):
         print()
         print_summary(errors, warnings)
 
-    # Pro upgrade nudge for free users
-    if not use_json:
-        try:
-            from omega.plugins import has_capability
-            if not has_capability("pro_tools"):
-                print("\n  Upgrade to Pro: 98 more tools. Run 'omega upgrade' or visit https://omegamax.co/pro?ref=cli-doctor")
-        except Exception:
-            print("\n  Upgrade to Pro: 98 more tools. Run 'omega upgrade' or visit https://omegamax.co/pro?ref=cli-doctor")
-
-    if not use_json:
-        _offer_email_capture()
-
     sys.exit(1 if errors > 0 else 0)
-
-
-def cmd_knowledge(args):
-    """Knowledge base management."""
-    try:
-        from omega_platform.knowledge.engine import scan_directory, list_documents, search_documents  # noqa: F401
-    except ImportError:
-        print("Knowledge base requires OMEGA Pro.")
-        print("Run 'omega upgrade' or visit https://omegamax.co/pro")
-        return
-
-    subcmd = getattr(args, "kb_command", None)
-
-    if subcmd == "scan":
-        directory = args.dir
-        result = scan_directory(directory)
-        print(result)
-
-    elif subcmd == "list":
-        print(list_documents())
-
-    elif subcmd == "search":
-        query_text = " ".join(args.query)
-        result = search_documents(query_text, limit=args.limit)
-        print(result)
-
-    elif subcmd == "sync-kb":
-        try:
-            from omega_platform.knowledge.cloud_sync import sync_kb_queue
-        except ImportError:
-            print("Knowledge cloud sync requires OMEGA Pro.")
-            print("Run 'omega upgrade' or visit https://omegamax.co/pro")
-            return
-        result = sync_kb_queue(batch_size=args.batch_size)
-        print(result)
-
-    else:
-        docs_dir = Path.home() / ".omega" / "documents"
-        print("Usage: omega knowledge {scan|list|search}")
-        print(f"\nDocuments folder: {docs_dir}")
-        print("Drop PDF, markdown, or text files there for auto-ingestion.")
-        print("Files are auto-scanned on each Claude Code session start.")
-
-
-def cmd_cloud(args):
-    """Cloud sync and Supabase management."""
-    try:
-        from omega_platform.cloud.sync import get_sync  # noqa: F401
-    except ImportError:
-        print("Cloud sync requires OMEGA Pro.")
-        print("Run 'omega upgrade' or visit https://omegamax.co/pro")
-        return
-
-    from omega.cli_ui import print_header
-
-    subcmd = getattr(args, "cloud_command", None)
-
-    if subcmd == "setup":
-        url = args.url
-        key = args.key
-        service_key = args.service_key or ""
-        if not url or not key:
-            print("Usage: omega cloud setup --url <SUPABASE_URL> --key <ANON_KEY>")
-            print("\nGet these from: Supabase Dashboard → Settings → API")
-            return
-        try:
-            from omega_platform.cloud.setup import setup_supabase
-        except ImportError:
-            print("Cloud setup requires OMEGA Pro.")
-            print("Run 'omega upgrade' or visit https://omegamax.co/pro")
-            return
-
-        result = setup_supabase(url, key, service_key)
-        print(result)
-
-    elif subcmd == "sync":
-        print_header("Cloud Sync")
-        try:
-            sync = get_sync()
-            results = sync.sync_all()
-            for table, info in results.items():
-                status = info.get("status", "unknown")
-                synced = info.get("synced", 0)
-                print(f"  {table}: {synced} synced ({status})")
-        except Exception as e:
-            print(f"  Sync failed: {e}")
-
-    elif subcmd == "status":
-        try:
-            print(get_sync().status())
-        except Exception as e:
-            print(f"Cloud not configured: {e}")
-
-    elif subcmd == "schema":
-        try:
-            from omega_platform.cloud.setup import get_schema_sql
-        except ImportError:
-            print("Cloud setup requires OMEGA Pro.")
-            print("Run 'omega upgrade' or visit https://omegamax.co/pro")
-            return
-
-        print(get_schema_sql())
-
-    elif subcmd == "verify":
-        try:
-            from omega_platform.cloud.setup import verify_connection
-        except ImportError:
-            print("Cloud verify requires OMEGA Pro.")
-            print("Run 'omega upgrade' or visit https://omegamax.co/pro")
-            return
-
-        print(verify_connection())
-
-    elif subcmd == "pull":
-        print_header("Cloud Pull")
-        try:
-            sync = get_sync()
-            results = sync.pull_all()
-            for table, info in results.items():
-                status = info.get("status", "unknown")
-                pulled = info.get("pulled", 0)
-                skipped = info.get("skipped", 0)
-                print(f"  {table}: {pulled} pulled, {skipped} skipped ({status})")
-        except Exception as e:
-            print(f"  Pull failed: {e}")
-
-    else:
-        print("Usage: omega cloud {setup|sync|pull|status|schema|verify}")
-        print("\nCloud sync enables mobile access to OMEGA memories via Supabase.")
-
-
-def cmd_mobile(args):
-    """Mobile access setup and mcp-proxy management."""
-    try:
-        from omega_platform.cloud.sync import get_sync  # noqa: F401
-    except ImportError:
-        print("Mobile access requires OMEGA Pro (cloud sync).")
-        print("Run 'omega upgrade' or visit https://omegamax.co/pro")
-        return
-
-    subcmd = getattr(args, "mobile_command", None)
-
-    if subcmd == "setup":
-        print("""
-## OMEGA Mobile Access Setup
-
-### Prerequisites
-1. Install mcp-proxy: `pipx install mcp-proxy`
-2. Install Tailscale: `brew install tailscale && tailscale up`
-
-### Quick Start (4 steps)
-
-1. Start OMEGA HTTP proxy:
-   ```
-   omega mobile serve
-   ```
-
-2. Expose via Tailscale:
-   ```
-   tailscale serve https / http://127.0.0.1:8089
-   ```
-
-3. Get your Tailscale hostname:
-   ```
-   tailscale status | head -1
-   ```
-
-4. Add to Claude mobile app:
-   - Settings → MCP Servers → Add
-   - URL: https://<your-tailscale-hostname>/mcp
-   - All 70 OMEGA tools available from your phone!
-
-### Security
-- Tailscale uses WireGuard encryption (zero-trust mesh)
-- Only your enrolled devices can connect
-- No ports exposed to the public internet
-- Encryption key stays on your Mac (profile decryption is local)
-
-### Troubleshooting
-- Verify: `curl http://127.0.0.1:8089/health`
-- Tailscale: `tailscale status` (should show 'active')
-- Logs: `omega logs -n 20`
-""")
-
-    elif subcmd == "serve":
-        import subprocess
-        import sys
-
-        port = args.port
-        host = args.host
-        print(f"Starting OMEGA MCP proxy on {host}:{port}...")
-        print(f"Connect via: http://{host}:{port}/mcp")
-        print("Press Ctrl+C to stop.\n")
-
-        try:
-            subprocess.run(
-                [
-                    sys.executable, "-m", "mcp_proxy",
-                    "--transport", "streamablehttp",
-                    "--host", host,
-                    "--port", str(port),
-                    "--",
-                    sys.executable, "-m", "omega.server.mcp_server",
-                ],
-                check=True,
-            )
-        except FileNotFoundError:
-            print("Error: mcp-proxy not found. Install with: pipx install mcp-proxy")
-        except KeyboardInterrupt:
-            print("\nProxy stopped.")
-
-    else:
-        print("Usage: omega mobile {setup|serve}")
-        print("\nMobile access via mcp-proxy + Tailscale.")
-
-
-def _offer_email_capture():
-    """Offer email capture for users approaching or at the memory cap."""
-    try:
-        import sqlite3
-        from pathlib import Path
-        db_path = Path.home() / ".omega" / "omega.db"
-        if not db_path.exists():
-            return
-        conn = sqlite3.connect(str(db_path), timeout=5)
-        count = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
-        conn.close()
-        if count < 1800:
-            return
-
-        # Check if already captured
-        telemetry_path = Path.home() / ".omega" / "telemetry.json"
-        if telemetry_path.exists():
-            import json as _json
-            data = _json.loads(telemetry_path.read_text())
-            if data.get("email_captured"):
-                return
-
-        print()
-        print(f"  You have {count} memories" + (" (limit: 2,000)" if count < 2000 else " (at free tier limit)") + ".")
-        print("  Get product updates and early access to new features.")
-        email = input("  Email (or press Enter to skip): ").strip()
-
-        if email and "@" in email:
-            import urllib.request
-            import json as _json
-            data = _json.dumps({"email": email, "source": "cli_cap", "metadata": {"memory_count": count}}).encode()
-            req = urllib.request.Request(
-                "https://admin.omegamax.co/api/subscribe",
-                data=data,
-                headers={"Content-Type": "application/json"},
-                method="POST"
-            )
-            try:
-                urllib.request.urlopen(req, timeout=5)
-                print("  Thanks! We'll keep you posted.")
-                # Mark as captured in telemetry
-                if telemetry_path.exists():
-                    tdata = _json.loads(telemetry_path.read_text())
-                    tdata["email_captured"] = True
-                    telemetry_path.write_text(_json.dumps(tdata, indent=2))
-            except Exception:
-                print("  Saved. Thanks!")
-    except Exception:
-        pass
-
-
-def cmd_upgrade(args):
-    """Open the Pro purchase page in the browser."""
-    import webbrowser
-
-    url = "https://omegamax.co/pro?ref=cli-upgrade"
-    print("Opening OMEGA Pro purchase page...")
-    print(f"  {url}")
-    print()
-    print("After purchase, activate with:")
-    print("  omega activate <your-license-key>")
-    try:
-        from omega.telemetry import track_event
-        track_event("upgrade_opened")
-    except Exception:
-        pass
-    webbrowser.open(url)
-
-
-def _activate_license(key: str) -> bool:
-    """Activate a Pro license key against the server API.
-
-    Self-contained: uses only stdlib so activation works from the public
-    omega-memory package without requiring the Pro wheel.
-    """
-    import hashlib
-    import json as _json
-    import platform
-    import socket
-    import urllib.error
-    import urllib.request
-    import uuid
-
-    activate_url = "https://admin.omegamax.co/api/activate"
-    cache_days = 7
-    timeout = min(int(os.environ.get("OMEGA_LICENSE_TIMEOUT", "30")), 120)
-    omega_dir = Path.home() / ".omega"
-    device_file = omega_dir / "device.json"
-
-    try:
-        omega_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as e:
-        print(f"Could not create {omega_dir}: {e}")
-        return False
-
-    try:
-        if device_file.exists():
-            device_data = _json.loads(device_file.read_text())
-            device_id = str(device_data.get("device_id") or "")
-        else:
-            device_id = ""
-    except (OSError, _json.JSONDecodeError):
-        device_id = ""
-
-    if not device_id:
-        device_id = str(uuid.uuid4())
-        try:
-            device_file.write_text(_json.dumps({
-                "device_id": device_id,
-                "created_at": time.time(),
-            }))
-            device_file.chmod(0o600)
-        except OSError as e:
-            print(f"Could not write device file at {device_file}: {e}")
-            return False
-
-    fingerprint_parts = [
-        device_id,
-        platform.system(),
-        platform.machine(),
-        platform.node(),
-        str(uuid.getnode()),
-    ]
-    device_fingerprint_hash = hashlib.sha256(
-        "\n".join(fingerprint_parts).encode()
-    ).hexdigest()
-    device_label = (
-        f"{platform.system() or 'Unknown'} {platform.machine() or 'machine'} "
-        f"({(platform.node() or 'device')[:64]})"
-    )
-
-    data = _json.dumps({
-        "key": key,
-        "device_id": device_id,
-        "device_fingerprint_hash": device_fingerprint_hash,
-        "device_label": device_label,
-    }).encode()
-    req = urllib.request.Request(
-        activate_url,
-        data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            result = _json.loads(resp.read().decode())
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            print("License key not found. Double-check you copied the full key.")
-        elif e.code == 403:
-            print("This license is not active. It may have been cancelled.")
-        elif e.code in (500, 502, 503, 504):
-            print(f"Activation server error (HTTP {e.code}). Please try again shortly.")
-        else:
-            print(f"Unexpected HTTP error (HTTP {e.code}).")
-        print("Contact hello@omegamax.co if this persists.")
-        return False
-    except urllib.error.URLError as e:
-        print("Could not reach the activation server. Check your internet connection.")
-        print(f"Detail: {e.reason}")
-        return False
-    except socket.timeout:
-        print(f"Activation request timed out after {timeout}s. Try again.")
-        return False
-    except _json.JSONDecodeError:
-        print("Activation server returned a malformed response. Contact hello@omegamax.co.")
-        return False
-    except Exception as e:
-        print(f"Unexpected error: {type(e).__name__}: {e}")
-        print("Contact hello@omegamax.co with this message.")
-        return False
-
-    if not result.get("valid"):
-        reason = result.get("reason", "No reason given")
-        print(f"Activation rejected: {reason}")
-        return False
-
-    # Parse expiry
-    expires_at_str = result.get("expires_at", "")
-    try:
-        dt = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
-        valid_until = dt.timestamp()
-    except (ValueError, AttributeError):
-        valid_until = time.time() + (cache_days * 86400)
-
-    # Write license file
-    license_file = omega_dir / "license.json"
-
-    license_data: dict = {
-        "key": key,
-        "valid_until": valid_until,
-        "activated_at": time.time(),
-    }
-    signature = result.get("signature")
-    if signature:
-        license_data["signature"] = signature
-    if result.get("device_id"):
-        license_data["device_id"] = result["device_id"]
-    if result.get("device_fingerprint_hash"):
-        license_data["device_fingerprint_hash"] = result["device_fingerprint_hash"]
-
-    try:
-        license_file.write_text(_json.dumps(license_data))
-        license_file.chmod(0o600)
-    except OSError as e:
-        print(f"Could not write license file at {license_file}: {e}")
-        return False
-
-    return True
-
-
-def _download_and_install_pro_wheel(key: str) -> bool:
-    """Download the Pro wheel from the server and pip-install it.
-
-    Uses a POST request with the license key in the body (not URL) to avoid
-    leaking credentials in server logs. Verifies download integrity via
-    SHA256 hash returned by the server.
-    Returns True if the wheel was installed successfully.
-    """
-    import hashlib
-    import json as _json
-    import tempfile
-    import urllib.error
-    import urllib.request
-
-    wheel_url = "https://admin.omegamax.co/api/pro/download-wheel"
-    timeout = min(int(os.environ.get("OMEGA_LICENSE_TIMEOUT", "60")), 120)
-
-    # Download the wheel (key in POST body, not URL query string)
-    try:
-        data = _json.dumps({"key": key}).encode()
-        req = urllib.request.Request(
-            wheel_url,
-            data=data,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            # Extract filename from Content-Disposition header
-            cd = resp.headers.get("Content-Disposition", "")
-            filename = "omega_memory_pro.whl"
-            if "filename=" in cd:
-                # Parse filename="omega_memory_pro-1.4.0-py3-none-any.whl"
-                parts = cd.split("filename=")[-1].strip().strip('"').strip("'")
-                if parts:
-                    filename = parts
-
-            # Server provides SHA256 hash for integrity verification
-            expected_hash = resp.headers.get("X-Content-SHA256", "")
-
-            wheel_bytes = resp.read()
-    except urllib.error.HTTPError as e:
-        if e.code == 503:
-            print("  Pro wheel is not yet published. Contact hello@omegamax.co.")
-        elif e.code in (403, 404):
-            print("  Could not download Pro wheel. Contact hello@omegamax.co.")
-        else:
-            print(f"  Download failed (HTTP {e.code}). Contact hello@omegamax.co.")
-        return False
-    except Exception as e:
-        print(f"  Download failed: {e}")
-        return False
-
-    # Verify integrity if server provided a hash
-    if expected_hash:
-        actual_hash = hashlib.sha256(wheel_bytes).hexdigest()
-        if actual_hash != expected_hash:
-            print("  ERROR: Wheel integrity check failed (SHA256 mismatch).")
-            print("  The download may have been tampered with. Aborting.")
-            return False
-
-    # Save to temp file and pip install
-    tmp_dir = tempfile.mkdtemp(prefix="omega_pro_")
-    wheel_path = Path(tmp_dir) / filename
-    installed = False
-    try:
-        wheel_path.write_bytes(wheel_bytes)
-
-        # Use the same Python that's running this CLI (ensures same environment)
-        result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", str(wheel_path), "--quiet"],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        if result.returncode != 0:
-            stderr = result.stderr.strip()
-            print(f"  pip install failed: {stderr}")
-            print(f"  Wheel saved to: {wheel_path}")
-            print(f"  Try manually: pip install {wheel_path}")
-            return False
-
-        installed = True
-        return True
-    except subprocess.TimeoutExpired:
-        print(f"  pip install timed out. Try manually: pip install {wheel_path}")
-        return False
-    except Exception as e:
-        print(f"  Install failed: {e}")
-        print(f"  Wheel saved to: {wheel_path}")
-        print(f"  Try manually: pip install {wheel_path}")
-        return False
-    finally:
-        # Clean up temp file only on success; keep it on failure for manual install
-        if installed:
-            try:
-                wheel_path.unlink(missing_ok=True)
-                Path(tmp_dir).rmdir()
-            except OSError:
-                pass
-
-
-def cmd_activate(args):
-    """Activate a Pro license key."""
-    key = args.key.strip()
-
-    if not key.startswith("OMEGA-PRO-"):
-        print("Invalid key format. Keys start with OMEGA-PRO-")
-        sys.exit(1)
-
-    # If omega_platform is already installed, use its richer activate() with
-    # Ed25519 verification, clock-skew detection, and detailed diagnostics.
-    try:
-        from omega_platform.license import activate
-        print("Activating license key...")
-        if activate(key):
-            print("License activated successfully! Pro modules will load on next MCP server start.")
-            print("\nRestart Claude Code or your MCP client to load Pro tools.")
-        else:
-            print("Activation failed. Please check your key and try again.")
-            print("If the problem persists, contact hello@omegamax.co")
-            sys.exit(1)
-        return
-    except ImportError:
-        pass
-
-    # Standalone path: validate key, cache license, download + install Pro wheel.
-    print("Activating license key...")
-    if not _activate_license(key):
-        sys.exit(1)
-
-    print("  License validated.")
-    print("  Downloading Pro package...")
-
-    if _download_and_install_pro_wheel(key):
-        print("  Pro package installed.")
-        print()
-        print("  Pro license activated! 69 Pro tools now available.")
-        print()
-        print("  Next steps:")
-        print("    omega doctor                         # Verify installation")
-        print("    omega status                         # Check Pro features")
-        print()
-        print("  Restart Claude Code or your MCP client to load Pro tools.")
-    else:
-        print()
-        print("  License activated, but Pro package could not be installed automatically.")
-        print("  Download it manually from your dashboard:")
-        print()
-        print("    https://admin.omegamax.co/pro/dashboard")
-        print()
-        print("  Then install:")
-        print("    pip install ~/Downloads/omega_memory_pro-*.whl")
-        print()
-        print("  After installing, restart Claude Code or your MCP client.")
-
-
-def cmd_license(args):
-    """Show current license status."""
-    # If omega_platform is available, use its richer implementation.
-    try:
-        from omega_platform.license import license_status, deactivate
-
-        if getattr(args, "deactivate", False):
-            deactivate()
-            print("License removed.")
-            return
-
-        status = license_status()
-        if status["active"]:
-            print("Status:      Active")
-            print(f"Key:         {status['key']}")
-            print(f"Valid until:  {status['valid_until']}")
-        else:
-            if status["key"]:
-                print("Status:      Expired")
-                print(f"Key:         {status['key']}")
-                print("\nRun 'omega activate <key>' to reactivate.")
-            else:
-                print("Status:      No license")
-                print("\nUpgrade at https://omegamax.co/pro")
-        return
-    except ImportError:
-        pass
-
-    # Standalone: read the license file directly.
-    license_file = Path.home() / ".omega" / "license.json"
-
-    if getattr(args, "deactivate", False):
-        try:
-            license_file.unlink(missing_ok=True)
-        except OSError:
-            pass
-        print("License removed.")
-        return
-
-    if not license_file.exists():
-        print("Status:      No license")
-        print("\nActivate with: omega activate <your-license-key>")
-        print("Purchase at: https://omegamax.co/pro")
-        return
-
-    try:
-        data = json.loads(license_file.read_text())
-    except (json.JSONDecodeError, OSError):
-        print("Status:      License file corrupt")
-        print(f"\nRemove and re-activate:\n  rm {license_file}\n  omega activate <your-key>")
-        return
-
-    key = data.get("key", "unknown")
-    valid_until = data.get("valid_until", 0)
-    now = time.time()
-
-    # Mask key for display
-    if len(key) > 20:
-        masked = key[:14] + "..." + key[-4:]
-    else:
-        masked = key
-
-    if valid_until > now:
-        valid_dt = datetime.fromtimestamp(valid_until, tz=timezone.utc).isoformat()
-        print("Status:      Active")
-        print(f"Key:         {masked}")
-        print(f"Valid until:  {valid_dt}")
-        pro_installed = False
-        try:
-            import omega_platform  # noqa: F401
-            pro_installed = True
-        except ImportError:
-            pass
-        if not pro_installed:
-            print("\nPro wheel not installed. Download from https://admin.omegamax.co/pro/dashboard")
-            print("Then: pip install ~/Downloads/omega_memory_pro-*.whl")
-    else:
-        print("Status:      Expired")
-        print(f"Key:         {masked}")
-        print("\nRun 'omega activate <key>' to reactivate.")
 
 
 def cmd_export_obsidian(args):
@@ -3592,9 +2831,6 @@ def cmd_eval_context_packet(args):
 
 def cmd_backfill_context_packet(args):
     """Backfill graph edges from context packet misses."""
-    if getattr(args, "apply", False):
-        _require_pro_cli(args, "backfill-context-packet --apply")
-
     from omega.bridge import _get_store
     from omega.evaluation.context_packet_eval import backfill_packet_miss_report
 
@@ -3645,8 +2881,6 @@ def cmd_diagnose_context_packet(args):
 
 def cmd_maintain_context_packet(args):
     """Run eval plus capped packet-miss maintenance."""
-    _require_pro_cli(args, "maintain-context-packet")
-
     from omega.bridge import _get_store
     from omega.evaluation.context_packet_eval import run_context_packet_maintenance_loop
 
@@ -3722,7 +2956,6 @@ def main():
     parser = argparse.ArgumentParser(
         prog="omega",
         description="OMEGA — Persistent memory for AI coding agents",
-        epilog="Pro: 98 more tools (coordination, routing, knowledge base). Run 'omega upgrade' for details.",
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
@@ -3862,15 +3095,6 @@ def main():
     embed_sub.add_parser("stop", help="Stop the embedding daemon")
     embed_sub.add_parser("status", help="Show daemon status")
 
-    # --- License commands ---
-    subparsers.add_parser("upgrade", help="Open Pro purchase page in browser")
-
-    activate_parser = subparsers.add_parser("activate", help="Activate a Pro license key")
-    activate_parser.add_argument("key", help="License key (OMEGA-PRO-...)")
-
-    license_parser = subparsers.add_parser("license", help="Show Pro license status")
-    license_parser.add_argument("--deactivate", action="store_true", help="Remove local license")
-
     # --- Reminder commands (experimental) ---
     remind_parser = subparsers.add_parser("remind", help="Manage time-based reminders (experimental)")
     remind_sub = remind_parser.add_subparsers(dest="remind_command", help="Reminder subcommands")
@@ -3892,41 +3116,6 @@ def main():
 
     remind_dismiss_parser = remind_sub.add_parser("dismiss", help="Dismiss a reminder")
     remind_dismiss_parser.add_argument("reminder_id", help="Reminder ID to dismiss")
-
-    # --- Knowledge commands ---
-    knowledge_parser = subparsers.add_parser("knowledge", aliases=["kb"], help="Knowledge base management")
-    knowledge_sub = knowledge_parser.add_subparsers(dest="kb_command", help="Knowledge subcommands")
-    scan_parser = knowledge_sub.add_parser("scan", help="Scan documents folder for new/changed files")
-    scan_parser.add_argument("--dir", help="Custom directory to scan (default: ~/.omega/documents/)")
-    knowledge_sub.add_parser("list", help="List all ingested documents")
-    knowledge_search_parser = knowledge_sub.add_parser("search", help="Search ingested documents")
-    knowledge_search_parser.add_argument("query", nargs="+", help="Search query")
-    knowledge_search_parser.add_argument("--limit", type=int, default=5, help="Max results (default: 5)")
-    sync_kb_parser = knowledge_sub.add_parser("sync-kb", help="Sync pending files from cloud KB queue")
-    sync_kb_parser.add_argument("--batch-size", type=int, default=10, help="Max items to process (default: 10)")
-
-    # --- Cloud commands ---
-    cloud_parser = subparsers.add_parser("cloud", help="Cloud sync and mobile access")
-    cloud_sub = cloud_parser.add_subparsers(dest="cloud_command", help="Cloud subcommands")
-
-    cloud_setup_parser = cloud_sub.add_parser("setup", help="Configure Supabase connection")
-    cloud_setup_parser.add_argument("--url", help="Supabase project URL")
-    cloud_setup_parser.add_argument("--key", help="Supabase anon key")
-    cloud_setup_parser.add_argument("--service-key", help="Supabase service role key (optional)")
-
-    cloud_sub.add_parser("sync", help="Sync local data to Supabase cloud")
-    cloud_sub.add_parser("status", help="Show cloud sync status")
-    cloud_sub.add_parser("schema", help="Print Supabase SQL schema")
-    cloud_sub.add_parser("verify", help="Verify Supabase connection")
-    cloud_sub.add_parser("pull", help="Pull memories and documents from Supabase cloud")
-
-    # --- Mobile commands ---
-    mobile_parser = subparsers.add_parser("mobile", help="Mobile access via mcp-proxy + Tailscale")
-    mobile_sub = mobile_parser.add_subparsers(dest="mobile_command", help="Mobile subcommands")
-    mobile_sub.add_parser("setup", help="Print setup instructions for mobile access")
-    mobile_serve_parser = mobile_sub.add_parser("serve", help="Start mcp-proxy HTTP server for mobile access")
-    mobile_serve_parser.add_argument("--port", type=int, default=8089, help="HTTP port (default: 8089)")
-    mobile_serve_parser.add_argument("--host", default="127.0.0.1", help="Bind address (default: 127.0.0.1)")
 
     # --- Obsidian export ---
     obsidian_parser = subparsers.add_parser("export-obsidian", help="Export memories as Obsidian-compatible markdown files")
@@ -4012,14 +3201,7 @@ def main():
         "proxy": cmd_proxy,
         "hooks": cmd_hooks,
         "embed-daemon": cmd_embed_daemon,
-        "upgrade": cmd_upgrade,
-        "activate": cmd_activate,
-        "license": cmd_license,
         "remind": cmd_remind,
-        "knowledge": cmd_knowledge,
-        "kb": cmd_knowledge,
-        "cloud": cmd_cloud,
-        "mobile": cmd_mobile,
         "eval-retrieval": cmd_eval_retrieval,
         "eval-context-packet": cmd_eval_context_packet,
         "backfill-context-packet": cmd_backfill_context_packet,

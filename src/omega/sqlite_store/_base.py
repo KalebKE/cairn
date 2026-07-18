@@ -147,6 +147,7 @@ class SQLiteStoreBase:
         "preference_generated": "semantic",
         "advisor_action_outcome": "semantic",
         "advisor_insight": "semantic",
+        "project_history": "semantic",  # rollup syntheses — distilled project knowledge
         "test": "semantic",
     }
 

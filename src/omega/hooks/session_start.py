@@ -148,26 +148,6 @@ def _maybe_auto_compact():
         _log_hook_error("auto_compact", e)
 
 
-def _maybe_analyze_behavior():
-    """Run behavioral pattern extraction if >3 days since last run."""
-    try:
-        old = _try_acquire_periodic("last-behavioral-analysis", 3)
-        if old is None:
-            return
-        try:
-            from omega.behavioral import analyze_and_store
-            analyze_and_store()
-        except ImportError:
-            _rollback_marker("last-behavioral-analysis", old)
-        except Exception:
-            _rollback_marker("last-behavioral-analysis", old)
-            raise
-    except ImportError:
-        pass
-    except Exception as e:
-        _log_hook_error("behavioral_analysis", e)
-
-
 def main():
     project = os.environ.get("PROJECT_DIR", os.getcwd())
     session_id = os.environ.get("SESSION_ID", "")
@@ -180,9 +160,6 @@ def main():
 
     # Auto-backup check (max once per 7 days)
     _maybe_auto_backup()
-
-    # Behavioral pattern extraction (max once per 3 days)
-    _maybe_analyze_behavior()
 
     try:
         from omega.bridge import welcome
@@ -258,34 +235,6 @@ def main():
         print(f"Health: {health_label} | Last capture: {ago}{graph_info}")
     except Exception:
         pass
-
-    # Behavioral patterns (habits) — with confidence decay and status
-    try:
-        from omega.behavioral import effective_confidence
-        from omega.bridge import _get_store as _get_store_habits
-        habit_store = _get_store_habits()
-        habits = habit_store.get_by_type("behavioral_pattern", limit=10)
-        surfaced = []
-        for h in habits:
-            meta = h.metadata or {}
-            if meta.get("suppressed"):
-                continue
-            raw_conf = meta.get("confidence", 0)
-            last_ev = meta.get("last_evidence_at") or meta.get("captured_at", "")
-            eff_conf = effective_confidence(raw_conf, last_ev)
-            if eff_conf >= 0.7:
-                status = "confirmed" if meta.get("user_confirmed") else "inferred"
-                surfaced.append((h, eff_conf, status))
-            if len(surfaced) >= 3:
-                break
-        if surfaced:
-            print("\n[HABITS] Inferred from your behavior:")
-            for h, conf, status in surfaced:
-                print(f"  - {h.content} ({status}, {conf:.0%})")
-    except ImportError:
-        pass
-    except Exception as e:
-        _log_hook_error("behavioral_habits", e)
 
     # Clean up stale surfacing counter files (both .surfaced and .surfaced.json)
     try:

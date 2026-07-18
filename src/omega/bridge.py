@@ -1424,18 +1424,10 @@ def auto_capture(
         output += f" | conflicts: {', '.join(parts)}"
 
     # Milestone check (cheap: one node_count query + file existence check).
-    # A full-retrieval extension capability suppresses Free-tier upgrade CTA
-    # suffixes. Core never trusts a local license function for entitlement.
     try:
         from omega.milestones import check_capture_milestones
-        full_retrieval = False
-        try:
-            from omega.plugins import has_capability
-            full_retrieval = has_capability("full_retrieval")
-        except Exception as e:
-            logger.debug("Capability check failed in milestone: %s", e)
         count = store.node_count()
-        milestone_msg = check_capture_milestones(count, is_pro_user=full_retrieval)
+        milestone_msg = check_capture_milestones(count)
         if milestone_msg:
             output += f" | {milestone_msg}"
     except Exception as e:

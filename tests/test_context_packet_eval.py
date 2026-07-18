@@ -291,27 +291,7 @@ def test_cli_backfill_context_packet_json(capsys):
     assert mocked.call_args.kwargs["event_types"] == ["decision"]
 
 
-def test_cli_backfill_context_packet_apply_requires_pro(capsys):
-    from argparse import Namespace
-    from omega.cli import cmd_backfill_context_packet
-
-    with patch("omega.cli._is_pro_licensed", return_value=False), pytest.raises(SystemExit) as exc:
-        cmd_backfill_context_packet(Namespace(
-            report="packet-report.json",
-            threshold=0.72,
-            max_connections_per_source=1,
-            max_edges=10,
-            event_types="decision",
-            apply=True,
-            output=None,
-            json=False,
-        ))
-
-    assert exc.value.code == 1
-    assert "requires OMEGA Pro" in capsys.readouterr().err
-
-
-def test_cli_backfill_context_packet_apply_allows_pro(capsys):
+def test_cli_backfill_context_packet_apply(capsys):
     from argparse import Namespace
     from omega.cli import cmd_backfill_context_packet
 
@@ -331,7 +311,7 @@ def test_cli_backfill_context_packet_apply_allows_pro(capsys):
         "edges": [],
     }
 
-    with patch("omega.cli._is_pro_licensed", return_value=True), patch(
+    with patch(
         "omega.bridge._get_store", return_value=object()
     ), patch(
         "omega.evaluation.context_packet_eval.backfill_packet_miss_report",
@@ -453,7 +433,7 @@ def test_cli_maintain_context_packet_json(capsys):
         "backfill": {"created": 1},
     }
 
-    with patch("omega.cli._is_pro_licensed", return_value=True), patch(
+    with patch(
         "omega.bridge._get_store", return_value=object()
     ), patch(
         "omega.evaluation.context_packet_eval.run_context_packet_maintenance_loop",
@@ -481,33 +461,6 @@ def test_cli_maintain_context_packet_json(capsys):
     assert mocked.call_args.kwargs["apply"] is False
     assert mocked.call_args.kwargs["re_eval"] is False
     assert mocked.call_args.kwargs["event_types"] == ["decision"]
-
-
-def test_cli_maintain_context_packet_requires_pro(capsys):
-    from argparse import Namespace
-    from omega.cli import cmd_maintain_context_packet
-
-    with patch("omega.cli._is_pro_licensed", return_value=False), pytest.raises(SystemExit) as exc:
-        cmd_maintain_context_packet(Namespace(
-            artifact_prefix="packet-loop",
-            sample_size=5,
-            budget_tokens=500,
-            mode="before_edit",
-            seed=42,
-            probe_cache=None,
-            threshold=0.72,
-            max_connections_per_source=1,
-            max_edges=10,
-            event_types=None,
-            apply=False,
-            re_eval=False,
-            json=True,
-        ))
-
-    assert exc.value.code == 1
-    parsed = json.loads(capsys.readouterr().out)
-    assert parsed["requires_pro"] is True
-    assert "requires OMEGA Pro" in parsed["error"]
 
 
 def test_backfill_source_edges_dry_run_does_not_mutate(tmp_omega_dir):

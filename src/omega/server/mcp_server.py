@@ -13,7 +13,6 @@ import asyncio
 import collections
 import logging
 import os
-import random
 import socket
 import signal
 import sys
@@ -48,52 +47,9 @@ from omega.server import handlers as _handlers_module
 TOOL_SCHEMAS = list(_CORE_SCHEMAS)
 HANDLERS = dict(_CORE_HANDLERS)
 
-# Built-in optional modules (coordination, router, profile, knowledge, entity,
-# oracle, typed memory, audit, federation, dreaming, stores, ingest).
-# These live in the private `omega_platform` namespace distributed via the
-# private Pro delivery path. Core only loads them when an installed extension
-# advertises the `pro_tools` capability; it does not trust a local license
-# function for entitlement.
-_BUILTIN_MODULES = [
-    ("omega_platform.server.coord_schemas", "COORD_TOOL_SCHEMAS", "omega_platform.server.coord_handlers", "COORD_HANDLERS"),
-    ("omega_platform.router.tool_schemas", "ROUTER_TOOL_SCHEMAS", "omega_platform.router.handlers", "ROUTER_HANDLERS"),
-    ("omega_platform.profile.tool_schemas", "PROFILE_TOOL_SCHEMAS", "omega_platform.profile.handlers", "PROFILE_HANDLERS"),
-    ("omega_platform.knowledge.tool_schemas", "KNOWLEDGE_TOOL_SCHEMAS", "omega_platform.knowledge.handlers", "KNOWLEDGE_HANDLERS"),
-    ("omega_platform.entity.tool_schemas", "ENTITY_TOOL_SCHEMAS", "omega_platform.entity.handlers", "ENTITY_HANDLERS"),
-    ("omega_platform.oracle.tool_schemas", "ORACLE_TOOL_SCHEMAS", "omega_platform.oracle.handlers", "ORACLE_HANDLERS"),
-    ("omega_platform.ingest.tool_schemas", "INGEST_TOOL_SCHEMAS", "omega_platform.ingest.handlers", "INGEST_HANDLERS"),
-    ("omega_platform.stores.tool_schemas", "STORES_TOOL_SCHEMAS", "omega_platform.stores.handlers", "STORES_HANDLERS"),
-    ("omega_platform.dreaming.tool_schemas", "DREAMING_TOOL_SCHEMAS", "omega_platform.dreaming.handlers", "DREAMING_HANDLERS"),
-    ("omega_platform.audit.tool_schemas", "AUDIT_TOOL_SCHEMAS", "omega_platform.audit.handlers", "AUDIT_HANDLERS"),
-    ("omega_platform.federation.tool_schemas", "FEDERATION_TOOL_SCHEMAS", "omega_platform.federation.handlers", "FEDERATION_HANDLERS"),
-    ("omega_platform.typed.tool_schemas", "TYPED_TOOL_SCHEMAS", "omega_platform.typed.handlers", "TYPED_HANDLERS"),
-]
-
-import importlib
-
-# Check extension capabilities before loading commercial modules
-_pro_tools_available = False
-try:
-    from omega.plugins import has_capability
-    _pro_tools_available = has_capability("pro_tools")
-except Exception as e:
-    logging.getLogger("omega.mcp_server").debug("Capability check failed, defaulting to non-pro: %s", e)
-    _pro_tools_available = False
-
-if _pro_tools_available:
-    for _schema_mod, _schema_attr, _handler_mod, _handler_attr in _BUILTIN_MODULES:
-        try:
-            _sm = importlib.import_module(_schema_mod)
-            _hm = importlib.import_module(_handler_mod)
-            TOOL_SCHEMAS = TOOL_SCHEMAS + getattr(_sm, _schema_attr)
-            HANDLERS = {**HANDLERS, **getattr(_hm, _handler_attr)}
-        except ImportError:
-            pass
-else:
-    logging.getLogger("omega.server").info(
-        "Pro modules available — run 'omega activate <key>' to unlock. "
-        "Upgrade at https://omegamax.co/pro?ref=mcp-startup"
-    )
+# Fork note: the upstream Pro loader (omega_platform.* builtin modules gated
+# on a `pro_tools` capability, plus its "run 'omega activate'" upsell log) was
+# removed — this self-hosted fork ships core tools plus discovered plugins only.
 
 # Discover external plugins (e.g. omega-pro)
 from omega.plugins import discover_plugins
@@ -162,12 +118,6 @@ def _close_on_exit():
     """Close SQLite store and unregister PID when the MCP server process exits."""
     global _shutting_down
     _shutting_down = True
-    # Close UsageTracker (llm_usage.db connection)
-    try:
-        if _usage_tracker_instance is not None:
-            _usage_tracker_instance.close()
-    except Exception:
-        pass
     # Close CoordinationManager (omega.db connection)
     try:
         from omega_platform.orchestrator.coordination import close_manager
@@ -331,7 +281,6 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     """Dispatch tool call to the appropriate handler."""
     global _last_activity
     _last_activity = time.monotonic()
-    t0 = time.monotonic()
 
     # Reject new tool calls during shutdown to prevent docling/thread pool errors
     if _shutting_down:
@@ -359,9 +308,6 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         content_list = result.get("content", [{}])
         text = content_list[0].get("text", str(result)) if content_list else str(result)
 
-        # Log tool call to usage tracker (fire-and-forget)
-        _log_tool_usage(name, arguments, time.monotonic() - t0)
-
         # Release freed native memory after each tool call to prevent
         # MALLOC_LARGE_REUSABLE accumulation (macOS holds freed pages)
         _force_malloc_release()
@@ -386,39 +332,6 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         return [TextContent(type="text", text=f"Error in {name}: {error_msg}")]
 
 
-def _log_tool_usage(name: str, arguments: dict, elapsed_s: float) -> None:
-    """Fire-and-forget logging of tool calls to UsageTracker."""
-    try:
-        tracker = _get_usage_tracker()
-        if tracker:
-            tracker.log_call(
-                session_id=arguments.get("session_id"),
-                tool_name=name,
-                model="mcp-tool-call",  # actual LLM model not available via MCP
-                input_tokens=0,
-                output_tokens=0,
-                duration_ms=int(elapsed_s * 1000),
-                project=arguments.get("project"),
-            )
-    except Exception:
-        pass  # Never let usage tracking break tool calls
-
-
-_usage_tracker_instance = None
-
-
-def _get_usage_tracker():
-    """Lazy singleton for UsageTracker."""
-    global _usage_tracker_instance
-    if _usage_tracker_instance is None:
-        try:
-            from omega.usage_tracker import UsageTracker
-            _usage_tracker_instance = UsageTracker()
-        except Exception:
-            return None
-    return _usage_tracker_instance
-
-
 async def _idle_watchdog():
     """Exit the process if no tool call has been received within the timeout."""
     while True:
@@ -432,9 +345,6 @@ async def _idle_watchdog():
 
 async def _socket_watchdog():
     """Re-create the hook socket if deleted or stale (unresponsive)."""
-    if sys.platform == "win32":
-        return  # TCP server doesn't need file watchdog
-
     try:
         from omega.server.hook_server import SOCK_PATH, start_hook_server
     except ImportError:
@@ -465,91 +375,6 @@ async def _socket_watchdog():
                 await start_hook_server()
 
 
-_coord_tick_count = 0
-
-
-def _run_coordination_tick():
-    """Sync helper for periodic coordination maintenance."""
-    global _coord_tick_count
-    _coord_tick_count += 1
-    try:
-        from omega_platform.orchestrator.coordination import get_manager
-        from omega.server.hook_server import (
-            _last_deadlock_push,
-            DEADLOCK_PUSH_DEBOUNCE_S,
-            _agent_nickname,
-        )
-
-        mgr = get_manager()
-
-        # Stale cleanup — internally debounced to 5 min
-        try:
-            mgr._maybe_clean_stale()
-        except Exception as e:
-            logger.debug("Stale session cleanup failed: %s", e)
-
-        # Flush audit buffer on every tick (time-based fallback)
-        try:
-            mgr.flush_audit_buffer()
-        except Exception as e:
-            logger.debug("Audit buffer flush failed: %s", e)
-
-        # Every 5th tick (~5 min): deadlock detection + notification flush + stale pruning
-        if _coord_tick_count % 5 == 0:
-            # Prune stale debounce entries (>1h old) to prevent unbounded growth
-            try:
-                from omega.server.hook_server import _debounce_state
-                evicted = _debounce_state.prune_stale(3600)
-                if evicted:
-                    logger.debug("Pruned %d stale debounce entries", evicted)
-            except Exception:
-                pass
-            # Flush batched notifications (high: 1h, medium: 3h cutoffs)
-            try:
-                flushed = mgr.flush_notification_batch()
-                if flushed:
-                    logger.debug("Flushed %d batched notifications", flushed)
-            except Exception as e:
-                logger.debug("Notification flush failed: %s", e)
-
-            try:
-                cycles = mgr.detect_deadlocks()
-                if cycles:
-                    now_dl = time.monotonic()
-                    for cycle in cycles[:2]:
-                        cycle_key = str(hash(tuple(sorted(cycle[:-1]))))
-                        if cycle_key not in _last_deadlock_push or now_dl - _last_deadlock_push[cycle_key] >= DEADLOCK_PUSH_DEBOUNCE_S:
-                            _last_deadlock_push[cycle_key] = now_dl
-                            cycle_str = " -> ".join(_agent_nickname(s) for s in cycle)
-                            for peer in set(cycle[:-1]):
-                                try:
-                                    mgr.send_message(
-                                        from_session=peer,
-                                        subject=f"[DEADLOCK] Circular wait: {cycle_str}",
-                                        to_session=peer,
-                                        msg_type="inform",
-                                        ttl_minutes=30,
-                                    )
-                                except Exception as e:
-                                    logger.debug("Deadlock broadcast failed: %s", e)
-            except Exception as e:
-                logger.debug("Deadlock detection failed: %s", e)
-    except Exception as e:
-        logger.debug("Coordination tick failed: %s", e)
-
-
-async def _coordination_loop():
-    """Periodic coordination maintenance — runs even during idle."""
-    loop = asyncio.get_running_loop()
-    while True:
-        # Jitter: 60-90s to desynchronize across processes
-        await asyncio.sleep(60 + random.uniform(0, 30))
-        try:
-            await loop.run_in_executor(_SQLITE_EXECUTOR, _run_coordination_tick)
-        except Exception as e:
-            logger.debug("Coordination loop tick failed: %s", e)
-
-
 def _configure_logging():
     """Set up logging with both stderr and rotating file handler."""
     from logging.handlers import RotatingFileHandler
@@ -572,69 +397,6 @@ def _configure_logging():
         datefmt="%Y-%m-%d %H:%M:%S",
     ))
     logging.getLogger().addHandler(file_handler)
-
-
-def _cleanup_dead_sessions():
-    """Crash-recovery: clean sessions whose PIDs no longer exist.
-
-    Runs at startup BEFORE registering the new session, so stale sessions
-    from prior crashes are cleaned even when the DB is under contention.
-    Uses a short busy_timeout and skips gracefully if the DB is locked.
-    """
-    try:
-        from omega_platform.orchestrator.coordination import get_manager
-        mgr = get_manager()
-        conn = mgr.get_read_connection()
-
-        rows = conn.execute(
-            "SELECT session_id, pid FROM coord_sessions WHERE status = 'active'"
-        ).fetchall()
-
-        dead_ids = []
-        for sid, pid in rows:
-            if pid is None:
-                dead_ids.append(sid)
-            elif pid > 0:
-                try:
-                    os.kill(pid, 0)  # Signal 0 = check if alive, no signal sent
-                except ProcessLookupError:
-                    dead_ids.append(sid)
-                except PermissionError:
-                    pass  # Process exists but owned by another user — leave it
-
-        if dead_ids:
-            now = datetime.now(timezone.utc).isoformat()
-            with mgr._lock:
-                placeholders = ",".join("?" * len(dead_ids))
-                # Release claims and mark stopped
-                conn.execute(
-                    f"DELETE FROM coord_file_claims WHERE session_id IN ({placeholders})",
-                    dead_ids,
-                )
-                conn.execute(
-                    f"DELETE FROM coord_branch_claims WHERE session_id IN ({placeholders})",
-                    dead_ids,
-                )
-                conn.execute(
-                    f"UPDATE coord_tasks SET status = 'pending', session_id = NULL, claimed_at = NULL "
-                    f"WHERE session_id IN ({placeholders}) AND status = 'in_progress'",
-                    dead_ids,
-                )
-                conn.execute(
-                    f"UPDATE coord_sessions SET status = 'stopped', last_heartbeat = ? "
-                    f"WHERE session_id IN ({placeholders})",
-                    [now] + dead_ids,
-                )
-                conn.commit()
-            # Sync status to cloud so the admin dashboard sees them as stopped
-            for sid in dead_ids:
-                mgr._cloud_fire("update_session_status", sid, "stopped", now)
-                mgr._cloud_fire("delete_session_claims", sid)
-                mgr._cloud_fire("delete_session_file_reads", sid)
-            logger.warning("Crash recovery: cleaned %d dead sessions: %s",
-                          len(dead_ids), [s[:8] for s in dead_ids])
-    except Exception as e:
-        logger.debug("Crash-recovery cleanup failed (non-fatal): %s", e)
 
 
 # --- Mach task_info objects (hoisted to module level to avoid per-call leaks) ---
@@ -708,50 +470,6 @@ def _get_current_rss_bytes() -> int:
                 return info.resident_size
         except Exception:
             pass
-
-    if sys.platform == "win32":
-        # Windows: GetProcessMemoryInfo via psapi. The `resource` stdlib module
-        # is Unix-only, so the getrusage fallback below would crash at import.
-        try:
-            from ctypes import wintypes
-
-            class _PROCESS_MEMORY_COUNTERS(ctypes.Structure):
-                _fields_ = [
-                    ("cb", wintypes.DWORD),
-                    ("PageFaultCount", wintypes.DWORD),
-                    ("PeakWorkingSetSize", ctypes.c_size_t),
-                    ("WorkingSetSize", ctypes.c_size_t),
-                    ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
-                    ("QuotaPagedPoolUsage", ctypes.c_size_t),
-                    ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
-                    ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
-                    ("PagefileUsage", ctypes.c_size_t),
-                    ("PeakPagefileUsage", ctypes.c_size_t),
-                ]
-
-            kernel32 = ctypes.windll.kernel32
-            psapi = ctypes.windll.psapi
-            counters = _PROCESS_MEMORY_COUNTERS()
-            counters.cb = ctypes.sizeof(counters)
-            # GetCurrentProcess() returns a pseudo-handle that has been
-            # observed to fail in some configs; OpenProcess on the current
-            # PID is more reliable per the Windows bug report.
-            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-            handle = kernel32.OpenProcess(
-                PROCESS_QUERY_LIMITED_INFORMATION, False,
-                kernel32.GetCurrentProcessId(),
-            )
-            if handle:
-                try:
-                    if psapi.GetProcessMemoryInfo(
-                        handle, ctypes.byref(counters), counters.cb,
-                    ):
-                        return counters.WorkingSetSize
-                finally:
-                    kernel32.CloseHandle(handle)
-        except Exception:
-            pass
-        return 0
 
     # Fallback: getrusage (peak RSS, not current — but better than nothing)
     try:
@@ -1002,11 +720,9 @@ async def main():
         except Exception as e:
             logger.debug("Orphan cleanup at startup failed: %s", e)
 
-    # --- P0/P3: Crash-recovery — clean dead sessions from prior crashes ---
-    try:
-        await loop.run_in_executor(_SQLITE_EXECUTOR, _cleanup_dead_sessions)
-    except Exception as e:
-        logger.debug("Crash recovery at startup failed: %s", e)
+    # Fork note: the upstream crash-recovery pass (_cleanup_dead_sessions) is
+    # gone — it operated on coord_* tables that don't exist in this build and
+    # pushed session status to the removed cloud sync.
 
     # Register this process for lock diagnostics
     try:
@@ -1093,10 +809,9 @@ async def main():
     # Socket watchdog — re-creates hook.sock if deleted by another session's stop
     _sock_watchdog_task = asyncio.create_task(_socket_watchdog())
 
-    # Fork note: the background coordination loop is NOT started — it depended
-    # entirely on the absent omega_platform coordination module and woke every
-    # 60-90s only to swallow an ImportError. (_coordination_loop kept for
-    # reference until the Phase-5 dead-weight sweep removes it.)
+    # Fork note: the upstream background coordination loop was removed — it
+    # depended entirely on the absent omega_platform coordination module and
+    # woke every 60-90s only to swallow an ImportError.
 
     # RSS memory watchdog — graceful exit before memory pressure causes SIGSEGV
     _rss_watchdog_task = asyncio.create_task(_rss_watchdog())

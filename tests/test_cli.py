@@ -795,31 +795,6 @@ class TestCmdStatus:
         assert parsed["backend"] is None
         assert parsed["memories"] == 0
 
-    def test_json_cloud_status(self, capsys, tmp_path, monkeypatch):
-        """JSON output should include cloud status."""
-        import sqlite3
-
-        db_path = tmp_path / "omega.db"
-        conn = sqlite3.connect(str(db_path))
-        conn.execute("CREATE TABLE memories (id TEXT, content TEXT, metadata TEXT)")
-        conn.commit()
-        conn.close()
-
-        # Create secrets to simulate configured cloud
-        (tmp_path / "secrets.json").write_text("{}")
-        (tmp_path / "last-cloud-pull").write_text("2026-02-26T10:00:00Z")
-
-        monkeypatch.setattr("omega.cli.OMEGA_DIR", tmp_path)
-        monkeypatch.setattr("omega.cli.BGE_MODEL_DIR", tmp_path / "no-model")
-        monkeypatch.setattr("omega.cli.MINILM_MODEL_DIR", tmp_path / "no-model")
-
-        args = argparse.Namespace(json=True)
-        cmd_status(args)
-        out = capsys.readouterr().out
-        parsed = json.loads(out)
-        assert parsed["cloud"]["configured"] is True
-        assert parsed["cloud"]["last_pull"] == "2026-02-26T10:00:00Z"
-
 
 # ============================================================================
 # cmd_doctor() JSON output

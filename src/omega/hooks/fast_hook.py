@@ -14,15 +14,7 @@ import socket
 import sys
 import time
 
-# Windows uses TCP loopback; Unix uses domain socket
-if sys.platform == "win32":
-    SOCK_PATH = None
-    HOOK_HOST = "127.0.0.1"
-    HOOK_PORT = 19876
-else:
-    SOCK_PATH = os.path.expanduser("~/.omega/hook.sock")
-    HOOK_HOST = None
-    HOOK_PORT = None
+SOCK_PATH = os.path.expanduser("~/.omega/hook.sock")
 
 # Map hook names to their original script modules for fallback
 _FALLBACK_SCRIPTS = {
@@ -97,14 +89,9 @@ def delegate(hook_names, payload, timeout=5.0):
     Accepts a single hook name (str) or multiple (list) for batching.
     Batch requests use {"hooks": [...]} and return {"results": [...]}.
     """
-    if sys.platform == "win32":
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(timeout)
-        s.connect((HOOK_HOST, HOOK_PORT))
-    else:
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(timeout)
-        s.connect(SOCK_PATH)
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(timeout)
+    s.connect(SOCK_PATH)
     try:
         if isinstance(hook_names, list):
             request = json.dumps({"hooks": hook_names, **payload}).encode("utf-8")
