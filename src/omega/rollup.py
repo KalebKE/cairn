@@ -107,8 +107,23 @@ def _build_prompt(project: str, window: str, rows: List[tuple]) -> str:
     return "\n".join(parts)
 
 
+def _archive_raw_config() -> bool:
+    """Read rollup.archive_raw from ~/.omega/config.json (default False:
+    grace-TTL deletion). True keeps raw rows on disk as status='archived' —
+    verbatim fidelity behind the synthesis, excluded from retrieval."""
+    import os
+    from pathlib import Path
+    try:
+        cfg_path = Path(os.environ.get("OMEGA_HOME", os.path.expanduser("~/.omega"))) / "config.json"
+        data = json.loads(cfg_path.read_text())
+        return bool((data.get("rollup") or {}).get("archive_raw", False))
+    except Exception:
+        return False
+
+
 def rollup_window(store, project: str, window: str,
-                  min_age_days: int = 30, dry_run: bool = False) -> Dict[str, Any]:
+                  min_age_days: int = 30, dry_run: bool = False,
+                  archive_raw: "bool | None" = None) -> Dict[str, Any]:
     """Synthesize one (project, window) into a project_history memory."""
     cutoff = (datetime.now(timezone.utc) - timedelta(days=min_age_days)).isoformat()
     rows = _window_rows(store, project, window, cutoff)
@@ -145,24 +160,36 @@ def rollup_window(store, project: str, window: str,
         skip_inference=True,   # no dedup/contradiction pass against sources
     )
 
+    if archive_raw is None:
+        archive_raw = _archive_raw_config()
+
     now = datetime.now(timezone.utc)
     with store._lock:
         for src_id, _content, created_at, _etype in rows:
             store.add_edge(node_id, src_id, edge_type="derived_from")
-            # Grace TTL: expire GRACE_TTL_DAYS from now (ttl is relative to
-            # created_at, so add the row's current age).
-            created_dt = store._parse_dt(created_at) or now
-            ttl = int((now - created_dt).total_seconds()) + GRACE_TTL_DAYS * 86400
             row = store._conn.execute(
                 "SELECT metadata FROM memories WHERE node_id = ?", (src_id,)
             ).fetchone()
             meta = json.loads(row[0]) if row and row[0] else {}
             meta["rolled_up"] = 1
             meta["rolled_into"] = node_id
-            store._conn.execute(
-                "UPDATE memories SET ttl_seconds = ?, metadata = ? WHERE node_id = ?",
-                (ttl, json.dumps(meta), src_id),
-            )
+            if archive_raw:
+                # Keep verbatim source on disk, out of the retrieval path.
+                meta["archived"] = 1
+                store._conn.execute(
+                    "UPDATE memories SET ttl_seconds = NULL, status = 'archived', "
+                    "metadata = ? WHERE node_id = ?",
+                    (json.dumps(meta), src_id),
+                )
+            else:
+                # Grace TTL: expire GRACE_TTL_DAYS from now (ttl is relative
+                # to created_at, so add the row's current age).
+                created_dt = store._parse_dt(created_at) or now
+                ttl = int((now - created_dt).total_seconds()) + GRACE_TTL_DAYS * 86400
+                store._conn.execute(
+                    "UPDATE memories SET ttl_seconds = ?, metadata = ? WHERE node_id = ?",
+                    (ttl, json.dumps(meta), src_id),
+                )
         store._commit()
     store._invalidate_query_cache()
 
@@ -171,13 +198,15 @@ def rollup_window(store, project: str, window: str,
 
 
 def rollup_pending(store, min_age_days: int = 30, dry_run: bool = False,
-                   max_windows: int = 6) -> Dict[str, Any]:
+                   max_windows: int = 6,
+                   archive_raw: "bool | None" = None) -> Dict[str, Any]:
     """Roll up all pending windows (bounded per run for nightly use)."""
     result: Dict[str, Any] = {"windows_rolled": 0, "rows_rolled": 0,
                               "skipped_llm": 0, "windows": []}
     for win in find_pending_windows(store, min_age_days=min_age_days)[:max_windows]:
         r = rollup_window(store, win["project"], win["window"],
-                          min_age_days=min_age_days, dry_run=dry_run)
+                          min_age_days=min_age_days, dry_run=dry_run,
+                          archive_raw=archive_raw)
         entry = {**win, **{k: v for k, v in r.items() if k != "synthesis"}}
         if dry_run and "synthesis" in r:
             entry["synthesis"] = r["synthesis"]

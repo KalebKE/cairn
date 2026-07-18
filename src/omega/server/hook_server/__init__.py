@@ -252,8 +252,111 @@ def _do_surface(payload: Dict[str, Any]) -> str:
     return "\n".join(out) if out else ""
 
 
+# --------------------------------------------------------------------------
+# Pre-compaction capture: snapshot the session into a memory BEFORE Claude
+# Code compresses its context away. This is the write-path safety net — since
+# per-message auto-capture was removed for latency reasons, memory creation
+# otherwise depends entirely on the agent remembering to call omega_store.
+# Compaction is rare (unlike per-message hooks), and the LLM digest runs in a
+# background task so the hook returns immediately.
+# --------------------------------------------------------------------------
+
+_TRANSCRIPT_TAIL_CHARS = 16000
+
+# Keep references so background capture tasks aren't garbage-collected.
+_bg_futures: set = set()
+
+
+def _transcript_tail(transcript_path: str, max_chars: int = _TRANSCRIPT_TAIL_CHARS) -> str:
+    """Extract the conversational tail (user prompts + assistant prose) from a
+    Claude Code transcript JSONL. Thinking blocks, tool calls, and tool
+    results are excluded — they're volume, not session knowledge."""
+    parts: list = []
+    try:
+        with open(transcript_path, "r", errors="replace") as f:
+            for line in f:
+                try:
+                    d = json.loads(line)
+                except Exception:
+                    continue
+                role = d.get("type")
+                if role not in ("user", "assistant"):
+                    continue
+                content = (d.get("message") or {}).get("content")
+                texts: list = []
+                if isinstance(content, str):
+                    texts.append(content)
+                elif isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            texts.append(block.get("text", ""))
+                if texts:
+                    tag = "USER" if role == "user" else "ASSISTANT"
+                    parts.append(f"[{tag}] " + " ".join(t for t in texts if t))
+    except OSError as e:
+        logger.debug("pre_compact: cannot read transcript %s: %s", transcript_path, e)
+        return ""
+    text = "\n".join(parts)
+    return text[-max_chars:] if len(text) > max_chars else text
+
+
+_COMPACT_SYSTEM_PROMPT = (
+    "You are the memory layer of an engineering assistant. The following is "
+    "the tail of a coding session that is about to be compressed. Write a "
+    "dense session digest capturing what would otherwise be lost: what was "
+    "worked on, decisions made and why, problems found with root causes, and "
+    "unfinished threads / next steps. Preserve concrete identifiers (files, "
+    "PRs, branches, error messages). 200 words maximum, no preamble."
+)
+
+
+def _do_compact_capture(payload: Dict[str, Any]) -> None:
+    """Background worker: digest the transcript tail and store it. All
+    failures are logged and swallowed — capture is best-effort by design."""
+    try:
+        tail = _transcript_tail(payload.get("transcript_path") or "")
+        if len(tail) < 500:
+            logger.debug("pre_compact: transcript tail too small, skipping")
+            return
+        import omega.llm as _llm
+        digest = _llm.llm_complete(
+            tail, _COMPACT_SYSTEM_PROMPT,
+            max_tokens=3000, temperature=0.2, timeout=60.0, model_tier="fast",
+        )
+        if not (digest or "").strip():
+            logger.debug("pre_compact: empty digest, skipping store")
+            return
+        import omega.bridge as _bridge
+        store = _bridge._get_store()
+        store.store(
+            content=digest.strip(),
+            metadata={
+                "event_type": "session_summary",
+                "project": payload.get("project") or payload.get("cwd") or "",
+                "tags": ["pre-compact", "session-capture"],
+                "compact_trigger": payload.get("trigger", ""),
+            },
+            session_id=payload.get("session_id") or None,
+        )
+        logger.info("pre_compact: session digest stored (%d chars)", len(digest))
+    except Exception as e:
+        logger.debug("pre_compact capture failed: %s", e)
+
+
 async def _dispatch(hook: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Route one hook to its handler. Only surface_memories does work."""
+    """Route one hook to its handler."""
+    if hook == "pre_compact_capture":
+        # Fire-and-forget: compaction is blocked on this hook returning, so
+        # the digest+store runs in the executor and we answer immediately.
+        try:
+            loop = asyncio.get_running_loop()
+            from omega.server.mcp_server import _SQLITE_EXECUTOR
+            fut = loop.run_in_executor(_SQLITE_EXECUTOR, _do_compact_capture, payload)
+            _bg_futures.add(fut)
+            fut.add_done_callback(_bg_futures.discard)
+        except Exception as e:
+            logger.debug("pre_compact dispatch failed: %s", e)
+        return {"output": "", "exit_code": 0}
     if hook != "surface_memories":
         return {"output": "", "exit_code": 0}
     try:

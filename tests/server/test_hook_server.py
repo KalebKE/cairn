@@ -212,6 +212,109 @@ def test_pass2_debounced_per_project(monkeypatch):
     assert len(planning_calls) == 1, "project briefing must fire once per window"
 
 
+def _write_transcript(tmp_path):
+    """Minimal Claude Code transcript JSONL: mode records, str/list user
+    content, assistant blocks with thinking+text+tool_use."""
+    lines = [
+        {"type": "mode", "mode": "normal"},
+        {"type": "user", "message": {"content": "let's fix the catalog enrichment bug"}},
+        {"type": "assistant", "message": {"content": [
+            {"type": "thinking", "thinking": "SECRET INTERNAL REASONING"},
+            {"type": "text", "text": "Root cause: the sync cursor races the enrichment writer."},
+            {"type": "tool_use", "name": "Bash", "input": {"command": "grep ..."}},
+        ]}},
+        {"type": "user", "message": {"content": [
+            {"type": "tool_result", "content": "big tool output blob"},
+            {"type": "text", "text": "ship the fix as PR 999"},
+        ]}},
+        {"type": "assistant", "message": {"content": [
+            {"type": "text", "text": "Decision: merged PR 999 behind the queue."},
+        ]}},
+        # padding so the tail clears _do_compact_capture's minimum-size guard
+        {"type": "assistant", "message": {"content": [
+            {"type": "text", "text": "Additional context on the enrichment work: " * 20},
+        ]}},
+    ]
+    p = tmp_path / "transcript.jsonl"
+    p.write_text("\n".join(json.dumps(l) for l in lines))
+    return p
+
+
+def test_transcript_tail_extraction(tmp_path):
+    p = _write_transcript(tmp_path)
+    text = H._transcript_tail(str(p), max_chars=5000)
+    assert "catalog enrichment bug" in text
+    assert "sync cursor races" in text
+    assert "ship the fix as PR 999" in text
+    assert "merged PR 999" in text
+    assert "SECRET INTERNAL REASONING" not in text, "thinking blocks must be excluded"
+    assert "big tool output blob" not in text, "tool results must be excluded"
+    # cap respected
+    assert len(H._transcript_tail(str(p), max_chars=50)) <= 50
+
+
+def test_pre_compact_dispatch_is_nonblocking(monkeypatch):
+    """pre_compact_capture must return immediately (compaction is waiting);
+    the LLM digest + store happens in a background executor task."""
+    import threading
+    done = threading.Event()
+    monkeypatch.setattr(H, "_do_compact_capture", lambda payload: done.set())
+
+    async def body():
+        resp = await H._dispatch("pre_compact_capture", {"transcript_path": "/nope"})
+        assert resp == {"output": "", "exit_code": 0}
+        for _ in range(50):
+            if done.is_set():
+                break
+            await asyncio.sleep(0.02)
+
+    asyncio.run(body())
+    assert done.is_set(), "background capture must actually run"
+
+
+def test_do_compact_capture_stores_digest(tmp_path, monkeypatch):
+    p = _write_transcript(tmp_path)
+    stored = {}
+
+    class FakeStore:
+        def store(self, content, metadata=None, **kw):
+            stored.update({"content": content, "metadata": metadata, **kw})
+            return "mem-fake"
+
+    import omega.bridge as bridge
+    import omega.llm as llm
+    monkeypatch.setattr(bridge, "_get_store", lambda: FakeStore())
+    monkeypatch.setattr(llm, "llm_complete",
+                        lambda *a, **k: "Session digest: fixed enrichment race, merged PR 999.")
+
+    H._do_compact_capture({
+        "transcript_path": str(p),
+        "session_id": "sess-1",
+        "project": "/Users/k/Projects/Force-Server",
+        "trigger": "auto",
+    })
+    assert "PR 999" in stored["content"]
+    assert stored["metadata"]["event_type"] == "session_summary"
+    assert stored["metadata"]["project"] == "/Users/k/Projects/Force-Server"
+    assert "pre-compact" in stored["metadata"]["tags"]
+
+
+def test_do_compact_capture_skips_on_empty_llm(tmp_path, monkeypatch):
+    p = _write_transcript(tmp_path)
+    import omega.bridge as bridge
+    import omega.llm as llm
+    called = {"store": False}
+
+    class FakeStore:
+        def store(self, *a, **k):
+            called["store"] = True
+
+    monkeypatch.setattr(bridge, "_get_store", lambda: FakeStore())
+    monkeypatch.setattr(llm, "llm_complete", lambda *a, **k: "")
+    H._do_compact_capture({"transcript_path": str(p), "session_id": "s"})
+    assert not called["store"], "no digest -> nothing stored (fail-open)"
+
+
 def test_no_dangling_header_when_budget_cuts_entries(monkeypatch):
     """A header whose entries were all trimmed by the budget must not be
     emitted on its own."""

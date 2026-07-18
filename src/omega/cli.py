@@ -2725,6 +2725,31 @@ def cmd_doctor(args):
     except Exception as e:
         warn(f"Query expansion check failed: {e}")
 
+    # 9b-3. Retrieval-quality trend — the nightly job appends seeded
+    # eval-retrieval scores to eval-history.csv; a falling MRR is how a silent
+    # degradation (e.g. embeddings quietly broken) shows up in METRICS before
+    # anyone notices behaviorally.
+    try:
+        _hist = OMEGA_DIR / "logs" / "eval-history.csv"
+        if _hist.exists():
+            _rows = [ln.split(",") for ln in _hist.read_text().strip().splitlines()[1:] if ln]
+            _mrrs = [float(r[1]) for r in _rows if len(r) >= 2]
+            if len(_mrrs) >= 5:
+                _prev = sorted(_mrrs[:-1])
+                _median = _prev[len(_prev) // 2]
+                if _median > 0 and _mrrs[-1] < 0.9 * _median:
+                    warn(f"Retrieval MRR dropped: latest {_mrrs[-1]:.3f} vs median "
+                         f"{_median:.3f} — investigate embeddings/scoring regressions")
+                else:
+                    ok(f"Retrieval MRR trend healthy (latest {_mrrs[-1]:.3f}, "
+                       f"median {_median:.3f}, n={len(_mrrs)})")
+            else:
+                ok(f"Retrieval eval history: {len(_mrrs)} run(s) (trend needs 5)")
+        else:
+            ok("Retrieval eval history: none yet (nightly job will create it)")
+    except Exception as e:
+        warn(f"Eval trend check failed: {e}")
+
     # 9c. Maintenance freshness — maintenance is only useful if it actually runs.
     # It silently stopped for months once; flag stale markers loudly.
     _maint_intervals = {"last-consolidate": 3, "last-compact": 3,

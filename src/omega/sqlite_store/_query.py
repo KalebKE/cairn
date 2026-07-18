@@ -720,9 +720,11 @@ class QueryMixin:
                 del all_results[nid]
                 node_scores.pop(nid, None)
 
-        # Filter superseded
+        # Filter superseded and archived (archived: rollup raw sources kept on
+        # disk for fidelity — reachable via derived_from edges, never surfaced)
         for nid in list(all_results.keys()):
-            if all_results[nid].metadata.get("superseded"):
+            _m = all_results[nid].metadata
+            if _m.get("superseded") or _m.get("archived"):
                 del all_results[nid]
                 node_scores.pop(nid, None)
 
@@ -1032,7 +1034,8 @@ class QueryMixin:
                         if nbr_id in existing_ids:
                             continue
                         result = entry["_result"]
-                        if result.is_expired() or result.metadata.get("superseded"):
+                        if (result.is_expired() or result.metadata.get("superseded")
+                                or result.metadata.get("archived")):
                             continue
                         hop = entry["hop"]
                         weight = entry["weight"]

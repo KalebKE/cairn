@@ -150,6 +150,29 @@ class TestRollup:
             "SELECT count(*) FROM memories WHERE json_extract(metadata,'$.rolled_up') = 1"
         ).fetchone()[0] == 0, "raw rows must be untouched when synthesis fails"
 
+    def test_archive_raw_mode(self, store, fake_llm):
+        """archive_raw=True keeps raw rows on disk (status=archived, no TTL)
+        instead of grace-TTL deletion — MemPalace-style verbatim fidelity
+        behind the synthesis, out of the retrieval path."""
+        _, ids = _seed(store)
+        R.rollup_pending(store, min_age_days=30, archive_raw=True)
+        for nid in ids:
+            r = store._conn.execute(
+                "SELECT status, ttl_seconds, metadata FROM memories WHERE node_id = ?",
+                (nid,),
+            ).fetchone()
+            assert r[0] == "archived"
+            assert r[1] is None, "archived raws must not TTL-expire"
+            meta = json.loads(r[2])
+            assert meta.get("rolled_up") and meta.get("archived")
+
+    def test_archived_rows_excluded_from_query(self, store, fake_llm):
+        _, ids = _seed(store)
+        R.rollup_pending(store, min_age_days=30, archive_raw=True)
+        results = store.query("enrichment pipeline step shipped verified", limit=10)
+        got = {r.id for r in results}
+        assert not (got & set(ids)), "archived raw rows must never surface in retrieval"
+
     def test_min_rows_threshold(self, store, fake_llm):
         _seed(store, n_tasks=1, n_summaries=0)  # below default min of 3
         result = R.rollup_pending(store, min_age_days=30)
