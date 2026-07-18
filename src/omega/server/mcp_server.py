@@ -142,11 +142,6 @@ _SQLITE_EXECUTOR = ThreadPoolExecutor(
     thread_name_prefix="omega-db",
 )
 
-# Dedicated executor for hook handlers — prevents hooks from starving behind
-# MCP tool calls that saturate _SQLITE_EXECUTOR. SQLite WAL mode handles
-# concurrent reader access safely across both executors.
-_HOOK_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="omega-hook")
-
 # RSS memory watchdog threshold (bytes). Default 1 GB for stdio, 4 GB for HTTP daemon.
 # Override with OMEGA_RSS_LIMIT_MB env var. HTTP daemon serves 8-10 concurrent Claude
 # Code sessions; 2 GB is normal operating load. Self-killing at 2 GB is worse than
@@ -190,12 +185,11 @@ def _close_on_exit():
         _close_store()
     except Exception as e:
         logger.debug("Store close at exit failed: %s", e)
-    # Shutdown background executors to release threads
-    for executor in (_SQLITE_EXECUTOR, _HOOK_EXECUTOR):
-        try:
-            executor.shutdown(wait=False)
-        except Exception:
-            pass
+    # Shutdown background executor to release threads
+    try:
+        _SQLITE_EXECUTOR.shutdown(wait=False)
+    except Exception:
+        pass
 
 
 atexit.register(_close_on_exit)
@@ -353,22 +347,6 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
     handler = HANDLERS.get(name)
     if not handler:
-        # Check if this is a known Pro tool the user hasn't unlocked
-        try:
-            from omega.server.tool_schemas import TOOL_CATEGORIES
-            if name in TOOL_CATEGORIES:
-                try:
-                    from omega.telemetry import track_nag
-                    track_nag("tool_gate")
-                except Exception:
-                    pass
-                return [TextContent(type="text", text=(
-                    f"Tool '{name}' requires OMEGA Pro. "
-                    f"**Tell the user:** \"The tool I just tried to use ({name}) requires OMEGA Pro. "
-                    "Run `omega upgrade` in terminal to learn more ($19/mo).\""
-                ))]
-        except Exception:
-            pass
         return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
     try:
@@ -1007,8 +985,8 @@ async def main():
         os.environ.setdefault("OMEGA_CROSS_ENCODER", "0")
     # Cap asyncio's default executor — prevents unbounded thread growth from
     # run_in_executor(None, ...) calls (was reaching 49-64 threads at crash).
-    # Note: hooks use _HOOK_EXECUTOR (see hook_server/core.py) to prevent
-    # starvation behind MCP tool calls. Only MCP tools use _SQLITE_EXECUTOR.
+    # Note: the surfacing hook (hook_server) shares _SQLITE_EXECUTOR with MCP
+    # tools so all blocking SQLite work stays serialized on one pool.
     loop = asyncio.get_running_loop()
     loop.set_default_executor(ThreadPoolExecutor(max_workers=2, thread_name_prefix="omega-default"))
 
@@ -1115,8 +1093,10 @@ async def main():
     # Socket watchdog — re-creates hook.sock if deleted by another session's stop
     _sock_watchdog_task = asyncio.create_task(_socket_watchdog())
 
-    # Background coordination loop — stale cleanup + deadlock detection even during idle
-    _coord_loop_task = asyncio.create_task(_coordination_loop())
+    # Fork note: the background coordination loop is NOT started — it depended
+    # entirely on the absent omega_platform coordination module and woke every
+    # 60-90s only to swallow an ImportError. (_coordination_loop kept for
+    # reference until the Phase-5 dead-weight sweep removes it.)
 
     # RSS memory watchdog — graceful exit before memory pressure causes SIGSEGV
     _rss_watchdog_task = asyncio.create_task(_rss_watchdog())

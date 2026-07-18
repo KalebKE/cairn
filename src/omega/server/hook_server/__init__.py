@@ -56,20 +56,50 @@ _DEFAULTS: Dict[str, Any] = {
 }
 
 # Per-file debounce state (process-local; fine for a single long-lived daemon).
+# Bounded: pruned opportunistically on insert so a long-lived daemon that has
+# touched tens of thousands of distinct files doesn't grow this forever.
 _last_surfaced: Dict[str, float] = {}
+_MAX_DEBOUNCE_ENTRIES = 512
 
 # The asyncio server handle (set by start_hook_server, cleared by stop).
 _server: "asyncio.AbstractServer | None" = None
 
+# _cfg cache: (config_path, mtime, resolved_dict). The surface hook fires on
+# every edit; re-reading + re-parsing config.json each time is wasted I/O.
+_cfg_cache: "tuple[Path, float, Dict[str, Any]] | None" = None
+
 
 def _cfg() -> Dict[str, Any]:
-    """Read the ``surface`` config block, falling back to defaults per-key."""
+    """Read the ``surface`` config block, falling back to defaults per-key.
+
+    Cached on (path, mtime); the file is only re-read when it changes.
+    """
+    global _cfg_cache
+    path = _omega_home() / "config.json"
     try:
-        data = json.loads((_omega_home() / "config.json").read_text())
+        mtime = path.stat().st_mtime
+        if _cfg_cache is not None and _cfg_cache[0] == path and _cfg_cache[1] == mtime:
+            return dict(_cfg_cache[2])
+        data = json.loads(path.read_text())
         s = data.get("surface", {}) or {}
-        return {k: s.get(k, v) for k, v in _DEFAULTS.items()}
+        resolved = {k: s.get(k, v) for k, v in _DEFAULTS.items()}
+        _cfg_cache = (path, mtime, resolved)
+        return dict(resolved)
     except Exception:
         return dict(_DEFAULTS)
+
+
+def _prune_debounce(now: float, debounce_s: float) -> None:
+    """Keep the debounce dict bounded: drop expired entries; if still over the
+    cap (many files inside one window), drop the oldest."""
+    if len(_last_surfaced) < _MAX_DEBOUNCE_ENTRIES:
+        return
+    expired = [k for k, t in _last_surfaced.items() if now - t >= debounce_s]
+    for k in expired:
+        del _last_surfaced[k]
+    while len(_last_surfaced) >= _MAX_DEBOUNCE_ENTRIES:
+        oldest = min(_last_surfaced, key=_last_surfaced.get)
+        del _last_surfaced[oldest]
 
 
 def _file_path_from_payload(payload: Dict[str, Any]) -> str:
@@ -115,6 +145,7 @@ def _do_surface(payload: Dict[str, Any]) -> str:
 
     # Record the attempt even when empty so we don't re-query the same file
     # every keystroke-triggered edit within the debounce window.
+    _prune_debounce(now, float(cfg["debounce_s"]))
     _last_surfaced[file_path] = now
     if not results:
         return ""
@@ -143,7 +174,7 @@ async def _dispatch(hook: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     if hook != "surface_memories":
         return {"output": "", "exit_code": 0}
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         from omega.server.mcp_server import _SQLITE_EXECUTOR
         block = await loop.run_in_executor(_SQLITE_EXECUTOR, _do_surface, payload)
     except Exception as e:  # never propagate to the session
@@ -209,8 +240,12 @@ async def start_hook_server() -> "asyncio.AbstractServer | None":
     return _server
 
 
-async def stop_hook_server() -> None:
-    """Close the hook server and remove its socket."""
+async def stop_hook_server(_legacy_server: object = None) -> None:
+    """Close the hook server and remove its socket.
+
+    Accepts (and ignores) one positional argument: mcp_server.py's shutdown
+    paths historically pass the server handle returned by start_hook_server.
+    """
     global _server
     if _server is not None:
         _server.close()

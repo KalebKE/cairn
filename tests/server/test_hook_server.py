@@ -128,3 +128,57 @@ def test_surface_empty_when_no_file(monkeypatch):
     monkeypatch.setattr(H, "_cfg", lambda: dict(H._DEFAULTS))
     assert H._do_surface({"tool_input": "{}"}) == ""
     assert H._do_surface({}) == ""
+
+
+def test_stop_hook_server_accepts_legacy_server_arg():
+    """mcp_server.py calls stop_hook_server(hook_srv) on shutdown (both the
+    stdio finally and the HTTP lifespan teardown). The clean-room rewrite took
+    no args, so every graceful shutdown raised TypeError and leaked the socket.
+    stop_hook_server must tolerate the legacy positional argument."""
+    asyncio.run(H.stop_hook_server(object()))  # must not raise
+    asyncio.run(H.stop_hook_server())          # zero-arg form still works
+
+
+def test_last_surfaced_debounce_dict_is_bounded(monkeypatch):
+    """The per-file debounce dict must not grow without bound in a long-lived
+    daemon: one entry per distinct file path edited, never pruned."""
+    H._last_surfaced.clear()
+    monkeypatch.setattr(H, "_cfg", lambda: {
+        "limit": 1, "relevance_floor": 0.30, "preview_chars": 40,
+        "debounce_s": 999, "max_block_chars": 200,
+    })
+    import omega.bridge as bridge
+    monkeypatch.setattr(bridge, "query_structured", lambda **kw: [])
+    cap = H._MAX_DEBOUNCE_ENTRIES
+    for i in range(cap + 50):
+        H._do_surface({"tool_input": json.dumps({"file_path": f"/proj/file_{i}.py"})})
+    assert len(H._last_surfaced) <= cap
+
+
+def test_cfg_is_cached_until_config_mtime_changes(tmp_path, monkeypatch):
+    """_cfg() ran a filesystem read + json parse on every surfaced edit.
+    It must cache on (path, mtime) and only re-read when the file changes."""
+    import os
+    cfg_file = tmp_path / "config.json"
+    cfg_file.write_text(json.dumps({"surface": {"limit": 7}}))
+    monkeypatch.setattr(H, "_omega_home", lambda: tmp_path)
+    H._cfg_cache = None  # reset cache state
+
+    reads = {"n": 0}
+    orig_read_text = type(cfg_file).read_text
+
+    def counting_read_text(self, *a, **kw):
+        if self.name == "config.json":
+            reads["n"] += 1
+        return orig_read_text(self, *a, **kw)
+
+    monkeypatch.setattr(type(cfg_file), "read_text", counting_read_text)
+
+    assert H._cfg()["limit"] == 7
+    assert H._cfg()["limit"] == 7
+    assert reads["n"] == 1, "second call must hit the cache"
+
+    cfg_file.write_text(json.dumps({"surface": {"limit": 9}}))
+    os.utime(cfg_file, (cfg_file.stat().st_atime, cfg_file.stat().st_mtime + 10))
+    assert H._cfg()["limit"] == 9, "mtime change must invalidate the cache"
+    assert reads["n"] == 2
