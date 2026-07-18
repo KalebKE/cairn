@@ -189,6 +189,14 @@ def _log_timing(hook_name, elapsed_ms, mode):
         from pathlib import Path
         log_path = Path.home() / ".omega" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        # Bound growth: rotate at 5 MB (keep one previous generation). The
+        # daemon-side 15s heartbeat that once bloated this to 35 MB is gone,
+        # but per-edit lines still accumulate over time.
+        try:
+            if log_path.exists() and log_path.stat().st_size > 5 * 1024 * 1024:
+                log_path.replace(log_path.parent / "hooks.log.1")
+        except OSError:
+            pass
         timestamp = datetime.now().isoformat(timespec="seconds")
         data = f"[{timestamp}] fast_hook/{hook_name}: OK ({elapsed_ms:.0f}ms, {mode})\n"
         fd = os.open(str(log_path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)

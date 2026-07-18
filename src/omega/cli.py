@@ -2416,10 +2416,20 @@ def cmd_doctor(args):
             warn("ONNX Runtime not available, will use fallback")
 
         emb = generate_embedding("test embedding")
-        if len(emb) == 384:
-            ok(f"Embedding generation works (384-dim, backend={info.get('backend', 'unknown')})")
-        else:
+        from omega.embedding import is_embedding_degraded, get_active_backend
+        backend = get_active_backend() or "hash-fallback"
+        if len(emb) != 384:
             fail(f"Embedding dimension wrong: {len(emb)} (expected 384)")
+        elif is_embedding_degraded() or backend in ("hash", "hash-fallback"):
+            # Do NOT report this as OK — a hash-fallback backend means semantic
+            # search is silently broken: stored ONNX vectors won't match hashed
+            # query vectors. This is the failure mode that went unnoticed for
+            # months. Fix: install the ONNX model, then re-embed the store.
+            fail(f"Embeddings DEGRADED to {backend} — semantic search is broken. "
+                 f"The ONNX model failed to load; queries and stored vectors will "
+                 f"not match. Install the model and re-embed the store.")
+        else:
+            ok(f"Embedding generation works (384-dim, backend={backend})")
     except Exception as e:
         fail(f"Embedding generation failed: {e}")
 
@@ -2676,6 +2686,51 @@ def cmd_doctor(args):
                 warn(f"Cannot read settings.json: {e}")
         else:
             warn("settings.json not found (hooks not configured)")
+
+    # 9b. Read-path health — catch the silent-death mode where the PostToolUse
+    # surface hook is wired but the daemon socket is gone, so nothing ever
+    # surfaces and nothing errors (the way the read path quietly died before).
+    if not use_json:
+        print_section("Read Path (Surfacing)")
+    surface_wired = False
+    if SETTINGS_JSON_PATH.exists():
+        try:
+            _settings = json.loads(SETTINGS_JSON_PATH.read_text())
+            for _entry in _settings.get("hooks", {}).get("PostToolUse", []):
+                for _h in _entry.get("hooks", []):
+                    if "surface_memories" in _h.get("command", ""):
+                        surface_wired = True
+        except Exception:
+            pass
+    _hook_sock = OMEGA_DIR / "hook.sock"
+    if surface_wired:
+        if _hook_sock.exists():
+            ok("Surface hook wired and daemon hook.sock present")
+        else:
+            fail("Surface hook is WIRED but hook.sock is MISSING — memory "
+                 "surfacing is silently dead (the daemon isn't serving the hook "
+                 "socket). Restart the MCP daemon.")
+    else:
+        ok("Surface hook not wired (explicit-query mode)")
+
+    # 9c. Maintenance freshness — maintenance is only useful if it actually runs.
+    # It silently stopped for months once; flag stale markers loudly.
+    _maint_intervals = {"last-consolidate": 3, "last-compact": 3,
+                        "last-backup": 7, "last-doctor": 7}
+    _stale_maint = []
+    for _marker, _days in _maint_intervals.items():
+        _mp = OMEGA_DIR / _marker
+        if _mp.exists():
+            try:
+                _age_days = (time.time() - _mp.stat().st_mtime) / 86400
+                if _age_days > _days * 2:
+                    _stale_maint.append(f"{_marker} {_age_days:.0f}d old (expected <{_days}d)")
+            except Exception:
+                pass
+    if _stale_maint:
+        warn("Maintenance appears stale (not running?): " + "; ".join(_stale_maint))
+    else:
+        ok("Maintenance markers fresh (or none yet)")
 
     # 6. Python path
     if not use_json:
