@@ -217,7 +217,7 @@ class SQLiteStoreBase:
         "skill_template": 0.01,         # 50% at ~69 days — slower decay than decisions
         "advisor_insight": 0.015,        # 50% at ~46 days — codebase knowledge ages with code
         "decision": 0.015,            # 50% at ~46 days (never-accessed); access reduces decay
-        "task_completion": 0.015,      # 50% at ~46 days
+        "task_completion": 0.03,       # 50% at ~23 days — episodic exhaust, 40x more numerous than decisions
         "checkpoint": 0.02,            # 50% at ~35 days
         "memory": 0.02,               # 50% at ~35 days
         "session_summary": 0.05,       # 50% at ~14 days

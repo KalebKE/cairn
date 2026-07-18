@@ -464,17 +464,26 @@ class SearchMixin:
                 query_emb = generate_embedding(query)
                 if query_emb:
                     vec_results = self._vec_query(query_emb, limit=limit * 5)
+                    # Batch-hydrate all candidates in one SELECT (was N+1)
+                    _cand = [
+                        (rowid, 1.0 - distance)
+                        for rowid, distance in vec_results
+                        if (1.0 - distance) >= min_similarity
+                    ]
+                    row_map = {}
+                    if _cand:
+                        _ph = ",".join("?" * len(_cand))
+                        for row in self._conn.execute(
+                            f"""SELECT id, node_id, content, metadata, created_at,
+                                       access_count, last_accessed, ttl_seconds
+                                FROM memories
+                                WHERE id IN ({_ph}) AND event_type = ?""",
+                            [rid for rid, _ in _cand] + [event_type],
+                        ).fetchall():
+                            row_map[row[0]] = row[1:]
                     results = []
-                    for rowid, distance in vec_results:
-                        similarity = 1.0 - distance
-                        if similarity < min_similarity:
-                            continue
-                        row = self._conn.execute(
-                            """SELECT node_id, content, metadata, created_at,
-                                      access_count, last_accessed, ttl_seconds
-                               FROM memories WHERE id = ? AND event_type = ?""",
-                            (rowid, event_type),
-                        ).fetchone()
+                    for rowid, similarity in _cand:
+                        row = row_map.get(rowid)
                         if row:
                             result = self._row_to_result(row)
                             # Project filter
@@ -692,14 +701,20 @@ class SearchMixin:
         with self._lock:
             # Over-fetch to account for filtered results
             vec_results = self._vec_query(embedding, limit=limit * 2)
+            # Batch-hydrate all candidates in one SELECT (was N+1)
+            row_map = {}
+            if vec_results:
+                _ph = ",".join("?" * len(vec_results))
+                for row in self._conn.execute(
+                    f"""SELECT id, node_id, content, metadata, created_at,
+                               access_count, last_accessed, ttl_seconds
+                        FROM memories WHERE id IN ({_ph})""",
+                    [rid for rid, _ in vec_results],
+                ).fetchall():
+                    row_map[row[0]] = row[1:]
             results = []
             for rowid, distance in vec_results:
-                row = self._conn.execute(
-                    """SELECT node_id, content, metadata, created_at,
-                              access_count, last_accessed, ttl_seconds
-                       FROM memories WHERE id = ?""",
-                    (rowid,),
-                ).fetchone()
+                row = row_map.get(rowid)
                 if row:
                     result = self._row_to_result(row)
                     if result.is_expired() or result.metadata.get("superseded"):
@@ -941,7 +956,7 @@ class SearchMixin:
                 """SELECT node_id, content, metadata, created_at,
                           access_count, last_accessed, ttl_seconds
                    FROM memories WHERE access_count > 0
-                     AND json_extract(metadata, '$.superseded') IS NULL
+                     AND (status IS NULL OR status != 'superseded')
                    ORDER BY access_count DESC LIMIT ?""",
                 (_HOT_CACHE_SIZE,),
             ).fetchall()

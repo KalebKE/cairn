@@ -2713,6 +2713,30 @@ def cmd_doctor(args):
     else:
         ok("Surface hook not wired (explicit-query mode)")
 
+    # 9b-2. Query expansion — wired into the query pipeline but silently
+    # contributes nothing without a working LLM provider. Surface that state
+    # instead of letting it no-op invisibly.
+    try:
+        from omega.query_expansion import is_expansion_enabled
+        if is_expansion_enabled():
+            _provider = os.environ.get("OMEGA_LLM_PROVIDER", "anthropic")
+            _has_llm = bool(
+                os.environ.get("OMEGA_LLM_BASE_URL")
+                or os.environ.get("ANTHROPIC_API_KEY")
+                or _provider not in ("", "anthropic")
+            )
+            if _has_llm:
+                ok(f"Query expansion enabled (LLM provider: {_provider})")
+            else:
+                warn("Query expansion is enabled but no LLM provider is configured "
+                     "(OMEGA_LLM_PROVIDER/ANTHROPIC_API_KEY unset) — expansion "
+                     "silently no-ops. Configure a provider or set "
+                     "OMEGA_QUERY_EXPANSION=0.")
+        else:
+            ok("Query expansion disabled (OMEGA_QUERY_EXPANSION=0)")
+    except Exception as e:
+        warn(f"Query expansion check failed: {e}")
+
     # 9c. Maintenance freshness — maintenance is only useful if it actually runs.
     # It silently stopped for months once; flag stale markers loudly.
     _maint_intervals = {"last-consolidate": 3, "last-compact": 3,

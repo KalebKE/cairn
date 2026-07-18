@@ -36,6 +36,10 @@ __all__ = [
 
 logger = logging.getLogger("omega.embedding")
 
+# Failed-import cache: omega.embedding_client is an optional module probed on
+# every embedding call; Python does not cache failed imports.
+_EMBEDDING_CLIENT_UNAVAILABLE = False
+
 # NumPy for vectorized operations (required by ONNX backend)
 try:
     import numpy as np
@@ -352,8 +356,15 @@ def preload_embedding_model() -> bool:
     Tries the shared daemon first. If daemon is healthy, skips local model load.
     """
     # Try daemon first -- if it's running, no need to load in-process
+    global _EMBEDDING_CLIENT_UNAVAILABLE
     try:
-        from omega.embedding_client import get_client
+        if _EMBEDDING_CLIENT_UNAVAILABLE:
+            raise ImportError("embedding_client unavailable (cached)")
+        try:
+            from omega.embedding_client import get_client
+        except ImportError:
+            _EMBEDDING_CLIENT_UNAVAILABLE = True
+            raise
 
         client = get_client()
         if client is not None:
@@ -449,8 +460,15 @@ def generate_embedding(text: str, dimension: int = 384) -> List[float]:
         return _EMBEDDING_CACHE[cache_key]
 
     # Try shared embedding daemon first (avoids per-process model loading)
+    global _EMBEDDING_CLIENT_UNAVAILABLE
     try:
-        from omega.embedding_client import get_client
+        if _EMBEDDING_CLIENT_UNAVAILABLE:
+            raise ImportError("embedding_client unavailable (cached)")
+        try:
+            from omega.embedding_client import get_client
+        except ImportError:
+            _EMBEDDING_CLIENT_UNAVAILABLE = True
+            raise
 
         client = get_client()
         if client is not None:
@@ -506,8 +524,15 @@ def generate_embeddings_batch(texts: List[str]) -> List[List[float]]:
         return []
 
     # Try shared embedding daemon first
+    global _EMBEDDING_CLIENT_UNAVAILABLE
     try:
-        from omega.embedding_client import get_client
+        if _EMBEDDING_CLIENT_UNAVAILABLE:
+            raise ImportError("embedding_client unavailable (cached)")
+        try:
+            from omega.embedding_client import get_client
+        except ImportError:
+            _EMBEDDING_CLIENT_UNAVAILABLE = True
+            raise
 
         client = get_client()
         if client is not None:

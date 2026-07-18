@@ -25,6 +25,11 @@ from ._types import (
 
 logger = logging.getLogger("omega.sqlite_store")
 
+# Failed-import caches: Python does NOT cache failed imports, and these
+# optional modules are probed on hot query paths (per candidate, per query).
+_THOMPSON_UNAVAILABLE = False
+_PATTERN_LEARNER_UNAVAILABLE = False
+
 # Strong signal short-circuit thresholds (QMD-inspired)
 STRONG_SIGNAL_THRESHOLD = float(os.environ.get("OMEGA_STRONG_SIGNAL_THRESHOLD", "0.85"))
 STRONG_SIGNAL_GAP = float(os.environ.get("OMEGA_STRONG_SIGNAL_GAP", "0.15"))
@@ -266,7 +271,15 @@ class QueryMixin:
             and (text_ranked[0][1] - text_ranked[1][1]) >= STRONG_SIGNAL_GAP
         ):
             self.stats["strong_signal_shortcuts"] = self.stats.get("strong_signal_shortcuts", 0) + 1
+            # Knowledge-fit (fork): apply the same metadata scoring as the
+            # fusion phase. Raw text scores let a lexically-sharp
+            # task_completion (weight 1.4) outrank a decision/lesson (2.0)
+            # that would have won under fusion — the shortcut must not
+            # bypass type weighting, feedback, priority, or decay.
             for nid, score in text_ranked:
+                _node = all_results.get(nid)
+                if _node is not None:
+                    score *= self._metadata_score_factor(_node)
                 node_scores[nid] = max(node_scores.get(nid, 0), score)
             self._query_phase_filter(
                 all_results, node_scores,
@@ -468,17 +481,17 @@ class QueryMixin:
                         t_start, t_end, limit=limit * 3, entity_id=entity_id,
                     )
                 )
-                # Add any new results to all_results
-                for nid, _score in temporal_ranked:
-                    if nid not in all_results:
-                        row = self._conn.execute(
-                            """SELECT node_id, content, metadata, created_at,
-                                      access_count, last_accessed, ttl_seconds
-                               FROM memories WHERE node_id = ?""",
-                            (nid,),
-                        ).fetchone()
-                        if row:
-                            all_results[nid] = self._row_to_result(row)
+                # Batch-hydrate any new results (was one SELECT per node)
+                _missing = [nid for nid, _s in temporal_ranked if nid not in all_results]
+                if _missing:
+                    _ph = ",".join("?" * len(_missing))
+                    for row in self._conn.execute(
+                        f"""SELECT node_id, content, metadata, created_at,
+                                   access_count, last_accessed, ttl_seconds
+                            FROM memories WHERE node_id IN ({_ph})""",
+                        _missing,
+                    ).fetchall():
+                        all_results[row[0]] = self._row_to_result(row)
             except Exception as e:
                 logger.debug("Temporal retrieval channel failed: %s", e)
 
@@ -642,20 +655,12 @@ class QueryMixin:
                 continue
             node = all_results[nid]
             event_type = node.metadata.get("event_type", "")
-            type_weight = self._TYPE_WEIGHTS.get(event_type, 1.0)
+            score = rrf_score * self._metadata_score_factor(node)
             # Apply perspective-based type boost (behavioral diversity)
             if perspective and perspective in self._PERSPECTIVE_BOOSTS:
-                type_weight *= self._PERSPECTIVE_BOOSTS[perspective].get(event_type, 1.0)
-            fb_score = node.metadata.get("feedback_score", 0)
-            fb_factor = self._compute_fb_factor(fb_score)
-            priority = node.metadata.get("priority", 3)
-            priority_factor = 0.7 + (priority * 0.08)
-            _la = node.last_accessed.isoformat() if node.last_accessed else None
-            _ca = node.created_at.isoformat() if node.created_at else None
-            decay_factor = self._compute_decay_factor(event_type, _la, _ca, node.access_count or 0)
+                score *= self._PERSPECTIVE_BOOSTS[perspective].get(event_type, 1.0)
             # Thompson sampling boost (outcome-correlated learning)
-            thompson_boost = self._get_thompson_boost(event_type)
-            score = rrf_score * type_weight * fb_factor * priority_factor * decay_factor * thompson_boost
+            score *= self._get_thompson_boost(event_type)
             # Consolidation quality boost (compacted knowledge nodes)
             cq = node.metadata.get("consolidation_quality", 0)
             if cq > 0:
@@ -1035,8 +1040,11 @@ class QueryMixin:
             except Exception as e:
                 logger.debug("Graph multi-hop traversal failed: %s", e)
 
-        # Cross-encoder reranking (P2) — rescore top candidates
-        _RERANK_CANDIDATES = 10
+        # Cross-encoder reranking (P2) — rescore top candidates.
+        # 20 (not 10): the position-aware weights below give rank 11+ the
+        # aggressive 0.50 tier — with only 10 candidates that tier was
+        # unreachable dead code and deep results never got reranked.
+        _RERANK_CANDIDATES = 20
         if node_scores and len(node_scores) > 1:
             try:
                 from omega.reranker import cross_encoder_score
@@ -1345,8 +1353,15 @@ class QueryMixin:
         (1.05-1.15x for cosine similarity > 0.5) and clusters is the raw
         cluster list from get_clusters_for_retrieval (avoids a second DB fetch).
         """
+        global _PATTERN_LEARNER_UNAVAILABLE
+        if _PATTERN_LEARNER_UNAVAILABLE:
+            return {}, []
         try:
             from omega.pattern_learner import PatternLearner
+        except ImportError:
+            _PATTERN_LEARNER_UNAVAILABLE = True
+            return {}, []
+        try:
             learner = PatternLearner(store=self)
             clusters = learner.get_clusters_for_retrieval()
         except Exception as e:
@@ -1619,6 +1634,30 @@ class QueryMixin:
                     matched += 1
         return matched / len(query_words)
 
+    # Durable-knowledge types whose decay slows with use: a decision or lesson
+    # that keeps getting recalled is load-bearing knowledge, not aging exhaust.
+    _ACCESS_AWARE_DECAY_TYPES = frozenset({
+        "decision", "lesson_learned", "advisor_insight", "skill_template",
+    })
+
+    def _metadata_score_factor(self, node) -> float:
+        """Shared metadata scoring used by BOTH the fusion phase and the
+        strong-signal short-circuit: type weight x feedback x priority x decay.
+
+        Kept in one place so no retrieval path can bypass knowledge weighting.
+        """
+        event_type = node.metadata.get("event_type", "")
+        type_weight = self._TYPE_WEIGHTS.get(event_type, 1.0)
+        fb_factor = self._compute_fb_factor(node.metadata.get("feedback_score", 0))
+        priority = node.metadata.get("priority", 3)
+        priority_factor = 0.7 + (priority * 0.08)
+        _la = node.last_accessed.isoformat() if node.last_accessed else None
+        _ca = node.created_at.isoformat() if node.created_at else None
+        decay_factor = self._compute_decay_factor(
+            event_type, _la, _ca, node.access_count or 0
+        )
+        return type_weight * fb_factor * priority_factor * decay_factor
+
     def _compute_decay_factor(self, event_type: str, last_accessed: Optional[str],
                                created_at: Optional[str],
                                access_count: int = 0) -> float:
@@ -1626,14 +1665,15 @@ class QueryMixin:
 
         Uses exponential decay: factor = max(floor, exp(-lambda * days))
         Protected types (lambda=0) return 1.0 immediately.
-        For decisions, each access reduces lambda by 15% (floor 0.002, ~346-day half-life).
+        For durable-knowledge types (_ACCESS_AWARE_DECAY_TYPES), each access
+        reduces lambda by 15% (floor 0.002, ~346-day half-life).
         """
         lam = self._DECAY_LAMBDAS.get(event_type, 0.02)
         if lam == 0.0:
             return 1.0
 
-        # Access-aware decay: well-used decisions persist longer
-        if event_type == "decision" and access_count > 0:
+        # Access-aware decay: well-used knowledge persists longer
+        if event_type in self._ACCESS_AWARE_DECAY_TYPES and access_count > 0:
             lam = max(0.002, lam * (0.85 ** min(access_count, 10)))
 
         # Use last_accessed if available, else created_at
@@ -1670,9 +1710,19 @@ class QueryMixin:
         """Get Thompson sampling boost factor for an event type.
 
         Returns 1.0 (neutral) if Thompson module unavailable or insufficient data.
+        The unavailability flag is cached: Python does not cache FAILED imports,
+        and this runs once per candidate per query — without the flag a missing
+        module costs a sys.path walk for every scored result.
         """
+        global _THOMPSON_UNAVAILABLE
+        if _THOMPSON_UNAVAILABLE:
+            return 1.0
         try:
             from omega.thompson import ThompsonBandit
+        except ImportError:
+            _THOMPSON_UNAVAILABLE = True
+            return 1.0
+        try:
             bandit = ThompsonBandit(store=self)
             arm_id = f"event_type:{event_type}" if event_type else "event_type:unknown"
             return bandit.get_boost_factor(arm_id)

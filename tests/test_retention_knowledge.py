@@ -194,6 +194,26 @@ class TestHashEmbeddingRecovery:
         assert result.get("skipped_degraded"), "must refuse to re-embed with hash vectors"
 
 
+class TestStrengthDecayProtectsKnowledge:
+    def test_old_zero_access_lesson_not_strength_decayed(self, store):
+        nid = store.store(
+            content="Lesson: Hetzner snapshot restores need the volume detached first",
+            metadata={"event_type": "lesson_learned"},
+        )
+        store._conn.execute(
+            "UPDATE memories SET created_at = datetime('now', '-400 days'), access_count = 0 "
+            "WHERE node_id = ?", (nid,),
+        )
+        store._conn.commit()
+        store.apply_strength_decay(min_age_days=90)
+        row = store._conn.execute(
+            "SELECT metadata FROM memories WHERE node_id = ?", (nid,)
+        ).fetchone()
+        assert not json.loads(row[0]).get("superseded"), (
+            "durable knowledge must not be soft-deleted by strength decay"
+        )
+
+
 class TestStatusNormalization:
     @pytest.mark.parametrize("stray", ["complete", "completed", "verified", "partial_complete"])
     def test_store_normalizes_stray_status(self, store, stray):

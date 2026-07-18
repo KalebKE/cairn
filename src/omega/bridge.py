@@ -554,11 +554,17 @@ def _infer_temporal_range(query_text: str) -> Optional[tuple]:
         end = datetime(now.year, 1, 1, tzinfo=timezone.utc)
         return (start.isoformat(), end.isoformat())
 
+    # Temporal context words: a bare month/weekday token is only treated as a
+    # date reference when preceded by one of these — "we may need", "the march
+    # of progress", and "monday-morning quarterbacking" must NOT trigger a
+    # temporal range (they used to, skewing non-temporal knowledge queries).
+    _TEMPORAL_PREP = r"(?:in|from|during|since|last|until|before|after|on|this|next|every)"
+
     # Day-of-week references: "last Monday", "on Friday", etc.
     _DAYS = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
              "friday": 4, "saturday": 5, "sunday": 6}
     for day_name, day_num in _DAYS.items():
-        if day_name in text:
+        if re.search(rf"\b{_TEMPORAL_PREP}\s+{day_name}\b", text):
             # Find the most recent occurrence of this day
             days_ago = (now.weekday() - day_num) % 7
             if days_ago == 0:
@@ -585,8 +591,9 @@ def _infer_temporal_range(query_text: str) -> Optional[tuple]:
             else:
                 end = datetime(year, num + 1, 1, tzinfo=timezone.utc)
             return (start.isoformat(), end.isoformat())
-        # Bare month name (assume most recent occurrence)
-        if name in text:
+        # Bare month name (assume most recent occurrence) — requires a
+        # temporal preposition so incidental words ("may", "march") don't fire.
+        if re.search(rf"\b{_TEMPORAL_PREP}\s+{name}\b", text):
             year = now.year if num <= now.month else now.year - 1
             start = datetime(year, num, 1, tzinfo=timezone.utc)
             if num == 12:

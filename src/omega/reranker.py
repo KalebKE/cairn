@@ -5,7 +5,7 @@ Provides:
 - cross_encoder_score(query, passages) → list of relevance scores (or None)
 - Lazy model loading with circuit breaker (3 attempts, 5-min cooldown)
 - Env-var disable: OMEGA_CROSS_ENCODER=0
-- Precision selection: OMEGA_RERANKER_PRECISION=fp32|int8 (default: fp32)
+- Precision selection: OMEGA_RERANKER_PRECISION=fp32|int8 (default: int8)
   fp32: full precision, ~2.3 GB on disk, ~2.5 GB RSS
   int8: quantized, ~571 MB on disk, ~650 MB RSS
 - Auto-download on first use: OMEGA_RERANKER_AUTODOWNLOAD=1 (default).
@@ -51,7 +51,11 @@ _RERANKER_MODEL = None  # Tuple of (tokenizer, session) when loaded
 _AVAILABLE_MODELS = {
     "bge-reranker-v2-m3": {
         "repo_id": "onnx-community/bge-reranker-v2-m3-ONNX",
-        "default_precision": "fp32",
+        # int8 default (fork): fp32 is a 2.3 GB download + ~2.5 GB RSS per
+        # process — unreasonable as an implicit default for a single-user
+        # store. int8 is ~571 MB / ~650 MB RSS with near-par quality.
+        # Set OMEGA_RERANKER_PRECISION=fp32 to opt back in.
+        "default_precision": "int8",
         "precisions": {
             "fp32": {
                 "dir": "~/.cache/omega/models/bge-reranker-v2-m3-onnx",

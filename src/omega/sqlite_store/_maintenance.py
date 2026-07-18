@@ -384,12 +384,17 @@ class MaintenanceMixin:
         non-protected, non-superseded memory older than min_age_days with 0 access.
         Memories below min_strength get marked superseded with reason 'strength_decay'.
         """
+        # Knowledge-first (fork): durable knowledge is protected from strength
+        # decay too — superseded rows are hidden from retrieval, which is
+        # deletion for practical purposes.
         protected_types = frozenset({
             "user_preference", "error_pattern", "behavioral_pattern",
             "constraint", "reminder",
+            "decision", "lesson_learned", "advisor_insight",
         })
         cutoff = (datetime.now(timezone.utc) - timedelta(days=min_age_days)).isoformat()
         stats: Dict[str, int] = {"decayed": 0, "scanned": 0}
+        _to_decay: list = []
 
         with self._lock:
             # Scan two populations:
@@ -430,19 +435,23 @@ class MaintenanceMixin:
             strength = type_weight * fb * decay
 
             if strength < min_strength:
-                with self._lock:
-                    self._log_forgetting(
-                        node_id, content or "", event_type or "", "strength_decay",
-                    )
-                    meta["superseded"] = True
-                    meta["superseded_reason"] = "strength_decay"
-                    meta["superseded_at"] = datetime.now(timezone.utc).isoformat()
+                meta["superseded"] = True
+                meta["superseded_reason"] = "strength_decay"
+                meta["superseded_at"] = datetime.now(timezone.utc).isoformat()
+                _to_decay.append((node_id, content or "", event_type or "", json.dumps(meta)))
+
+        # Single transaction (was one lock+commit — and one WAL checkpoint —
+        # per decayed row)
+        if _to_decay:
+            with self._lock:
+                for node_id, content, event_type, meta_str in _to_decay:
+                    self._log_forgetting(node_id, content, event_type, "strength_decay")
                     self._conn.execute(
                         "UPDATE memories SET metadata = ? WHERE node_id = ?",
-                        (json.dumps(meta), node_id),
+                        (meta_str, node_id),
                     )
-                    self._commit()
-                stats["decayed"] += 1
+                self._commit()
+            stats["decayed"] = len(_to_decay)
 
         return stats
 
