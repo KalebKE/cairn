@@ -212,6 +212,13 @@ class MaintenanceMixin:
 
         Returns dict with counts of what was removed.
         """
+        # Knowledge-first retention (fork): durable knowledge is NEVER age-pruned.
+        # Upstream's "Phase 0" deleted zero-access decisions with priority<5 at
+        # 14 days — while the default decision priority is 4 — and lessons were
+        # not protected at all. In a knowledge store (plans, decisions, history,
+        # lessons, docs), zero-access does not mean worthless: it means not yet
+        # needed. Episodic exhaust (task_completion, session_summary, …) still
+        # ages out via TTL and the zero-access prune below.
         protected_types = frozenset(
             {
                 "user_preference",
@@ -219,6 +226,10 @@ class MaintenanceMixin:
                 "behavioral_pattern",
                 "constraint",
                 "reminder",
+                # durable knowledge — the point of the store
+                "decision",
+                "lesson_learned",
+                "advisor_insight",
             }
         )
         stats = {"pruned_stale": 0, "pruned_summaries": 0, "pruned_edges": 0, "pruned_vec_orphans": 0}
@@ -227,49 +238,13 @@ class MaintenanceMixin:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=prune_days)).isoformat()
 
         with self._lock:
-            # Phase 0: Fast decision pruning — zero-access, older than 14 days, priority < 5
-            decision_cutoff = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
-            decision_rows = self._conn.execute(
-                """SELECT id, node_id, content, metadata FROM memories
-                    WHERE event_type = 'decision'
-                    AND access_count = 0
-                    AND created_at < ?
-                    AND COALESCE(priority, 3) < 5""",
-                (decision_cutoff,),
-            ).fetchall()
-
-            p0_ids = []
-            p0_node_ids = []
-            for rowid, node_id, content, meta_json in decision_rows:
-                self._log_forgetting(node_id, content or "", "decision", "consolidation_phase0_pruned")
-                self._queue_cloud_delete(rowid)
-                if self._vec_available:
-                    try:
-                        self._conn.execute("DELETE FROM memories_vec WHERE rowid = ?", (rowid,))
-                    except Exception as e:
-                        logger.debug("Failed to delete vec embedding rowid=%s: %s", rowid, e)
-                p0_ids.append(rowid)
-                p0_node_ids.append(node_id)
-                stats["pruned_stale"] += 1
-
-            if p0_ids:
-                ph = ",".join("?" * len(p0_ids))
-                self._conn.execute(f"DELETE FROM memories WHERE id IN ({ph})", p0_ids)
-                self._conn.execute(
-                    f"DELETE FROM edges WHERE source_id IN ({ph}) OR target_id IN ({ph})",
-                    p0_node_ids + p0_node_ids,
-                )
-
-            # Phase 1: Prune stale zero-access memories (not protected types)
-            # Decisions with priority >= 4 are protected; lower-priority
-            # zero-access decisions older than prune_days get pruned.
+            # Phase 1: Prune stale zero-access memories (not protected types).
             placeholders = ",".join("?" * len(protected_types))
             rows = self._conn.execute(
                 f"""SELECT id, node_id, content, event_type FROM memories
                     WHERE access_count = 0
                     AND created_at < ?
-                    AND (event_type IS NULL OR event_type NOT IN ({placeholders}))
-                    AND NOT (event_type = 'decision' AND COALESCE(priority, 3) >= 4)""",
+                    AND (event_type IS NULL OR event_type NOT IN ({placeholders}))""",
                 (cutoff, *protected_types),
             ).fetchall()
 
@@ -645,6 +620,65 @@ class MaintenanceMixin:
             "remaining": remaining,
             "status": "complete" if remaining == 0 else f"{remaining} still missing",
         }
+
+    def reembed_hash_tainted(self, batch_size: int = 200) -> Dict[str, Any]:
+        """Re-embed memories that were stored with hash-fallback vectors.
+
+        store() tags such rows with metadata._embedding_backend='hash' (the
+        embedding model was unavailable when they were written — the failure
+        mode that once silently degraded months of memories). Once the real
+        model is back, this replaces their vectors and clears the tag.
+
+        Refuses to run while the embedding backend is still degraded — that
+        would just rewrite hash vectors over hash vectors.
+        """
+        from omega.embedding import generate_embedding, is_embedding_degraded
+
+        result: Dict[str, Any] = {"reembedded": 0, "failed": 0, "remaining": 0}
+        # Probe to establish backend state before trusting is_embedding_degraded()
+        generate_embedding("reembed health probe")
+        if is_embedding_degraded():
+            result["skipped_degraded"] = True
+            logger.warning("reembed_hash_tainted: embedding backend degraded — skipping")
+            return result
+
+        rows = self._conn.execute(
+            """SELECT id, node_id, content, metadata FROM memories
+               WHERE json_extract(metadata, '$._embedding_backend') = 'hash'
+               LIMIT ?""",
+            (batch_size,),
+        ).fetchall()
+
+        for rowid, node_id, content, meta_json in rows:
+            try:
+                emb = generate_embedding(content or "")
+                meta = json.loads(meta_json) if meta_json else {}
+                meta.pop("_embedding_backend", None)
+                with self._lock:
+                    if self._vec_available and emb:
+                        self._conn.execute(
+                            "DELETE FROM memories_vec WHERE rowid = ?", (rowid,)
+                        )
+                        self._conn.execute(
+                            "INSERT INTO memories_vec (rowid, embedding) VALUES (?, ?)",
+                            (rowid, _serialize_f32(emb)),
+                        )
+                    self._conn.execute(
+                        "UPDATE memories SET metadata = ? WHERE id = ?",
+                        (json.dumps(meta), rowid),
+                    )
+                    self._commit()
+                result["reembedded"] += 1
+            except Exception as e:
+                logger.debug("reembed failed for %s: %s", node_id, e)
+                result["failed"] += 1
+
+        result["remaining"] = self._conn.execute(
+            "SELECT COUNT(*) FROM memories WHERE json_extract(metadata, '$._embedding_backend') = 'hash'"
+        ).fetchone()[0]
+        if result["reembedded"]:
+            self._invalidate_query_cache()
+        return result
 
     # ------------------------------------------------------------------
     # Health / metrics

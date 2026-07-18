@@ -297,8 +297,9 @@ def test_consolidation_protects_exempt_types():
         assert row is not None, f"Protected memory {nid} was incorrectly pruned"
 
 
-def test_consolidation_prunes_lesson_learned():
-    """lesson_learned is no longer protected; stale zero-access lessons get pruned."""
+def test_consolidation_protects_lesson_learned():
+    """Fork (knowledge-first): lesson_learned is durable knowledge and must
+    NEVER be age-pruned, regardless of access count."""
     store = _get_store()
 
     old_date = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
@@ -313,11 +314,10 @@ def test_consolidation_prunes_lesson_learned():
     )
     store._conn.commit()
 
-    stats = store.consolidate(prune_days=14)
-    assert stats["pruned_stale"] >= 1
+    store.consolidate(prune_days=14)
 
     row = store._conn.execute("SELECT 1 FROM memories WHERE node_id = ?", (nid,)).fetchone()
-    assert row is None, "Stale lesson_learned should have been pruned"
+    assert row is not None, "Zero-access lesson_learned must survive consolidation"
 
 
 def test_consolidation_respects_14_day_threshold():
@@ -388,8 +388,11 @@ def test_consolidation_preserves_priority5_decisions():
     assert row is not None, "Priority 5 decision should survive consolidation"
 
 
-def test_phase0_decision_prune_at_14_days():
-    """Phase 0 should prune zero-access decisions older than 14 days with priority < 5."""
+def test_decisions_never_age_pruned():
+    """Fork (knowledge-first): upstream's Phase 0 deleted zero-access decisions
+    with priority<5 at 14 days — while the DEFAULT decision priority is 4,
+    contradicting Phase 1's own priority>=4 protection. Phase 0 is gone and
+    decisions are a protected type: they must never be age-pruned."""
     store = _get_store()
 
     old_date = (datetime.now(timezone.utc) - timedelta(days=20)).isoformat()
@@ -404,13 +407,12 @@ def test_phase0_decision_prune_at_14_days():
     )
     store._conn.commit()
 
-    stats = store.consolidate(prune_days=14)
-    assert stats["pruned_stale"] >= 1
+    store.consolidate(prune_days=14)
 
     row = store._conn.execute("SELECT 1 FROM memories WHERE node_id = ?", (nid,)).fetchone()
-    assert row is None, "Stale low-priority decision should be pruned by Phase 0"
+    assert row is not None, "Zero-access low-priority decision must survive consolidation"
 
-    # Check forgetting log has the right reason
+    # And nothing may be logged as forgotten under the removed phase-0 reason
     entries = store.get_forgetting_log(limit=5)
     phase0 = [e for e in entries if e["reason"] == "consolidation_phase0_pruned"]
-    assert len(phase0) >= 1
+    assert not phase0

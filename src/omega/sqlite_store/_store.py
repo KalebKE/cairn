@@ -14,6 +14,17 @@ from ._types import MemoryResult, _serialize_f32, _canonicalize
 
 logger = logging.getLogger("omega.sqlite_store")
 
+# Knowledge types where a near-duplicate NEW memory is a refinement of the old
+# one: embedding dedup keeps the new copy and supersedes the old (see store()).
+_KNOWLEDGE_DEDUP_TYPES = frozenset({
+    "decision", "lesson_learned", "user_preference", "advisor_insight",
+})
+
+# Lifecycle status enum. Anything else (agents pass free text like "complete",
+# "verified") normalizes to "active" so rows never silently drop out of
+# status-filtered maintenance paths.
+_VALID_STATUSES = frozenset({"active", "superseded", "speculative", "archived"})
+
 
 class StoreMixin:
     """CRUD operations for SQLiteStore — store, get, update, delete, batch."""
@@ -58,10 +69,20 @@ class StoreMixin:
             embedding = generate_embedding(content)
             # Discard hash-fallback embeddings only when a real backend has been
             # established (degradation from real -> hash). When no backend exists
-            # (test/bootstrap), hash embeddings are acceptable.
-            if is_embedding_degraded() and get_active_backend() is not None:
-                logger.warning("store: hash-fallback embedding discarded — text search only")
-                embedding = None
+            # (test/bootstrap), hash embeddings are acceptable — but they MUST be
+            # tagged: the model-never-loaded case is exactly how months of
+            # memories once got unqueryable hash vectors with no trace. The tag
+            # lets reembed_hash_tainted() recover them once the model is back.
+            if is_embedding_degraded():
+                if get_active_backend() is not None:
+                    logger.warning("store: hash-fallback embedding discarded — text search only")
+                    embedding = None
+                else:
+                    meta["_embedding_backend"] = "hash"
+                    logger.warning(
+                        "store: embedding model unavailable — storing HASH vector "
+                        "(semantic search degraded) for: %.60s", content
+                    )
             try:
                 model_info = get_embedding_model_info()
                 meta["_embedding_model"] = model_info["model_name"]
@@ -180,7 +201,14 @@ class StoreMixin:
                 self._record_timing("write", (_time.monotonic() - _t0_agency) * 1000)
                 return existing[0]
 
-            # Embedding-based dedup (vec_query already done outside lock)
+            # Embedding-based dedup (vec_query already done outside lock).
+            # Direction matters (fork): for KNOWLEDGE types the newer memory is
+            # usually a refinement of the older one — keeping the old copy and
+            # silently discarding the new (upstream behavior) evolves the store
+            # backwards. Knowledge types keep the NEW memory and supersede the
+            # old duplicate after insert; episodic types keep the old (a repeat
+            # of the same completed task adds nothing).
+            _supersede_after_insert = None
             if _vec_dedup_candidate:
                 try:
                     top_rowid, _similarity = _vec_dedup_candidate
@@ -188,13 +216,17 @@ class StoreMixin:
                         "SELECT node_id FROM memories WHERE id = ?", (top_rowid,)
                     ).fetchone()
                     if row:
-                        self._exec(
-                            "UPDATE memories SET access_count = access_count + 1 WHERE id = ?", (top_rowid,)
-                        )
-                        self._commit()
-                        self.stats["embedding_dedup_skips"] += 1
-                        self._record_timing("write", (_time.monotonic() - _t0_agency) * 1000)
-                        return row[0]
+                        _new_etype = meta.get("event_type") or meta.get("type")
+                        if _new_etype in _KNOWLEDGE_DEDUP_TYPES:
+                            _supersede_after_insert = (row[0], _similarity)
+                        else:
+                            self._exec(
+                                "UPDATE memories SET access_count = access_count + 1 WHERE id = ?", (top_rowid,)
+                            )
+                            self._commit()
+                            self.stats["embedding_dedup_skips"] += 1
+                            self._record_timing("write", (_time.monotonic() - _t0_agency) * 1000)
+                            return row[0]
                 except Exception as e:
                     logger.debug("Embedding dedup check failed: %s", e)
 
@@ -229,6 +261,12 @@ class StoreMixin:
             effective_derived_from = derived_from or meta.get("derived_from")
             effective_source_uri = source_uri or meta.get("source_uri")
             effective_status = status or meta.get("status") or "active"
+            if effective_status not in _VALID_STATUSES:
+                # Agents pass free-text statuses ("complete", "verified", …);
+                # anything outside the enum silently vanishes from lifecycle
+                # filters like discover_connections. Normalize.
+                logger.debug("store: normalizing stray status %r -> 'active'", effective_status)
+                effective_status = "active"
 
             _insert_cur = self._exec(
                 """INSERT INTO memories
@@ -297,6 +335,18 @@ class StoreMixin:
             self._commit()
             self.stats["stores"] += 1
             self._writes_since_consolidation += 1
+
+        # Knowledge dedup supersession: the near-duplicate OLD memory yields to
+        # the refinement we just stored (mark_superseded also writes the
+        # graph-traversable `supersedes` edge).
+        if _supersede_after_insert:
+            try:
+                self.mark_superseded(_supersede_after_insert[0], superseded_by=node_id)
+                self.stats["embedding_dedup_superseded"] = (
+                    self.stats.get("embedding_dedup_superseded", 0) + 1
+                )
+            except Exception as e:
+                logger.debug("Knowledge dedup supersession failed: %s", e)
 
         # Post-store: contradiction detection (outside lock — CPU-bound)
         # Finds existing memories that contradict the new one and annotates both.
@@ -554,6 +604,10 @@ class StoreMixin:
                 "ingest_superseded", {"superseded_by": superseded_by},
             )
             self._commit()
+        # Graph-traversable lineage (fork): a `supersedes` edge (new -> old) so
+        # plan chains v1 <- v2 <- v3 can be walked in both directions instead of
+        # living only in the scalar metadata.superseded_by field.
+        self.add_edge(superseded_by, node_id, edge_type="supersedes")
         return True
 
     # ------------------------------------------------------------------
