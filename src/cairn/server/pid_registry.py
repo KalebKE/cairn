@@ -13,9 +13,10 @@ import signal
 import subprocess
 import time
 from pathlib import Path
+from cairn.paths import cairn_home
 from typing import Any
 
-_REGISTRY_DIR = Path.home() / ".cairn" / "pids"
+_REGISTRY_DIR = cairn_home() / "pids"
 
 
 def _registry_dir() -> Path:

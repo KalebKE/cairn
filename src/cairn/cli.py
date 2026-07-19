@@ -11,6 +11,7 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from cairn.paths import cairn_home
 
 logger = logging.getLogger("cairn.cli")
 
@@ -28,7 +29,7 @@ def _parse_event_types_arg(value) -> list[str] | None:
     return [part.strip() for part in str(value).split(",") if part.strip()]
 
 
-CAIRN_DIR = Path.home() / ".cairn"
+CAIRN_DIR = cairn_home()
 CAIRN_CACHE = Path.home() / ".cache" / "cairn"
 BGE_MODEL_DIR = CAIRN_CACHE / "models" / "bge-small-en-v1.5-onnx"
 MINILM_MODEL_DIR = CAIRN_CACHE / "models" / "all-MiniLM-L6-v2-onnx"

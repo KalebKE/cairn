@@ -9,6 +9,7 @@ Requires the 'server' extra: pip install cairn[server]
 """
 
 import atexit
+from cairn.paths import cairn_home
 import asyncio
 import collections
 import logging
@@ -438,7 +439,7 @@ def _configure_logging():
     from logging.handlers import RotatingFileHandler
     from pathlib import Path
 
-    log_dir = Path.home() / ".cairn" / "logs"
+    log_dir = cairn_home() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     log_file = log_dir / "cairn.log"
 

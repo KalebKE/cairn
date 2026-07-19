@@ -13,6 +13,7 @@ import contextlib
 import secrets
 from collections.abc import AsyncIterator
 from pathlib import Path
+from cairn.paths import cairn_home
 
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -22,7 +23,7 @@ from starlette.types import Receive, Scope, Send
 
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 
-API_KEY_PATH = Path.home() / ".cairn" / "api_key"
+API_KEY_PATH = cairn_home() / "api_key"
 
 
 def get_or_create_api_key() -> str:

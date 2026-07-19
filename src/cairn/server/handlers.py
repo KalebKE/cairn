@@ -12,6 +12,7 @@ import logging
 import os
 import time
 from pathlib import Path
+from cairn.paths import cairn_home
 from typing import Any, Dict
 
 logger = logging.getLogger("cairn.server.handlers")
@@ -19,7 +20,7 @@ logger = logging.getLogger("cairn.server.handlers")
 # ---------------------------------------------------------------------------
 # Deploy gate tracking — file-based so it works in daemon + fallback modes
 # ---------------------------------------------------------------------------
-_GATE_DIR = Path.home() / ".cairn" / "gates"
+_GATE_DIR = cairn_home() / "gates"
 
 
 def _mark_deploy_gate_cleared(session_id: str | None = None) -> None:
@@ -130,7 +131,7 @@ def _clamp_int(value, default: int, min_val: int = 1, max_val: int = 10000) -> i
 
 
 # Safe directory for export/import operations
-_SAFE_EXPORT_DIR = Path.home() / ".cairn"
+_SAFE_EXPORT_DIR = cairn_home()
 
 
 # ---------------------------------------------------------------------------
