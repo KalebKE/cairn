@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **`rollup.archive_raw` now defaults to `true`**: rolled-up raw episodic rows
+  are kept on disk as `status='archived'` (excluded from retrieval) instead of
+  being deleted after a 14-day grace TTL. Set `{"rollup": {"archive_raw": false}}`
+  in `~/.omega/config.json` to restore deletion. Disk note: archived raws
+  accumulate instead of being reclaimed.
+- Browse/phrase search paths (`get_by_type`, `get_by_session`, `get_recent`,
+  `phrase_search`) now exclude `superseded`/`archived` rows, matching the main
+  query pipeline. Explicit fetch by id (`omega_memory action=get`) still
+  returns them, with `status` visible.
+
+### Fixed
+- Hook daemon: `start_hook_server()` now re-binds when the socket file was
+  unlinked by a sibling session's shutdown (previously the watchdog looped
+  "re-creating..." forever with an unreachable daemon), and `stop_hook_server()`
+  only unlinks a socket it owns (inode guard).
+
+### Added
+- `omega_memory action=get`: fetch full memory content by id or unique prefix.
+- Daemon-side maintenance scheduler (`omega.scheduler`): rollup, link, gc,
+  consolidate, compact, backup, behavioral — flock-marker-guarded, replaces the
+  dead SessionStart-hook jobs and the untracked nightly cron.
+- SessionEnd hook: distills the session trajectory into a `skill_template` and
+  stores a final `session-end` digest.
+
 ## [1.5.2] - 2026-06-11
 
 ### Fixed

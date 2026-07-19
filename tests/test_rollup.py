@@ -3,8 +3,9 @@
 Rollup is the knowledge-first replacement for silently TTL-expiring episodic
 exhaust: aging task_completions/session_summaries are synthesized (real LLM
 abstraction, not sentence-picking) into one durable `project_history` memory
-per project-month, linked via derived_from edges; the raw rows then expire on
-a short grace TTL.
+per project-month, linked via derived_from edges. By default the raw rows are
+kept on disk as status='archived' (excluded from retrieval); setting
+rollup.archive_raw=false in config.json restores the old grace-TTL deletion.
 """
 import json
 from datetime import datetime, timedelta, timezone
@@ -58,8 +59,9 @@ def fake_llm(monkeypatch):
 
 class TestRollup:
     def test_rollup_creates_project_history_and_expires_raw(self, store, fake_llm):
+        """Explicit archive_raw=False exercises the grace-TTL deletion path."""
         window, ids = _seed(store)
-        result = R.rollup_pending(store, min_age_days=30)
+        result = R.rollup_pending(store, min_age_days=30, archive_raw=False)
         assert result["windows_rolled"] == 1
         assert fake_llm["n"] == 1
         # all source contents made it into the synthesis prompt
@@ -177,3 +179,53 @@ class TestRollup:
         _seed(store, n_tasks=1, n_summaries=0)  # below default min of 3
         result = R.rollup_pending(store, min_age_days=30)
         assert result["windows_rolled"] == 0, "tiny windows are not worth an LLM call"
+
+    def test_default_unset_config_archives_raw(self, store, fake_llm, tmp_path, monkeypatch):
+        """With no config.json, archive_raw resolves True: raw rows become
+        status='archived' with no TTL, never deleted."""
+        monkeypatch.setenv("OMEGA_HOME", str(tmp_path))  # empty: no config.json
+        _, ids = _seed(store)
+        R.rollup_pending(store, min_age_days=30)  # archive_raw unset
+        for nid in ids:
+            r = store._conn.execute(
+                "SELECT status, ttl_seconds FROM memories WHERE node_id = ?", (nid,)
+            ).fetchone()
+            assert r[0] == "archived" and r[1] is None
+
+    def test_config_false_restores_grace_ttl(self, store, fake_llm, tmp_path, monkeypatch):
+        monkeypatch.setenv("OMEGA_HOME", str(tmp_path))
+        (tmp_path / "config.json").write_text(json.dumps({"rollup": {"archive_raw": False}}))
+        _, ids = _seed(store)
+        R.rollup_pending(store, min_age_days=30)
+        for nid in ids:
+            r = store._conn.execute(
+                "SELECT status, ttl_seconds FROM memories WHERE node_id = ?", (nid,)
+            ).fetchone()
+            assert r[0] != "archived" and r[1] is not None
+
+
+class TestArchivedExcludedEverywhere:
+    """status='archived'/'superseded' rows must be invisible to every
+    direct-SQL search/browse path, not just the main query() pipeline."""
+
+    def _archive_one(self, store):
+        nid = store.store(
+            content="Archived phrase-needle content about sync cursor recovery",
+            metadata={"event_type": "task_completion", "project": "/p/x"},
+            skip_inference=True,
+        )
+        store._conn.execute(
+            "UPDATE memories SET status = 'archived' WHERE node_id = ?", (nid,)
+        )
+        store._conn.commit()
+        return nid
+
+    def test_phrase_search_excludes_archived(self, store):
+        nid = self._archive_one(store)
+        hits = store.phrase_search("phrase-needle")
+        assert nid not in {r.id for r in hits}
+
+    def test_browse_paths_exclude_archived(self, store):
+        nid = self._archive_one(store)
+        assert nid not in {r.id for r in store.get_by_type("task_completion")}
+        assert nid not in {r.id for r in store.get_recent(limit=50)}

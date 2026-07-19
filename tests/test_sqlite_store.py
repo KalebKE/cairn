@@ -117,13 +117,25 @@ class TestQuery:
         assert results == []
 
     def test_get_by_type(self, store):
-        store.store(content="A decision", metadata={"event_type": "decision"})
+        # Dissimilar contents: near-identical decisions supersede each other
+        # at store time, and browse paths exclude superseded rows.
+        store.store(content="Decision: adopt SQLite WAL mode for the store",
+                    metadata={"event_type": "decision"})
         store.store(content="A lesson", metadata={"event_type": "lesson_learned"})
-        store.store(content="Another decision", metadata={"event_type": "decision"})
+        store.store(content="Decision: schedule maintenance from the daemon loop",
+                    metadata={"event_type": "decision"})
 
         decisions = store.get_by_type("decision", limit=10)
         assert len(decisions) == 2
         assert all(r.metadata.get("event_type") == "decision" for r in decisions)
+
+    def test_get_by_type_excludes_superseded(self, store):
+        # Storing two near-identical decisions supersedes the first; browse
+        # must only return the active one.
+        store.store(content="A decision", metadata={"event_type": "decision"})
+        store.store(content="Another decision", metadata={"event_type": "decision"})
+        decisions = store.get_by_type("decision", limit=10)
+        assert [r.content for r in decisions] == ["Another decision"]
 
     def test_get_by_session(self, store):
         store.store(content="Session A memory", session_id="session-a")

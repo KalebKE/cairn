@@ -108,17 +108,18 @@ def _build_prompt(project: str, window: str, rows: List[tuple]) -> str:
 
 
 def _archive_raw_config() -> bool:
-    """Read rollup.archive_raw from ~/.omega/config.json (default False:
-    grace-TTL deletion). True keeps raw rows on disk as status='archived' —
-    verbatim fidelity behind the synthesis, excluded from retrieval."""
+    """Read rollup.archive_raw from ~/.omega/config.json (default True:
+    keep raw rows on disk as status='archived' — verbatim fidelity behind
+    the synthesis, excluded from retrieval). Set to false to restore the
+    old grace-TTL deletion of rolled-up raw rows."""
     import os
     from pathlib import Path
     try:
         cfg_path = Path(os.environ.get("OMEGA_HOME", os.path.expanduser("~/.omega"))) / "config.json"
         data = json.loads(cfg_path.read_text())
-        return bool((data.get("rollup") or {}).get("archive_raw", False))
+        return bool((data.get("rollup") or {}).get("archive_raw", True))
     except Exception:
-        return False
+        return True
 
 
 def rollup_window(store, project: str, window: str,

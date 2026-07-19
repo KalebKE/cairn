@@ -23,6 +23,12 @@ from . import _types as _types_mod
 
 logger = logging.getLogger("omega.sqlite_store")
 
+# Rows soft-removed from retrieval (contradiction supersession, strength
+# decay, archive-raw rollup) must stay invisible to EVERY search/browse
+# path. The main query() pipeline has its own filtering; direct-SQL paths
+# (phrase/regex search, browse listings) append this predicate.
+_ACTIVE_STATUS_SQL = "(status IS NULL OR status NOT IN ('superseded', 'archived'))"
+
 
 class SearchMixin:
     """Search, retrieval, and caching methods extracted from SQLiteStore."""
@@ -418,18 +424,20 @@ class SearchMixin:
         """Get memories by event type, sorted by recency."""
         if entity_id:
             rows = self._conn.execute(
-                """SELECT node_id, content, metadata, created_at,
+                f"""SELECT node_id, content, metadata, created_at,
                           access_count, last_accessed, ttl_seconds
                    FROM memories WHERE event_type = ?
                    AND (entity_id = ? OR entity_id IS NULL)
+                   AND {_ACTIVE_STATUS_SQL}
                    ORDER BY created_at DESC LIMIT ?""",
                 (event_type, entity_id, limit),
             ).fetchall()
         else:
             rows = self._conn.execute(
-                """SELECT node_id, content, metadata, created_at,
+                f"""SELECT node_id, content, metadata, created_at,
                           access_count, last_accessed, ttl_seconds
                    FROM memories WHERE event_type = ?
+                   AND {_ACTIVE_STATUS_SQL}
                    ORDER BY created_at DESC LIMIT ?""",
                 (event_type, limit),
             ).fetchall()
@@ -438,9 +446,10 @@ class SearchMixin:
     def get_by_session(self, session_id: str, limit: int = 100) -> List[MemoryResult]:
         """Get memories by session ID, sorted by recency."""
         rows = self._conn.execute(
-            """SELECT node_id, content, metadata, created_at,
+            f"""SELECT node_id, content, metadata, created_at,
                       access_count, last_accessed, ttl_seconds
                FROM memories WHERE session_id = ?
+               AND {_ACTIVE_STATUS_SQL}
                ORDER BY created_at DESC LIMIT ?""",
             (session_id, limit),
         ).fetchall()
@@ -779,6 +788,8 @@ class SearchMixin:
             conditions.append("(entity_id = ? OR entity_id IS NULL)")
             params.append(entity_id)
 
+        conditions.append(_ACTIVE_STATUS_SQL)
+
         params.append(limit)
 
         rows = self._conn.execute(
@@ -808,9 +819,10 @@ class SearchMixin:
     def get_recent(self, limit: int = 10) -> List[MemoryResult]:
         """Get most recent memories."""
         rows = self._conn.execute(
-            """SELECT node_id, content, metadata, created_at,
+            f"""SELECT node_id, content, metadata, created_at,
                       access_count, last_accessed, ttl_seconds
-               FROM memories ORDER BY created_at DESC LIMIT ?""",
+               FROM memories WHERE {_ACTIVE_STATUS_SQL}
+               ORDER BY created_at DESC LIMIT ?""",
             (limit,),
         ).fetchall()
         return [self._row_to_result(row) for row in rows]
