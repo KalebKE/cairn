@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from omega import rollup as R
+from cairn import rollup as R
 
 
 def _seed(store, project="/p/force-server", days_ago=40, n_tasks=4, n_summaries=2):
@@ -183,7 +183,7 @@ class TestRollup:
     def test_default_unset_config_archives_raw(self, store, fake_llm, tmp_path, monkeypatch):
         """With no config.json, archive_raw resolves True: raw rows become
         status='archived' with no TTL, never deleted."""
-        monkeypatch.setenv("OMEGA_HOME", str(tmp_path))  # empty: no config.json
+        monkeypatch.setenv("CAIRN_HOME", str(tmp_path))  # empty: no config.json
         _, ids = _seed(store)
         R.rollup_pending(store, min_age_days=30)  # archive_raw unset
         for nid in ids:
@@ -193,7 +193,7 @@ class TestRollup:
             assert r[0] == "archived" and r[1] is None
 
     def test_config_false_restores_grace_ttl(self, store, fake_llm, tmp_path, monkeypatch):
-        monkeypatch.setenv("OMEGA_HOME", str(tmp_path))
+        monkeypatch.setenv("CAIRN_HOME", str(tmp_path))
         (tmp_path / "config.json").write_text(json.dumps({"rollup": {"archive_raw": False}}))
         _, ids = _seed(store)
         R.rollup_pending(store, min_age_days=30)

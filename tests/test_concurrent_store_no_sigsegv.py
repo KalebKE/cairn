@@ -26,12 +26,12 @@ import sys
 import threading
 from pathlib import Path
 
-# Force a non-default OMEGA_HOME so the test never touches a real DB.
-os.environ["OMEGA_HOME"] = sys.argv[1]
-os.environ.setdefault("OMEGA_SKIP_EMBEDDINGS", "1")  # hash fallback — no ONNX dependency
+# Force a non-default CAIRN_HOME so the test never touches a real DB.
+os.environ["CAIRN_HOME"] = sys.argv[1]
+os.environ.setdefault("CAIRN_SKIP_EMBEDDINGS", "1")  # hash fallback — no ONNX dependency
 
-from omega import bridge
-from omega.sqlite_store import SQLiteStore
+from cairn import bridge
+from cairn.sqlite_store import SQLiteStore
 
 # Reuse one store across workers — that's the real-world MCP/CLI shape and
 # the exact configuration the reporter crashed on.

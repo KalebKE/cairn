@@ -1,21 +1,21 @@
-# Contributing to OMEGA
+# Contributing to Cairn
 
-Thanks for your interest in contributing to OMEGA!
+Thanks for your interest in contributing to Cairn!
 
 ## Development Setup
 
 ```bash
-git clone https://github.com/omega-memory/omega.git
-cd omega
+git clone https://github.com/TracqiTechnology/cairn.git
+cd cairn
 pip install -e ".[dev]"
-omega setup
+cairn setup
 ```
 
 ## Running Tests
 
 ```bash
 pytest tests/                          # All tests
-pytest tests/ --cov=omega              # With coverage
+pytest tests/ --cov=cairn              # With coverage
 pytest tests/test_bridge.py -v         # Single file
 ruff check src/ tests/                 # Lint
 ```
@@ -36,17 +36,17 @@ ruff check src/ tests/                 # Lint
 
 ## Architecture
 
-- `src/omega/bridge.py` — Public API (start here for new features)
-- `src/omega/sqlite_store.py` — Storage layer (SQLite + sqlite-vec + FTS5)
-- `src/omega/server/handlers.py` — MCP tool handlers
-- `src/omega/server/hook_server.py` — Daemon hook handlers
-- `src/omega/coordination.py` — Multi-agent coordination
-- `src/omega/server/coord_handlers.py` — Coordination MCP handlers
+- `src/cairn/bridge.py` — Public API (start here for new features)
+- `src/cairn/sqlite_store.py` — Storage layer (SQLite + sqlite-vec + FTS5)
+- `src/cairn/server/handlers.py` — MCP tool handlers
+- `src/cairn/server/hook_server.py` — Daemon hook handlers
+- `src/cairn/coordination.py` — Multi-agent coordination
+- `src/cairn/server/coord_handlers.py` — Coordination MCP handlers
 - `tests/` — 1538+ tests across 39 files
 
 ## Reporting Issues
 
-Use [GitHub Issues](https://github.com/omega-memory/omega/issues). For security vulnerabilities, see [SECURITY.md](SECURITY.md).
+Use [GitHub Issues](https://github.com/TracqiTechnology/cairn/issues). For security vulnerabilities, see [SECURITY.md](SECURITY.md).
 
 ## License
 

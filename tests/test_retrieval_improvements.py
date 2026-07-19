@@ -11,7 +11,7 @@ import json
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from omega.sqlite_store import SQLiteStore, SCHEMA_VERSION, MemoryResult
+from cairn.sqlite_store import SQLiteStore, SCHEMA_VERSION, MemoryResult
 
 
 # ============================================================================
@@ -96,7 +96,7 @@ class TestRRFFusion:
 
 
 # ============================================================================
-# Entity-match channel (in-repo replacement for omega_platform entity
+# Entity-match channel (in-repo replacement for cairn_platform entity
 # expansion): query tokens vs metadata tags/fact terms/project/entity_id,
 # fused as a fourth RRF channel at modest weight.
 # ============================================================================
@@ -188,10 +188,10 @@ class TestCrossEncoderReranking:
 
     def test_cross_encoder_accepts_temporal_metadata(self):
         """cross_encoder_score should accept temporal_metadata parameter."""
-        from omega.reranker import cross_encoder_score
+        from cairn.reranker import cross_encoder_score
         import os
         # Disable actual model to test parameter passing
-        os.environ["OMEGA_CROSS_ENCODER"] = "0"
+        os.environ["CAIRN_CROSS_ENCODER"] = "0"
         try:
             result = cross_encoder_score(
                 "test query",
@@ -200,11 +200,11 @@ class TestCrossEncoderReranking:
             )
             assert result is None  # Disabled, but no error
         finally:
-            os.environ.pop("OMEGA_CROSS_ENCODER", None)
+            os.environ.pop("CAIRN_CROSS_ENCODER", None)
 
     def test_reranker_model_selection(self):
         """Reranker auto-detects best available model."""
-        from omega.reranker import _RERANKER_MODEL_NAME
+        from cairn.reranker import _RERANKER_MODEL_NAME
         # Auto-detects bge-reranker-v2-m3 if ONNX model exists on disk,
         # otherwise falls back to ms-marco-MiniLM-L-6-v2
         assert _RERANKER_MODEL_NAME in ("ms-marco-MiniLM-L-6-v2", "bge-reranker-v2-m3")
@@ -215,7 +215,7 @@ class TestCrossEncoderReranking:
         bge-reranker-v2-m3 uses the multi-precision schema (precisions.<p>.{dir,files});
         ms-marco-MiniLM-L-6-v2 uses the flat schema (dir, files at top level).
         """
-        from omega.reranker import _AVAILABLE_MODELS
+        from cairn.reranker import _AVAILABLE_MODELS
         assert "bge-reranker-v2-m3" in _AVAILABLE_MODELS
         assert "ms-marco-MiniLM-L-6-v2" in _AVAILABLE_MODELS
         for name, config in _AVAILABLE_MODELS.items():

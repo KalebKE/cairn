@@ -1,19 +1,19 @@
-# OMEGA
+# Cairn
 
 **AI 代理的记忆、协调与学习，全部在你的机器上运行。** 你的代理的大脑不应该存储在别人的服务器上。
 
-[![PyPI version](https://img.shields.io/pypi/v/omega-memory.svg)](https://pypi.org/project/omega-memory/)
+[![PyPI version](https://img.shields.io/pypi/v/cairn.svg)](https://pypi.org/project/cairn/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![#1 on LongMemEval](https://img.shields.io/badge/LongMemEval-95.4%25_%231_Overall-gold.svg)](https://omegamax.co/benchmarks)
+[![#1 on LongMemEval](https://img.shields.io/badge/LongMemEval-95.4%25_%231_Overall-gold.svg)](https://tracqi.com/benchmarks)
 
 [🇺🇸 English](../README.md) | [🇨🇳 中文](README_zh-CN.md) | [🇯🇵 日本語](README_ja.md) | [🇰🇷 한국어](README_ko.md) | [🇧🇷 Português](README_pt-BR.md) | [🇪🇸 Español](README_es.md) | [🇫🇷 Français](README_fr.md) | [🇩🇪 Deutsch](README_de.md) | [🇷🇺 Русский](README_ru.md)
 
 ## 快速开始
 
 ```bash
-pip3 install omega-memory[server]
-omega setup
+pip3 install cairn[server]
+cairn setup
 ```
 
 支持 **Claude Code** | **Cursor** | **Windsurf** | **Zed** | 任何 MCP 客户端
@@ -24,13 +24,13 @@ omega setup
 
 Claude Code 内置的 `CLAUDE.md` 是一个纯文本文件。记几条笔记没问题，但它在以下场景中会崩溃：
 
-- **无法搜索。** 超过 200 行后，你只能用 grep 碰运气。OMEGA 使用语义搜索（bge-small-en-v1.5 嵌入 + sqlite-vec），即使用词不同也能找到相关记忆。
-- **不会自动捕获。** 每条经验都要手动写入。OMEGA 自动检测决策和调试结果。
-- **无限膨胀。** 没有去重、没有衰减、没有矛盾检测。OMEGA 自动解决冲突，语义去重，衰减过时记忆。
-- **每个项目一个文件。** 无法跨项目学习。OMEGA 的记忆图谱覆盖你的整个开发历史。
-- **无法存档恢复。** 重构到一半停下来就没法接着做。OMEGA 保存任务状态，下次从中断处精确恢复。
+- **无法搜索。** 超过 200 行后，你只能用 grep 碰运气。Cairn 使用语义搜索（bge-small-en-v1.5 嵌入 + sqlite-vec），即使用词不同也能找到相关记忆。
+- **不会自动捕获。** 每条经验都要手动写入。Cairn 自动检测决策和调试结果。
+- **无限膨胀。** 没有去重、没有衰减、没有矛盾检测。Cairn 自动解决冲突，语义去重，衰减过时记忆。
+- **每个项目一个文件。** 无法跨项目学习。Cairn 的记忆图谱覆盖你的整个开发历史。
+- **无法存档恢复。** 重构到一半停下来就没法接着做。Cairn 保存任务状态，下次从中断处精确恢复。
 
-CLAUDE.md 适合记录「始终使用 tabs」这类规则。OMEGA 适合让你的代理真正学会东西。
+CLAUDE.md 适合记录「始终使用 tabs」这类规则。Cairn 适合让你的代理真正学会东西。
 
 ## 基准测试
 
@@ -38,7 +38,7 @@ CLAUDE.md 适合记录「始终使用 tabs」这类规则。OMEGA 适合让你�
 
 | 系统 | 得分 | 备注 |
 |------|-----:|------|
-| **OMEGA** | **95.4%** | **第一名** |
+| **Cairn** | **95.4%** | **第一名** |
 | Mastra | 94.87% | 第二名 |
 | Zep/Graphiti | 71.2% | -- |
 
@@ -54,22 +54,22 @@ CLAUDE.md 适合记录「始终使用 tabs」这类规则。OMEGA 适合让你�
 ## 安装
 
 ```bash
-pip3 install omega-memory[server]   # 从 PyPI 安装（包含 MCP 服务器）
-omega setup                         # 自动配置编辑器
-omega doctor                        # 验证安装是否正常
+pip3 install cairn[server]   # 从 PyPI 安装（包含 MCP 服务器）
+cairn setup                         # 自动配置编辑器
+cairn doctor                        # 验证安装是否正常
 ```
 
 使用 Cursor、Windsurf 或 Zed？
 
 ```bash
-omega setup --client cursor
-omega setup --client windsurf
-omega setup --client zed
+cairn setup --client cursor
+cairn setup --client windsurf
+cairn setup --client zed
 ```
 
 ## 对比
 
-| 特性 | OMEGA | CLAUDE.md | Mem0 |
+| 特性 | Cairn | CLAUDE.md | Mem0 |
 |------|:-----:|:---------:|:----:|
 | 跨会话持久化 | ✅ | ✅ | ✅ |
 | 语义搜索 | ✅ | ❌ | ✅ |
@@ -81,7 +81,7 @@ omega setup --client zed
 
 完整文档请参阅 [English README](../README.md)。
 
-网站：[omegamax.co](https://omegamax.co) | 文档：[omegamax.co/docs](https://omegamax.co/docs) | 基准测试：[omegamax.co/benchmarks](https://omegamax.co/benchmarks)
+网站：[tracqi.com](https://tracqi.com) | 文档：[tracqi.com/docs](https://tracqi.com/docs) | 基准测试：[tracqi.com/benchmarks](https://tracqi.com/benchmarks)
 
 ## 许可证
 

@@ -1,13 +1,13 @@
-"""Tests for omega.exceptions hierarchy."""
+"""Tests for cairn.exceptions hierarchy."""
 
 import pytest
 
-from omega.exceptions import (
+from cairn.exceptions import (
     CloudSyncError,
     CoordinationError,
     EmbeddingError,
     HookError,
-    OmegaError,
+    CairnError,
     StorageError,
     ValidationError,
 )
@@ -23,29 +23,29 @@ ALL_EXCEPTIONS = [
 
 
 class TestExceptionHierarchy:
-    def test_omega_error_is_exception(self):
-        assert issubclass(OmegaError, Exception)
+    def test_cairn_error_is_exception(self):
+        assert issubclass(CairnError, Exception)
 
     @pytest.mark.parametrize("exc_cls", ALL_EXCEPTIONS)
-    def test_all_inherit_from_omega_error(self, exc_cls):
-        assert issubclass(exc_cls, OmegaError)
+    def test_all_inherit_from_cairn_error(self, exc_cls):
+        assert issubclass(exc_cls, CairnError)
 
     def test_exception_message_preserved(self):
         err = StorageError("disk full")
         assert str(err) == "disk full"
-        assert isinstance(err, OmegaError)
+        assert isinstance(err, CairnError)
         assert isinstance(err, Exception)
 
     def test_exceptions_catchable_as_base(self):
-        with pytest.raises(OmegaError):
+        with pytest.raises(CairnError):
             raise StorageError("test")
-        with pytest.raises(OmegaError):
+        with pytest.raises(CairnError):
             raise EmbeddingError("test")
-        with pytest.raises(OmegaError):
+        with pytest.raises(CairnError):
             raise CoordinationError("test")
 
     def test_each_exception_is_distinct(self):
-        classes = set(ALL_EXCEPTIONS + [OmegaError])
+        classes = set(ALL_EXCEPTIONS + [CairnError])
         assert len(classes) == len(ALL_EXCEPTIONS) + 1
         # Each should NOT be caught by a sibling
         with pytest.raises(StorageError):

@@ -1,10 +1,10 @@
-"""Tests for OMEGA Automated Decay Curves (Feature 2)."""
+"""Tests for Cairn Automated Decay Curves (Feature 2)."""
 
 import math
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from omega.sqlite_store import SQLiteStore
+from cairn.sqlite_store import SQLiteStore
 
 
 # ============================================================================
@@ -13,9 +13,9 @@ from omega.sqlite_store import SQLiteStore
 
 
 @pytest.fixture(autouse=True)
-def _reset_bridge(tmp_omega_dir):
+def _reset_bridge(tmp_cairn_dir):
     """Reset the bridge singleton so each test gets a fresh store."""
-    from omega.bridge import reset_memory
+    from cairn.bridge import reset_memory
 
     reset_memory()
     yield
@@ -23,7 +23,7 @@ def _reset_bridge(tmp_omega_dir):
 
 
 def _get_store():
-    from omega.bridge import _get_store
+    from cairn.bridge import _get_store
 
     return _get_store()
 

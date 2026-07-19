@@ -1,14 +1,14 @@
 {
   "serverInfo": {
-    "name": "omega-memory",
+    "name": "cairn",
     "version": "0.10.1",
-    "title": "OMEGA - Persistent Memory for AI Agents",
+    "title": "Cairn - Persistent Memory for AI Agents",
     "description": "#1 on LongMemEval (95.4%). Local-first persistent memory for AI coding agents. Semantic search, auto-capture, cross-session learning. Zero cloud dependency."
   },
   "capabilities": {
     "tools": [
       {
-        "name": "omega_store",
+        "name": "cairn_store",
         "description": "Store a memory with optional type and metadata. Use when the user says 'remember this' or for programmatic capture (decisions, lessons, errors). Defaults to type 'memory' if event_type is omitted.",
         "inputSchema": {
           "type": "object",
@@ -56,7 +56,7 @@
         }
       },
       {
-        "name": "omega_query",
+        "name": "cairn_query",
         "description": "Search memories \u2014 semantic (default) or exact phrase match. Use mode='phrase' for literal substring search (error messages, specific strings).",
         "inputSchema": {
           "type": "object",
@@ -134,7 +134,7 @@
         }
       },
       {
-        "name": "omega_welcome",
+        "name": "cairn_welcome",
         "description": "Get a session welcome briefing with recent relevant memories and user profile.",
         "inputSchema": {
           "type": "object",
@@ -149,7 +149,7 @@
         }
       },
       {
-        "name": "omega_profile",
+        "name": "cairn_profile",
         "description": "Read or update the user profile. Returns the profile by default. If 'update' dict is provided, merges those fields into the profile and saves.",
         "inputSchema": {
           "type": "object",
@@ -162,7 +162,7 @@
         }
       },
       {
-        "name": "omega_delete_memory",
+        "name": "cairn_delete_memory",
         "description": "Delete a specific memory by its ID.",
         "inputSchema": {
           "type": "object",
@@ -178,7 +178,7 @@
         }
       },
       {
-        "name": "omega_edit_memory",
+        "name": "cairn_edit_memory",
         "description": "Edit the content of a specific memory.",
         "inputSchema": {
           "type": "object",
@@ -199,7 +199,7 @@
         }
       },
       {
-        "name": "omega_list_preferences",
+        "name": "cairn_list_preferences",
         "description": "List all stored user preferences.",
         "inputSchema": {
           "type": "object",
@@ -207,7 +207,7 @@
         }
       },
       {
-        "name": "omega_health",
+        "name": "cairn_health",
         "description": "Detailed health check with memory usage, node counts, cache stats, warnings, and recommendations.",
         "inputSchema": {
           "type": "object",
@@ -231,7 +231,7 @@
         }
       },
       {
-        "name": "omega_backup",
+        "name": "cairn_backup",
         "description": "Export or import memories for backup/restore. Default mode is export.",
         "inputSchema": {
           "type": "object",
@@ -257,7 +257,7 @@
         }
       },
       {
-        "name": "omega_lessons",
+        "name": "cairn_lessons",
         "description": "Retrieve cross-session or cross-project lessons learned, ranked by verification count and access frequency.",
         "inputSchema": {
           "type": "object",
@@ -296,7 +296,7 @@
         }
       },
       {
-        "name": "omega_feedback",
+        "name": "cairn_feedback",
         "description": "Record feedback on a surfaced memory (helpful, unhelpful, outdated). Improves future surfacing quality.",
         "inputSchema": {
           "type": "object",
@@ -321,7 +321,7 @@
         }
       },
       {
-        "name": "omega_clear_session",
+        "name": "cairn_clear_session",
         "description": "Clear all memories for a specific session. Use for cleanup after test sessions.",
         "inputSchema": {
           "type": "object",
@@ -337,7 +337,7 @@
         }
       },
       {
-        "name": "omega_similar",
+        "name": "cairn_similar",
         "description": "Find memories similar to a given memory. Use for discovering related context.",
         "inputSchema": {
           "type": "object",
@@ -358,7 +358,7 @@
         }
       },
       {
-        "name": "omega_timeline",
+        "name": "cairn_timeline",
         "description": "Show memory timeline grouped by day. Use to see what was captured recently.",
         "inputSchema": {
           "type": "object",
@@ -377,7 +377,7 @@
         }
       },
       {
-        "name": "omega_consolidate",
+        "name": "cairn_consolidate",
         "description": "Run memory consolidation: prune stale low-value memories, cap session summaries, clean orphaned edges. Returns a report.",
         "inputSchema": {
           "type": "object",
@@ -396,7 +396,7 @@
         }
       },
       {
-        "name": "omega_traverse",
+        "name": "cairn_traverse",
         "description": "Traverse the memory relationship graph from a starting memory. Shows all connected memories within N hops, useful for understanding context chains and discovering related knowledge clusters.",
         "inputSchema": {
           "type": "object",
@@ -422,7 +422,7 @@
         }
       },
       {
-        "name": "omega_compact",
+        "name": "cairn_compact",
         "description": "Compact related memories into consolidated knowledge nodes. Finds clusters of similar memories (same event type, high overlap) and creates summary nodes, marking originals as superseded. Reduces noise while preserving knowledge.",
         "inputSchema": {
           "type": "object",
@@ -451,7 +451,7 @@
         }
       },
       {
-        "name": "omega_checkpoint",
+        "name": "cairn_checkpoint",
         "description": "Save a task checkpoint \u2014 captures current plan, progress, files touched, decisions, and key context. Use when: (1) context window is getting full, (2) completing a major milestone, (3) before starting a new session for an ongoing task. Checkpoints enable seamless session continuity.",
         "inputSchema": {
           "type": "object",
@@ -506,7 +506,7 @@
         }
       },
       {
-        "name": "omega_resume_task",
+        "name": "cairn_resume_task",
         "description": "Resume a previously checkpointed task. Retrieves the latest checkpoint with full plan, progress, files, decisions, and next steps. Use at the start of a new session to continue where you left off.",
         "inputSchema": {
           "type": "object",
@@ -536,8 +536,8 @@
         }
       },
       {
-        "name": "omega_remind",
-        "description": "Set a time-based reminder. OMEGA will surface it when the time arrives (at session start or during active sessions). Use for 'remind me in 1 hour to...' requests.",
+        "name": "cairn_remind",
+        "description": "Set a time-based reminder. Cairn will surface it when the time arrives (at session start or during active sessions). Use for 'remind me in 1 hour to...' requests.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -567,7 +567,7 @@
         }
       },
       {
-        "name": "omega_remind_list",
+        "name": "cairn_remind_list",
         "description": "List active reminders with their status and due times.",
         "inputSchema": {
           "type": "object",
@@ -586,7 +586,7 @@
         }
       },
       {
-        "name": "omega_remind_dismiss",
+        "name": "cairn_remind_dismiss",
         "description": "Dismiss a reminder by its ID. Use after acknowledging a reminder.",
         "inputSchema": {
           "type": "object",
@@ -602,7 +602,7 @@
         }
       },
       {
-        "name": "omega_type_stats",
+        "name": "cairn_type_stats",
         "description": "Get memory counts grouped by event type. Shows the composition of the memory store (how many decisions, lessons, errors, etc.).",
         "inputSchema": {
           "type": "object",
@@ -610,7 +610,7 @@
         }
       },
       {
-        "name": "omega_session_stats",
+        "name": "cairn_session_stats",
         "description": "Get memory counts grouped by session. Shows which sessions have contributed the most memories (top 20).",
         "inputSchema": {
           "type": "object",
@@ -618,7 +618,7 @@
         }
       },
       {
-        "name": "omega_weekly_digest",
+        "name": "cairn_weekly_digest",
         "description": "Get a weekly knowledge digest with stats, trends, and highlights. Shows new memories, session count, growth trends, type breakdown, and top topics.",
         "inputSchema": {
           "type": "object",
@@ -632,8 +632,8 @@
         }
       },
       {
-        "name": "omega_protocol",
-        "description": "Get your coordination playbook \u2014 dynamically assembled operating instructions. Call at session start (step 2 after omega_welcome) or when you need protocol guidance. Returns context-sensitive rules based on project, peer activity, and learned lessons.",
+        "name": "cairn_protocol",
+        "description": "Get your coordination playbook \u2014 dynamically assembled operating instructions. Call at session start (step 2 after cairn_welcome) or when you need protocol guidance. Returns context-sensitive rules based on project, peer activity, and learned lessons.",
         "inputSchema": {
           "type": "object",
           "properties": {

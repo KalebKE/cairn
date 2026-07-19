@@ -3,8 +3,8 @@ import time
 import pytest
 import sqlite3
 from datetime import datetime, timezone, timedelta
-from omega.sqlite_store import SQLiteStore
-from omega.schema import SCHEMA_VERSION
+from cairn.sqlite_store import SQLiteStore
+from cairn.schema import SCHEMA_VERSION
 
 
 class TestBitemporalSchema:
@@ -181,19 +181,19 @@ class TestBitemporalMemoryResult:
     """Test that MemoryResult carries valid_from/valid_until."""
 
     def test_memory_result_has_valid_from_attribute(self, store):
-        from omega.sqlite_store import MemoryResult
+        from cairn.sqlite_store import MemoryResult
         mr = MemoryResult(id="test", content="test")
         assert hasattr(mr, "valid_from")
         assert mr.valid_from is None
 
     def test_memory_result_has_valid_until_attribute(self, store):
-        from omega.sqlite_store import MemoryResult
+        from cairn.sqlite_store import MemoryResult
         mr = MemoryResult(id="test", content="test")
         assert hasattr(mr, "valid_until")
         assert mr.valid_until is None
 
     def test_memory_result_accepts_valid_from_and_valid_until(self, store):
-        from omega.sqlite_store import MemoryResult
+        from cairn.sqlite_store import MemoryResult
         now = datetime.now(timezone.utc)
         later = now + timedelta(hours=1)
         mr = MemoryResult(id="test", content="test", valid_from=now, valid_until=later)

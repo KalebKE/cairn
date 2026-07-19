@@ -1,4 +1,4 @@
-from omega.hooks.pre_add_guard import _is_broad_add
+from cairn.hooks.pre_add_guard import _is_broad_add
 
 
 def test_is_broad_add_blocks_real_commit_all_variants():

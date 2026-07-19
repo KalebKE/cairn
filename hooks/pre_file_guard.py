@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OMEGA PreToolUse hook — File guard for multi-agent coordination.
+"""Cairn PreToolUse hook — File guard for multi-agent coordination.
 
 Triggered on Edit/Write/NotebookEdit. Blocks the tool call if the target file
 is claimed by a DIFFERENT agent session. Self-claims are allowed.
@@ -7,7 +7,7 @@ is claimed by a DIFFERENT agent session. Self-claims are allowed.
 Exit code 2 = block the tool call in Claude Code.
 Exit code 0 = allow (including fail-open on any error).
 
-Design: Fail-open — OMEGA unavailable must never block edits.
+Design: Fail-open — Cairn unavailable must never block edits.
 """
 import json
 import os
@@ -20,7 +20,7 @@ from pathlib import Path
 
 def _log_hook_error(hook_name, error):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         tb = traceback.format_exc()
@@ -36,7 +36,7 @@ def _log_hook_error(hook_name, error):
 
 def _log_timing(hook_name, elapsed_ms):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         data = f"[{timestamp}] {hook_name}: OK ({elapsed_ms:.0f}ms)\n"
@@ -56,8 +56,8 @@ def _block_claimed(file_path, owner, owner_task):
         f"\n[FILE-GUARD] BLOCKED: {filename} is claimed by session {owner} ({owner_task}).\n"
         f"  Options:\n"
         f"    1. Wait for the other agent to finish and release\n"
-        f"    2. Ask other agent to call omega_file_release\n"
-        f"    3. Force-claim via omega_file_claim with force=true\n"
+        f"    2. Ask other agent to call cairn_file_release\n"
+        f"    3. Force-claim via cairn_file_claim with force=true\n"
         f"    4. The claim expires automatically after 10 minutes of inactivity"
     )
     sys.exit(2)
@@ -103,7 +103,7 @@ def _check_uncommitted_divergence(file_path, session_id):
 
         # Check if this session already claimed this file (meaning we made these changes)
         try:
-            from omega.coordination import get_manager
+            from cairn.coordination import get_manager
             mgr = get_manager()
             info = mgr.check_file(file_path)
             if info.get("claimed") and info.get("session_id") == session_id:
@@ -143,7 +143,7 @@ def main():
     _check_uncommitted_divergence(file_path, session_id)
 
     try:
-        from omega.coordination import get_manager
+        from cairn.coordination import get_manager
         mgr = get_manager()
         info = mgr.check_file(file_path)
 
@@ -171,10 +171,10 @@ def main():
         # No session_id + unclaimed → allow (true single-agent, no claims exist)
 
     except ImportError:
-        # OMEGA not installed — fail-open
+        # Cairn not installed — fail-open
         pass
     except Exception as e:
-        # Any error — fail-open, never block when OMEGA is unavailable
+        # Any error — fail-open, never block when Cairn is unavailable
         _log_hook_error("pre_file_guard", e)
 
 

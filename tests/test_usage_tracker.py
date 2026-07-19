@@ -2,12 +2,12 @@
 
 
 def test_log_call_and_query(tmp_path):
-    from omega.usage_tracker import UsageTracker
+    from cairn.usage_tracker import UsageTracker
 
     tracker = UsageTracker(db_path=str(tmp_path / "usage.db"))
     tracker.log_call(
         session_id="sess-123",
-        tool_name="omega_store",
+        tool_name="cairn_store",
         model="claude-opus-4-6",
         input_tokens=1000,
         output_tokens=500,
@@ -22,12 +22,12 @@ def test_log_call_and_query(tmp_path):
 
 
 def test_cost_estimation(tmp_path):
-    from omega.usage_tracker import UsageTracker
+    from cairn.usage_tracker import UsageTracker
 
     tracker = UsageTracker(db_path=str(tmp_path / "usage.db"))
     tracker.log_call(
         session_id="sess-123",
-        tool_name="omega_query",
+        tool_name="cairn_query",
         model="claude-opus-4-6",
         input_tokens=1_000_000,
         output_tokens=100_000,
@@ -40,22 +40,22 @@ def test_cost_estimation(tmp_path):
 
 
 def test_top_tools(tmp_path):
-    from omega.usage_tracker import UsageTracker
+    from cairn.usage_tracker import UsageTracker
 
     tracker = UsageTracker(db_path=str(tmp_path / "usage.db"))
     for i in range(5):
-        tracker.log_call("s1", "omega_store", "claude-sonnet-4-6", 100, 50)
+        tracker.log_call("s1", "cairn_store", "claude-sonnet-4-6", 100, 50)
     for i in range(2):
-        tracker.log_call("s1", "omega_query", "claude-sonnet-4-6", 200, 100)
+        tracker.log_call("s1", "cairn_query", "claude-sonnet-4-6", 200, 100)
 
     top = tracker.get_top_tools(days=1, limit=5)
-    assert top[0]["tool_name"] == "omega_store"
+    assert top[0]["tool_name"] == "cairn_store"
     assert top[0]["call_count"] == 5
     tracker.close()
 
 
 def test_local_embedding_zero_cost(tmp_path):
-    from omega.usage_tracker import UsageTracker
+    from cairn.usage_tracker import UsageTracker
 
     tracker = UsageTracker(db_path=str(tmp_path / "usage.db"))
     tracker.log_call("s1", "embed", "nomic-embed-text", 5000, 0)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OMEGA SessionStart hook — Welcome briefing with recent context."""
+"""Cairn SessionStart hook — Welcome briefing with recent context."""
 import os
 import time
 import traceback
@@ -9,7 +9,7 @@ from pathlib import Path
 
 def _log_hook_error(hook_name, error):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         tb = traceback.format_exc()
@@ -24,7 +24,7 @@ def _log_hook_error(hook_name, error):
 
 
 # Periodic maintenance (consolidate/compact/backup/...) moved to the
-# daemon-side scheduler: src/omega/scheduler.py (run from mcp_server's
+# daemon-side scheduler: src/cairn/scheduler.py (run from mcp_server's
 # event loop). The SessionStart hook path is dead in the lean daemon, so
 # jobs living here silently never ran.
 
@@ -33,37 +33,37 @@ def main():
     session_id = os.environ.get("SESSION_ID", "")
 
     try:
-        from omega.bridge import welcome
+        from cairn.bridge import welcome
         result = welcome(session_id=session_id, project=project)
     except ImportError:
-        print("OMEGA not installed. Run: pip install omega-memory && omega setup")
+        print("Cairn not installed. Run: pip install cairn && cairn setup")
         return
     except Exception as e:
         _log_hook_error("session_start", e)
-        print(f"OMEGA welcome failed: {e}")
+        print(f"Cairn welcome failed: {e}")
         return
 
     memory_count = result.get("memory_count", 0)
     recent = result.get("recent_memories", [])
 
-    print(f"## Welcome back! OMEGA ready — {memory_count} memories")
+    print(f"## Welcome back! Cairn ready — {memory_count} memories")
 
     # First-time user "Aha" moment
     if memory_count == 0:
         print("")
-        print("OMEGA captures decisions, lessons, and errors automatically as you work.")
+        print("Cairn captures decisions, lessons, and errors automatically as you work.")
         print("Next session, it surfaces relevant context when you edit the same files.")
         print("")
         print("**Quick start:**")
         print('- Say "remember that we always use TypeScript strict mode" to store a preference')
-        print("- Make a decision and OMEGA captures it automatically")
-        print("- Encounter an error, and OMEGA stores the pattern for future recall")
+        print("- Make a decision and Cairn captures it automatically")
+        print("- Encounter an error, and Cairn stores the pattern for future recall")
         print("")
         print("After this session ends, you'll see exactly what was captured.")
     elif memory_count <= 10:
-        print(f"  OMEGA has {memory_count} memories from your first sessions. These will surface when you edit related files.")
+        print(f"  Cairn has {memory_count} memories from your first sessions. These will surface when you edit related files.")
         try:
-            from omega.bridge import type_stats as _ts_first
+            from cairn.bridge import type_stats as _ts_first
             first_stats = _ts_first()
             stat_parts = []
             for k, v in sorted(first_stats.items(), key=lambda x: x[1], reverse=True):
@@ -77,8 +77,8 @@ def main():
     # Health pulse
     try:
         from datetime import timezone
-        from omega.bridge import _get_store, status as omega_status
-        health = omega_status()
+        from cairn.bridge import _get_store, status as cairn_status
+        health = cairn_status()
         health_label = "ok" if health.get("ok") else health.get("status", "unknown")
 
         store = _get_store()
@@ -109,8 +109,8 @@ def main():
 
     # Behavioral patterns (habits) — with confidence decay and status
     try:
-        from omega.behavioral import effective_confidence
-        from omega.bridge import _get_store as _get_store_habits
+        from cairn.behavioral import effective_confidence
+        from cairn.bridge import _get_store as _get_store_habits
         habit_store = _get_store_habits()
         habits = habit_store.get_by_type("behavioral_pattern", limit=10)
         surfaced = []
@@ -137,10 +137,10 @@ def main():
 
     # Clean up stale surfacing counter files (both .surfaced and .surfaced.json)
     try:
-        omega_dir = Path.home() / ".omega"
+        cairn_dir = Path.home() / ".cairn"
         cutoff = time.time() - 86400
         for pattern in ("session-*.surfaced", "session-*.surfaced.json"):
-            for f in omega_dir.glob(pattern):
+            for f in cairn_dir.glob(pattern):
                 if f.stat().st_mtime < cutoff:
                     f.unlink()
     except Exception:
@@ -148,7 +148,7 @@ def main():
 
     # Cross-project lesson surfacing
     try:
-        from omega.bridge import get_cross_project_lessons
+        from cairn.bridge import get_cross_project_lessons
         cross_lessons = get_cross_project_lessons(
             task=None,
             exclude_project=project,
@@ -168,7 +168,7 @@ def main():
 
     # Surface top project lessons
     try:
-        from omega.bridge import get_cross_session_lessons
+        from cairn.bridge import get_cross_session_lessons
         project_lessons = get_cross_session_lessons(
             task=None,
             project_path=project,
@@ -187,12 +187,12 @@ def main():
         _log_hook_error("project_lessons", e)
 
     # Weekly digest, type stats, preferences, recent memories available on-demand
-    # via omega_weekly_digest, omega_type_stats, omega_list_preferences.
+    # via cairn_weekly_digest, cairn_type_stats, cairn_list_preferences.
 
 
 def _log_timing(hook_name, elapsed_ms):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         data = f"[{timestamp}] {hook_name}: OK ({elapsed_ms:.0f}ms)\n"

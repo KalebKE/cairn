@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.cairn.jit-proxy-daemon</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PYTHON_PATH__</string>
+        <string>-m</string>
+        <string>cairn.server.jit_proxy</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>CAIRN_HOME</key>
+        <string>__CAIRN_HOME__</string>
+        <key>JIT_PROXY_TRANSPORT</key>
+        <string>http</string>
+        <key>PYTHONPATH</key>
+        <string>__PYTHONPATH__</string>
+        <key>PATH</key>
+        <string>__PATH__</string>
+    </dict>
+    <key>KeepAlive</key>
+    <true/>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    <key>StandardOutPath</key>
+    <string>__CAIRN_HOME__/logs/jit-proxy-daemon.log</string>
+    <key>StandardErrorPath</key>
+    <string>__CAIRN_HOME__/logs/jit-proxy-daemon.log</string>
+</dict>
+</plist>

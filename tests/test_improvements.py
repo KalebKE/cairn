@@ -1,4 +1,4 @@
-"""Tests for OMEGA SOTA improvements: graph traversal, contextual re-ranking, memory compaction."""
+"""Tests for Cairn SOTA improvements: graph traversal, contextual re-ranking, memory compaction."""
 import importlib.util
 import os
 import pytest
@@ -107,20 +107,20 @@ class TestGraphTraversal:
 class TestTraverseBridge:
     """Tests for bridge.traverse()."""
 
-    def test_traverse_nonexistent(self, tmp_omega_dir):
-        os.environ["OMEGA_SKIP_EMBEDDINGS"] = "1"
+    def test_traverse_nonexistent(self, tmp_cairn_dir):
+        os.environ["CAIRN_SKIP_EMBEDDINGS"] = "1"
         try:
-            from omega.bridge import reset_memory, traverse
+            from cairn.bridge import reset_memory, traverse
             reset_memory()
             result = traverse("nonexistent-id")
             assert "not found" in result
         finally:
-            os.environ.pop("OMEGA_SKIP_EMBEDDINGS", None)
+            os.environ.pop("CAIRN_SKIP_EMBEDDINGS", None)
 
-    def test_traverse_formats_markdown(self, tmp_omega_dir):
-        os.environ["OMEGA_SKIP_EMBEDDINGS"] = "1"
+    def test_traverse_formats_markdown(self, tmp_cairn_dir):
+        os.environ["CAIRN_SKIP_EMBEDDINGS"] = "1"
         try:
-            from omega.bridge import reset_memory, traverse, _get_store
+            from cairn.bridge import reset_memory, traverse, _get_store
             reset_memory()
             store = _get_store()
             a = store.store(content="Decision: use SQLite for storage")
@@ -132,7 +132,7 @@ class TestTraverseBridge:
             assert "Hop 1" in result
             assert b[:12] in result
         finally:
-            os.environ.pop("OMEGA_SKIP_EMBEDDINGS", None)
+            os.environ.pop("CAIRN_SKIP_EMBEDDINGS", None)
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +160,7 @@ class TestContextualReranking:
         results_with_ctx = store.query(
             "testing quality",
             limit=2,
-            context_file="/projects/omega/tests/test_store.py",
+            context_file="/projects/cairn/tests/test_store.py",
             context_tags=["python"],
         )
 
@@ -221,20 +221,20 @@ class TestContextualReranking:
 class TestMemoryCompaction:
     """Tests for bridge.compact()."""
 
-    def test_compact_insufficient_memories(self, tmp_omega_dir):
-        os.environ["OMEGA_SKIP_EMBEDDINGS"] = "1"
+    def test_compact_insufficient_memories(self, tmp_cairn_dir):
+        os.environ["CAIRN_SKIP_EMBEDDINGS"] = "1"
         try:
-            from omega.bridge import reset_memory, compact
+            from cairn.bridge import reset_memory, compact
             reset_memory()
             result = compact(event_type="lesson_learned", min_cluster_size=3)
             assert "Nothing to compact" in result
         finally:
-            os.environ.pop("OMEGA_SKIP_EMBEDDINGS", None)
+            os.environ.pop("CAIRN_SKIP_EMBEDDINGS", None)
 
-    def test_compact_dry_run(self, tmp_omega_dir):
-        os.environ["OMEGA_SKIP_EMBEDDINGS"] = "1"
+    def test_compact_dry_run(self, tmp_cairn_dir):
+        os.environ["CAIRN_SKIP_EMBEDDINGS"] = "1"
         try:
-            from omega.bridge import reset_memory, compact, _get_store
+            from cairn.bridge import reset_memory, compact, _get_store
             reset_memory()
             store = _get_store()
 
@@ -259,12 +259,12 @@ class TestMemoryCompaction:
             # No memories should be superseded in dry run
             assert store.node_count() == 4
         finally:
-            os.environ.pop("OMEGA_SKIP_EMBEDDINGS", None)
+            os.environ.pop("CAIRN_SKIP_EMBEDDINGS", None)
 
-    def test_compact_creates_summary(self, tmp_omega_dir):
-        os.environ["OMEGA_SKIP_EMBEDDINGS"] = "1"
+    def test_compact_creates_summary(self, tmp_cairn_dir):
+        os.environ["CAIRN_SKIP_EMBEDDINGS"] = "1"
         try:
-            from omega.bridge import reset_memory, compact, _get_store
+            from cairn.bridge import reset_memory, compact, _get_store
             reset_memory()
             store = _get_store()
 
@@ -299,12 +299,12 @@ class TestMemoryCompaction:
                 assert node.metadata.get("superseded") is True
                 assert "superseded_by" in node.metadata
         finally:
-            os.environ.pop("OMEGA_SKIP_EMBEDDINGS", None)
+            os.environ.pop("CAIRN_SKIP_EMBEDDINGS", None)
 
-    def test_compact_no_clusters_found(self, tmp_omega_dir):
-        os.environ["OMEGA_SKIP_EMBEDDINGS"] = "1"
+    def test_compact_no_clusters_found(self, tmp_cairn_dir):
+        os.environ["CAIRN_SKIP_EMBEDDINGS"] = "1"
         try:
-            from omega.bridge import reset_memory, compact, _get_store
+            from cairn.bridge import reset_memory, compact, _get_store
             reset_memory()
             store = _get_store()
 
@@ -329,7 +329,7 @@ class TestMemoryCompaction:
             )
             assert "already compact" in result or "No clusters" in result
         finally:
-            os.environ.pop("OMEGA_SKIP_EMBEDDINGS", None)
+            os.environ.pop("CAIRN_SKIP_EMBEDDINGS", None)
 
 
 # ---------------------------------------------------------------------------
@@ -340,11 +340,11 @@ class TestNewHandlers:
     """Integration tests for the new MCP handlers."""
 
     @pytest.mark.asyncio
-    async def test_traverse_handler(self, tmp_omega_dir):
-        os.environ["OMEGA_SKIP_EMBEDDINGS"] = "1"
+    async def test_traverse_handler(self, tmp_cairn_dir):
+        os.environ["CAIRN_SKIP_EMBEDDINGS"] = "1"
         try:
-            from omega.bridge import reset_memory, _get_store
-            from omega.server.handlers import handle_omega_traverse
+            from cairn.bridge import reset_memory, _get_store
+            from cairn.server.handlers import handle_cairn_traverse
             reset_memory()
             store = _get_store()
 
@@ -352,28 +352,28 @@ class TestNewHandlers:
             b = store.store(content="Test memory B")
             store.add_edge(a, b, "related", 0.9)
 
-            result = await handle_omega_traverse({"memory_id": a})
+            result = await handle_cairn_traverse({"memory_id": a})
             assert "content" in result
             assert not result.get("isError")
         finally:
-            os.environ.pop("OMEGA_SKIP_EMBEDDINGS", None)
+            os.environ.pop("CAIRN_SKIP_EMBEDDINGS", None)
 
     @pytest.mark.asyncio
     async def test_traverse_handler_missing_id(self):
-        from omega.server.handlers import handle_omega_traverse
-        result = await handle_omega_traverse({})
+        from cairn.server.handlers import handle_cairn_traverse
+        result = await handle_cairn_traverse({})
         assert result.get("isError")
 
     @pytest.mark.asyncio
-    async def test_compact_handler(self, tmp_omega_dir):
-        os.environ["OMEGA_SKIP_EMBEDDINGS"] = "1"
+    async def test_compact_handler(self, tmp_cairn_dir):
+        os.environ["CAIRN_SKIP_EMBEDDINGS"] = "1"
         try:
-            from omega.bridge import reset_memory
-            from omega.server.handlers import handle_omega_compact
+            from cairn.bridge import reset_memory
+            from cairn.server.handlers import handle_cairn_compact
             reset_memory()
 
-            result = await handle_omega_compact({"dry_run": True})
+            result = await handle_cairn_compact({"dry_run": True})
             assert "content" in result
             assert not result.get("isError")
         finally:
-            os.environ.pop("OMEGA_SKIP_EMBEDDINGS", None)
+            os.environ.pop("CAIRN_SKIP_EMBEDDINGS", None)

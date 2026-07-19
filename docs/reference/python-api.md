@@ -1,11 +1,11 @@
 # Python API
 
-`omega.bridge` public API -- 36 functions.
+`cairn.bridge` public API -- 36 functions.
 
-This is the main programmatic interface used internally by the MCP handlers. All functions are importable from `omega.bridge`.
+This is the main programmatic interface used internally by the MCP handlers. All functions are importable from `cairn.bridge`.
 
 ```python
-from omega.bridge import store, query, remember, auto_capture
+from cairn.bridge import store, query, remember, auto_capture
 ```
 
 ---
@@ -127,7 +127,7 @@ from omega.bridge import store, query, remember, auto_capture
 
 ## Notes
 
-- All functions are importable from `omega.bridge`.
+- All functions are importable from `cairn.bridge`.
 - The MCP handlers in `server/handlers.py` call these functions directly.
 - `auto_capture` is the primary ingestion path -- `store` and `remember` are convenience wrappers around it.
 - Functions returning `str` typically return markdown-formatted output suitable for display in agent conversations.

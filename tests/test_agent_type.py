@@ -2,7 +2,7 @@
 
 import pytest
 
-from omega.sqlite_store import SQLiteStore, SCHEMA_VERSION
+from cairn.sqlite_store import SQLiteStore, SCHEMA_VERSION
 
 
 # ============================================================================
@@ -31,9 +31,9 @@ class TestAgentTypeSchema:
         ).fetchall()
         assert len(indexes) == 1
 
-    def test_migration_v3_to_v4(self, tmp_omega_dir):
+    def test_migration_v3_to_v4(self, tmp_cairn_dir):
         """Simulate a v3 database and verify migration adds agent_type."""
-        db_path = tmp_omega_dir / "migrate_test.db"
+        db_path = tmp_cairn_dir / "migrate_test.db"
         import sqlite3
 
         conn = sqlite3.connect(str(db_path))
@@ -204,9 +204,9 @@ class TestAgentTypeQuery:
 class TestAgentTypeBridge:
     """Test bridge layer passes agent_type through."""
 
-    def test_bridge_store_with_agent_type(self, tmp_omega_dir):
+    def test_bridge_store_with_agent_type(self, tmp_cairn_dir):
         """bridge.store() passes agent_type to SQLiteStore."""
-        from omega.bridge import store, _get_store
+        from cairn.bridge import store, _get_store
 
         result = store(
             content="Bridge test: code reviewer lesson on error handling patterns",
@@ -223,9 +223,9 @@ class TestAgentTypeBridge:
         assert len(rows) >= 1
         assert rows[0][0] == "code-reviewer"
 
-    def test_bridge_store_agent_type_in_metadata(self, tmp_omega_dir):
+    def test_bridge_store_agent_type_in_metadata(self, tmp_cairn_dir):
         """bridge.store() should include agent_type in metadata."""
-        from omega.bridge import store, _get_store
+        from cairn.bridge import store, _get_store
 
         store(
             content="Bridge metadata test: agent type should appear in metadata for this lesson",
@@ -242,9 +242,9 @@ class TestAgentTypeBridge:
         meta = json.loads(rows[0][0])
         assert meta.get("agent_type") == "test-runner"
 
-    def test_bridge_query_with_agent_type(self, tmp_omega_dir):
+    def test_bridge_query_with_agent_type(self, tmp_cairn_dir):
         """bridge.query() passes agent_type filter through."""
-        from omega.bridge import store, query
+        from cairn.bridge import store, query
 
         store(
             content="Agent-scoped lesson: always validate input boundaries in code review",
@@ -271,9 +271,9 @@ class TestAgentTypeBridge:
 class TestAgentTypeLessons:
     """Test lessons filtering by agent_type."""
 
-    def test_cross_session_lessons_filtered(self, tmp_omega_dir):
+    def test_cross_session_lessons_filtered(self, tmp_cairn_dir):
         """get_cross_session_lessons() filters by agent_type."""
-        from omega.bridge import store, get_cross_session_lessons
+        from cairn.bridge import store, get_cross_session_lessons
 
         store(
             content="Code review lesson: always check error handling paths thoroughly",
@@ -303,9 +303,9 @@ class TestAgentTypeLessons:
         for lesson in lessons:
             assert "fixture" in lesson["content"].lower() or "test" in lesson["content"].lower()
 
-    def test_cross_project_lessons_filtered(self, tmp_omega_dir):
+    def test_cross_project_lessons_filtered(self, tmp_cairn_dir):
         """get_cross_project_lessons() filters by agent_type."""
-        from omega.bridge import store, get_cross_project_lessons
+        from cairn.bridge import store, get_cross_project_lessons
 
         store(
             content="Cross-project code review lesson: enforce consistent naming conventions",
@@ -326,9 +326,9 @@ class TestAgentTypeLessons:
         for lesson in lessons:
             assert "code review" in lesson["content"].lower() or "naming" in lesson["content"].lower()
 
-    def test_lessons_no_agent_type_returns_all(self, tmp_omega_dir):
+    def test_lessons_no_agent_type_returns_all(self, tmp_cairn_dir):
         """Without agent_type, lessons returns all types."""
-        from omega.bridge import store, get_cross_session_lessons
+        from cairn.bridge import store, get_cross_session_lessons
 
         store(
             content="Lesson A: agent-scoped reviewer insight on code quality standards",

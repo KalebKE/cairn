@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# OMEGA Database Sync -- push/pull omega.db to/from remote host
+# Cairn Database Sync -- push/pull cairn.db to/from remote host
 #
 # Usage:
 #   ./scripts/sync-db.sh push          # local -> remote
 #   ./scripts/sync-db.sh pull          # remote -> local backup
 #
 # Configuration (environment variables):
-#   OMEGA_REMOTE_HOST  -- SSH host (e.g., user@host or fly machine name)
-#   OMEGA_REMOTE_PATH  -- Remote DB path (default: /data/omega/omega.db)
-#   OMEGA_LOCAL_DB     -- Local DB path (default: ~/.omega/omega.db)
+#   CAIRN_REMOTE_HOST  -- SSH host (e.g., user@host or fly machine name)
+#   CAIRN_REMOTE_PATH  -- Remote DB path (default: /data/cairn/cairn.db)
+#   CAIRN_LOCAL_DB     -- Local DB path (default: ~/.cairn/cairn.db)
 
-REMOTE_HOST="${OMEGA_REMOTE_HOST:?Set OMEGA_REMOTE_HOST (e.g., user@myhost)}"
-REMOTE_PATH="${OMEGA_REMOTE_PATH:-/data/omega/omega.db}"
-LOCAL_DB="${OMEGA_LOCAL_DB:-$HOME/.omega/omega.db}"
-BACKUP_DIR="$HOME/.omega/backups"
+REMOTE_HOST="${CAIRN_REMOTE_HOST:?Set CAIRN_REMOTE_HOST (e.g., user@myhost)}"
+REMOTE_PATH="${CAIRN_REMOTE_PATH:-/data/cairn/cairn.db}"
+LOCAL_DB="${CAIRN_LOCAL_DB:-$HOME/.cairn/cairn.db}"
+BACKUP_DIR="$HOME/.cairn/backups"
 
 case "${1:-}" in
     push)
@@ -39,15 +39,15 @@ print('WAL checkpoint done')
         echo "Pulling remote DB to local backup..."
         mkdir -p "$BACKUP_DIR"
         TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-        DEST="$BACKUP_DIR/omega-remote-$TIMESTAMP.db"
+        DEST="$BACKUP_DIR/cairn-remote-$TIMESTAMP.db"
         rsync -avz --progress "$REMOTE_HOST:$REMOTE_PATH" "$DEST"
         echo "Done. Saved to $DEST ($(du -h "$DEST" | cut -f1))"
         ;;
     *)
         echo "Usage: $0 {push|pull}"
         echo ""
-        echo "  push  -- Upload local omega.db to remote host"
-        echo "  pull  -- Download remote omega.db to local backup"
+        echo "  push  -- Upload local cairn.db to remote host"
+        echo "  pull  -- Download remote cairn.db to local backup"
         exit 1
         ;;
 esac

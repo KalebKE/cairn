@@ -152,7 +152,7 @@ class TestSupersedesEdge:
 
 class TestHashEmbeddingRecovery:
     def _degrade(self, monkeypatch):
-        import omega.embedding as E
+        import cairn.embedding as E
         monkeypatch.setattr(E, "generate_embedding", lambda text, dimension=384: [0.1] * 384)
         monkeypatch.setattr(E, "is_embedding_degraded", lambda: True)
         monkeypatch.setattr(E, "get_active_backend", lambda: None)

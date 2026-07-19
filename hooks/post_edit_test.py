@@ -25,20 +25,20 @@ def _resolve_python() -> str:
 _PYTHON = _resolve_python()
 
 # Project test configs: directory prefix -> (test command, cwd)
-# Built-in default: OMEGA (this project itself)
+# Built-in default: Cairn (this project itself)
 _DEFAULT_PROJECTS = {
-    os.path.expanduser("~/Projects/omega/"): {
+    os.path.expanduser("~/Projects/cairn/"): {
         "cmd": [_PYTHON, "-m", "pytest", "tests/", "-x", "-q", "--tb=short", "--no-header"],
-        "cwd": os.path.expanduser("~/Projects/omega"),
-        "name": "OMEGA",
+        "cwd": os.path.expanduser("~/Projects/cairn"),
+        "name": "Cairn",
     },
 }
 
 
 def _load_projects():
-    """Load project configs: built-in OMEGA + optional ~/.omega/post_edit_projects.json."""
+    """Load project configs: built-in Cairn + optional ~/.cairn/post_edit_projects.json."""
     projects = dict(_DEFAULT_PROJECTS)
-    config_path = os.path.expanduser("~/.omega/post_edit_projects.json")
+    config_path = os.path.expanduser("~/.cairn/post_edit_projects.json")
     if os.path.exists(config_path):
         try:
             with open(config_path) as f:

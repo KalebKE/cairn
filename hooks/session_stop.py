@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OMEGA SessionStop hook — Generate and store session summary on exit."""
+"""Cairn SessionStop hook — Generate and store session summary on exit."""
 import json
 import os
 import sys
@@ -12,22 +12,22 @@ from pathlib import Path
 # Critical tools that agents SHOULD call at least once per session.
 # Scored: each hit = 1 point, total / len = percentage.
 CRITICAL_TOOLS = [
-    "omega_reflect",          # Contradiction/stale detection — 0 calls ever
-    "omega_decision_query",   # Check active decisions before domain work — 0 calls
-    "omega_file_check",       # Conflict check before edits — 5 calls / 931 edits
-    "omega_checkpoint",       # Save state at 70% context — 4 calls ever
-    "omega_coord_status",     # Check peers before taking work — 10 calls
+    "cairn_reflect",          # Contradiction/stale detection — 0 calls ever
+    "cairn_decision_query",   # Check active decisions before domain work — 0 calls
+    "cairn_file_check",       # Conflict check before edits — 5 calls / 931 edits
+    "cairn_checkpoint",       # Save state at 70% context — 4 calls ever
+    "cairn_coord_status",     # Check peers before taking work — 10 calls
 ]
 
 
 def _build_utilization_report(tool_calls: list) -> dict:
-    """Score which critical OMEGA tools the agent used this session."""
+    """Score which critical Cairn tools the agent used this session."""
     called = set(tool_calls)
-    # Normalize: strip mcp__omega-memory__ prefix if present
+    # Normalize: strip mcp__cairn__ prefix if present
     normalized = set()
     for t in called:
-        if t.startswith("mcp__omega-memory__"):
-            normalized.add(t.replace("mcp__omega-memory__", ""))
+        if t.startswith("mcp__cairn__"):
+            normalized.add(t.replace("mcp__cairn__", ""))
         else:
             normalized.add(t)
 
@@ -52,7 +52,7 @@ def _get_session_tool_names(session_id: str) -> list:
     """Get list of tool names called in this session from coord_audit."""
     try:
         import sqlite3
-        db_path = os.path.expanduser("~/.omega/omega.db")
+        db_path = os.path.expanduser("~/.cairn/cairn.db")
         conn = sqlite3.connect(db_path, timeout=10)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA busy_timeout=30000")
@@ -68,7 +68,7 @@ def _get_session_tool_names(session_id: str) -> list:
 
 def _log_hook_error(hook_name, error):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         tb = traceback.format_exc()
@@ -85,7 +85,7 @@ def _log_hook_error(hook_name, error):
 def _get_activity_counts(session_id: str) -> dict:
     """Count memories by event_type for this session."""
     try:
-        from omega.bridge import _get_store
+        from cairn.bridge import _get_store
         store = _get_store()
         return store.get_session_event_counts(session_id)
     except Exception:
@@ -95,7 +95,7 @@ def _get_activity_counts(session_id: str) -> dict:
 def _get_surfaced_count(session_id: str) -> int:
     """Read and clean up the surfacing counter file."""
     try:
-        marker = Path.home() / ".omega" / f"session-{session_id}.surfaced"
+        marker = Path.home() / ".cairn" / f"session-{session_id}.surfaced"
         if marker.exists():
             count = marker.stat().st_size
             marker.unlink()
@@ -110,7 +110,7 @@ def _get_surfaced_details(session_id: str) -> tuple:
     unique_ids = 0
     unique_files = 0
     try:
-        json_path = Path.home() / ".omega" / f"session-{session_id}.surfaced.json"
+        json_path = Path.home() / ".cairn" / f"session-{session_id}.surfaced.json"
         if json_path.exists():
             data = json.loads(json_path.read_text())
             all_ids = set()
@@ -154,7 +154,7 @@ def _print_activity_report(session_id: str):
 
     # Weekly recap
     try:
-        from omega.bridge import _get_store
+        from cairn.bridge import _get_store
         store = _get_store()
         total = store.node_count()
 
@@ -207,7 +207,7 @@ def _print_activity_report(session_id: str):
     except Exception:
         pass
 
-    # Check for external actions without omega_store
+    # Check for external actions without cairn_store
     try:
         import re as _re
         _EXT_PATTERNS = [
@@ -217,7 +217,7 @@ def _print_activity_report(session_id: str):
             _re.compile(r"\bnpm\s+publish\b"),
         ]
         import sqlite3
-        db_path = os.path.expanduser("~/.omega/omega.db")
+        db_path = os.path.expanduser("~/.cairn/cairn.db")
         conn = sqlite3.connect(db_path, timeout=10)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA busy_timeout=30000")
@@ -235,8 +235,8 @@ def _print_activity_report(session_id: str):
                         break
             if has_external:
                 break
-        if has_external and "omega_store" not in {t for t in tool_names}:
-            print("  [MISSED] External action without omega_store — outcome not persisted for future sessions.")
+        if has_external and "cairn_store" not in {t for t in tool_names}:
+            print("  [MISSED] External action without cairn_store — outcome not persisted for future sessions.")
     except Exception:
         pass
 
@@ -248,7 +248,7 @@ def _build_summary(session_id: str, project: str) -> str:
     session_summary type is excluded entirely to prevent circular refs.
     """
     try:
-        from omega.bridge import query_structured
+        from cairn.bridge import query_structured
     except ImportError:
         return "Session ended"
 
@@ -296,13 +296,13 @@ def _build_summary(session_id: str, project: str) -> str:
 
 def _get_reflect_store():
     """Lazy import store for reflection. Separated for testability."""
-    from omega.bridge import _get_store
+    from cairn.bridge import _get_store
     return _get_store()
 
 
-# Lazy import: may be None if omega.reflect is not installed
+# Lazy import: may be None if cairn.reflect is not installed
 try:
-    from omega.reflect import find_contradictions
+    from cairn.reflect import find_contradictions
 except ImportError:
     find_contradictions = None
 
@@ -322,7 +322,7 @@ def _auto_reflect(session_id: str, project: str) -> dict:
                 summary += f"- '{c.get('memory_a_content', '')[:80]}' vs '{c.get('memory_b_content', '')[:80]}'\n"
 
             try:
-                from omega.bridge import auto_capture
+                from cairn.bridge import auto_capture
                 auto_capture(
                     content=summary,
                     event_type="lesson_learned",
@@ -342,7 +342,7 @@ def _auto_feedback_on_surfaced(session_id: str):
     """Auto-record 'helpful' feedback for memories surfaced during active work."""
     if not session_id:
         return
-    json_path = Path.home() / ".omega" / f"session-{session_id}.surfaced.json"
+    json_path = Path.home() / ".cairn" / f"session-{session_id}.surfaced.json"
     if not json_path.exists():
         return
     try:
@@ -355,7 +355,7 @@ def _auto_feedback_on_surfaced(session_id: str):
         if not all_ids:
             return
 
-        from omega.bridge import record_feedback
+        from cairn.bridge import record_feedback
         count = 0
         for mid in list(all_ids)[:10]:  # Cap at 10 feedback calls
             try:
@@ -417,7 +417,7 @@ def _capture_usage_to_supabase(session_id: str, project_dir: str):
         sb_url = os.environ.get("SUPABASE_URL", "")
         sb_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
         if not sb_url or not sb_key:
-            env_file = Path.home() / "Projects" / "omega" / "website" / ".env.local"
+            env_file = Path.home() / "Projects" / "cairn" / "website" / ".env.local"
             if env_file.exists():
                 for line in env_file.read_text().splitlines():
                     line = line.strip()
@@ -537,7 +537,7 @@ def main():
     _auto_feedback_on_surfaced(session_id)
     _print_activity_report(session_id)
 
-    # Auto-reflect: detect contradictions (Part C — omega_reflect has 0 agent calls)
+    # Auto-reflect: detect contradictions (Part C — cairn_reflect has 0 agent calls)
     try:
         reflect_result = _auto_reflect(session_id, project)
         if reflect_result["contradictions_found"] > 0:
@@ -548,20 +548,20 @@ def main():
     # Cloud push fallback — when the hook_server is down (OOM), this fast_hook
     # path is the only session_stop that fires. Push to cloud here too.
     try:
-        from omega.cloud.sync import get_sync
+        from cairn.cloud.sync import get_sync
         get_sync().sync_all()
-        push_marker = Path.home() / ".omega" / "last-cloud-push"
+        push_marker = Path.home() / ".cairn" / "last-cloud-push"
         push_marker.write_text(datetime.now(timezone.utc).isoformat())
     except Exception:
         pass  # Fail-open: cloud push is best-effort
 
-    if os.environ.get("OMEGA_NO_SESSION_SUMMARY", "").strip() == "1":
+    if os.environ.get("CAIRN_NO_SESSION_SUMMARY", "").strip() == "1":
         return
 
     summary = _build_summary(session_id, project)
 
     try:
-        from omega.bridge import auto_capture
+        from cairn.bridge import auto_capture
         auto_capture(
             content=f"Session summary: {summary}",
             event_type="session_summary",
@@ -573,12 +573,12 @@ def main():
         pass
     except Exception as e:
         _log_hook_error("session_stop", e)
-        print(f"OMEGA session_stop failed: {e}", file=sys.stderr)
+        print(f"Cairn session_stop failed: {e}", file=sys.stderr)
 
 
 def _log_timing(hook_name, elapsed_ms):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         data = f"[{timestamp}] {hook_name}: OK ({elapsed_ms:.0f}ms)\n"

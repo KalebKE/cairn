@@ -1,13 +1,13 @@
 """Bridge integration tests -- real SQLiteStore, no mocking.
 
-Tests the public bridge API end-to-end with a temporary OMEGA directory
+Tests the public bridge API end-to-end with a temporary Cairn directory
 and a fresh SQLiteStore per test (via the _reset_bridge fixture).
 """
 
 import os
 import pytest
 
-from omega.bridge import (
+from cairn.bridge import (
     auto_capture,
     clear_session,
     delete_memory,
@@ -28,7 +28,7 @@ from omega.bridge import (
 
 
 @pytest.fixture(autouse=True)
-def _reset_bridge(tmp_omega_dir):
+def _reset_bridge(tmp_cairn_dir):
     """Reset the bridge singleton so each test gets a fresh store."""
     reset_memory()
     yield
@@ -237,7 +237,7 @@ def test_clear_session():
 # ============================================================================
 
 
-def test_export_import_roundtrip(tmp_omega_dir):
+def test_export_import_roundtrip(tmp_cairn_dir):
     """Store memories, export, reset, import, then query to verify."""
     store(
         "Roundtrip test memory: always validate exports before deploying to production",
@@ -248,7 +248,7 @@ def test_export_import_roundtrip(tmp_omega_dir):
         event_type="decision",
     )
 
-    export_path = str(tmp_omega_dir / "export_test.json")
+    export_path = str(tmp_cairn_dir / "export_test.json")
 
     # Export
     export_result = export_memories(export_path)

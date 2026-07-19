@@ -1,11 +1,11 @@
-"""Tests for omega.db_utils retry logic."""
+"""Tests for cairn.db_utils retry logic."""
 
 import sqlite3
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from omega.db_utils import DB_RETRY_ATTEMPTS, retry_on_locked, retry_write_on_locked
+from cairn.db_utils import DB_RETRY_ATTEMPTS, retry_on_locked, retry_write_on_locked
 
 
 class TestRetryOnLocked:
@@ -14,7 +14,7 @@ class TestRetryOnLocked:
         assert retry_on_locked(fn, "a", b="c") == 42
         fn.assert_called_once_with("a", b="c")
 
-    @patch("omega.db_utils.time.sleep")
+    @patch("cairn.db_utils.time.sleep")
     def test_retries_on_locked_error(self, mock_sleep):
         fn = MagicMock(
             side_effect=[
@@ -32,7 +32,7 @@ class TestRetryOnLocked:
             retry_on_locked(fn)
         fn.assert_called_once()
 
-    @patch("omega.db_utils.time.sleep")
+    @patch("cairn.db_utils.time.sleep")
     def test_exhausts_attempts(self, mock_sleep):
         fn = MagicMock(
             side_effect=sqlite3.OperationalError("database is locked")
@@ -52,7 +52,7 @@ class TestRetryWriteOnLocked:
         conn.commit.assert_called_once()
         fn.assert_called_once_with("x")
 
-    @patch("omega.db_utils.time.sleep")
+    @patch("cairn.db_utils.time.sleep")
     def test_retries_on_locked(self, mock_sleep):
         conn = MagicMock()
         conn.execute.side_effect = [
@@ -65,7 +65,7 @@ class TestRetryWriteOnLocked:
         conn.rollback.assert_called_once()
         mock_sleep.assert_called_once()
 
-    @patch("omega.db_utils.time.sleep")
+    @patch("cairn.db_utils.time.sleep")
     def test_rollback_on_final_failure(self, mock_sleep):
         conn = MagicMock()
         conn.execute.side_effect = sqlite3.OperationalError("database is locked")
@@ -75,7 +75,7 @@ class TestRetryWriteOnLocked:
         # rollback called on every attempt
         assert conn.rollback.call_count == DB_RETRY_ATTEMPTS
 
-    @patch("omega.db_utils.time.sleep")
+    @patch("cairn.db_utils.time.sleep")
     def test_rollback_itself_fails(self, mock_sleep):
         conn = MagicMock()
         conn.execute.side_effect = sqlite3.OperationalError("database is locked")

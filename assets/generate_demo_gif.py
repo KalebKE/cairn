@@ -1,4 +1,4 @@
-"""Generate an animated terminal demo GIF for omega-memory.
+"""Generate an animated terminal demo GIF for cairn.
 
 Creates a simulated terminal session showing install, setup, and memory recall.
 Each frame has an explicit duration -- no duplicate frames needed.
@@ -75,7 +75,7 @@ def make_base_frame():
         draw.ellipse([cx - 6, dot_y - 6, cx + 6, dot_y + 6], fill=color)
 
     # Title text
-    title = "Terminal -- omega-memory demo"
+    title = "Terminal -- cairn demo"
     bbox = draw.textbbox((0, 0), title, font=FONT_MONO_SM)
     tw = bbox[2] - bbox[0]
     draw.text(((WIDTH - tw) // 2, dot_y - 7), title, fill=GRAY, font=FONT_MONO_SM)
@@ -193,22 +193,22 @@ def generate_gif():
     pause(800)
 
     # =====================================================================
-    # SCENE 2: pip install omega-memory
+    # SCENE 2: pip install cairn
     # =====================================================================
-    type_command("pip install omega-memory")
+    type_command("pip install cairn")
     pause(PAUSE_SHORT)
 
     add_output([
-        (DIM_WHITE, "Collecting omega-memory"),
-        (DIM_WHITE, "  Downloading omega_memory-0.8.0-py3-none-any.whl"),
-        (GREEN, "Successfully installed omega-memory-0.8.0"),
+        (DIM_WHITE, "Collecting cairn"),
+        (DIM_WHITE, "  Downloading cairn_memory-0.8.0-py3-none-any.whl"),
+        (GREEN, "Successfully installed cairn-0.8.0"),
     ])
     pause(PAUSE_MEDIUM)
 
     # =====================================================================
-    # SCENE 3: omega setup
+    # SCENE 3: cairn setup
     # =====================================================================
-    type_command("omega setup")
+    type_command("cairn setup")
     pause(PAUSE_SHORT)
 
     add_output([
@@ -233,7 +233,7 @@ def generate_gif():
     pause(PAUSE_SHORT)
 
     # =====================================================================
-    # SCENE 6: OMEGA response appears line by line
+    # SCENE 6: Cairn response appears line by line
     # =====================================================================
     add_output([
         (ACCENT,    "\u2192 Decision (Feb 1):"),

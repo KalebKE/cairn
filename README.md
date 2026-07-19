@@ -1,9 +1,9 @@
-# OMEGA
+# Cairn
 
 **Cross-model memory for AI agents. Local-first. Works with Claude, GPT, Gemini, Cursor, Claw Code, and any MCP client.** Your agent's brain shouldn't live on someone else's server, or be locked to one provider.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![PyPI](https://img.shields.io/pypi/v/omega-memory.svg)](https://pypi.org/project/omega-memory/)
+[![PyPI](https://img.shields.io/pypi/v/cairn.svg)](https://pypi.org/project/cairn/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-1123%20passing-brightgreen.svg)]()
 
@@ -18,46 +18,46 @@ AI coding agents are stateless. Every new session starts from zero. The "solutio
 - **Cloud memory = someone else's database.** Services like Mem0 require API keys and send your data to their servers. When they change pricing, get acquired, or go down, your agent's accumulated intelligence disappears.
 - **Vendor lock-in.** Anthropic's Memory Tool only works with Claude. OpenAI's memory only works with GPT. Switch models, lose your memory.
 
-OMEGA solves this. Memory, coordination, and learning that runs entirely on your machine. Works with every major LLM and coding agent. No cloud. No API keys. No vendor lock-in.
+Cairn solves this. Memory, coordination, and learning that runs entirely on your machine. Works with every major LLM and coding agent. No cloud. No API keys. No vendor lock-in.
 
 <!-- TODO: terminal GIF showing memory recall across sessions -->
-<!-- mcp-name: io.github.omega-memory/omega-memory -->
+<!-- mcp-name: io.github.tracqitechnology/cairn -->
 
 ## Quick Install
 
 ```bash
-pip install omega-memory[server]    # Full install (memory + MCP server)
-omega setup                         # Downloads model, registers MCP, installs hooks
-omega doctor                        # Verify everything works
+pip install cairn[server]    # Full install (memory + MCP server)
+cairn setup                         # Downloads model, registers MCP, installs hooks
+cairn doctor                        # Verify everything works
 ```
 
 ### Claude Desktop
 
 ```bash
-pip install omega-memory[server]
-omega setup --client claude-desktop
+pip install cairn[server]
+cairn setup --client claude-desktop
 ```
 
-This registers OMEGA as an MCP server in Claude Desktop's config. Restart Claude Desktop to activate.
+This registers Cairn as an MCP server in Claude Desktop's config. Restart Claude Desktop to activate.
 
 ### Cursor, Claw Code, Windsurf, Cline, Codex
 
 ```bash
-pip install omega-memory[server]
-omega setup --client cursor      # or: claw-code, windsurf, cline, codex
+pip install cairn[server]
+cairn setup --client cursor      # or: claw-code, windsurf, cline, codex
 ```
 
 <details>
 <summary><strong>Library-only install (no MCP server)</strong></summary>
 
-If you only need OMEGA as a Python library for scripts, CI/CD, or automation:
+If you only need Cairn as a Python library for scripts, CI/CD, or automation:
 
 ```bash
-pip install omega-memory    # Core only, no MCP server process
+pip install cairn    # Core only, no MCP server process
 ```
 
 ```python
-from omega import store, query, remember
+from cairn import store, query, remember
 
 store("Always use TypeScript strict mode", "user_preference")
 results = query("TypeScript preferences")
@@ -66,7 +66,7 @@ results = query("TypeScript preferences")
 This gives you the full storage and retrieval API without running an MCP server (~50 MB lighter, no background process). Hooks still work:
 
 ```bash
-omega setup --hooks-only    # Auto-capture + memory surfacing, no MCP server (~600MB RAM saved)
+cairn setup --hooks-only    # Auto-capture + memory surfacing, no MCP server (~600MB RAM saved)
 ```
 
 </details>
@@ -74,22 +74,22 @@ omega setup --hooks-only    # Auto-capture + memory surfacing, no MCP server (~6
 ### From Source
 
 ```bash
-git clone https://github.com/omega-memory/omega.git
-cd omega
+git clone https://github.com/TracqiTechnology/cairn.git
+cd cairn
 pip install -e ".[server,dev]"
-omega setup
+cairn setup
 ```
 
-`omega setup` will:
-1. Create `~/.omega/` directory
-2. Download the ONNX embedding model (~90 MB) to `~/.cache/omega/models/`
-3. Register `omega-memory` as an MCP server (Claude Code auto-detected, or specify --client)
+`cairn setup` will:
+1. Create `~/.cairn/` directory
+2. Download the ONNX embedding model (~90 MB) to `~/.cache/cairn/models/`
+3. Register `cairn` as an MCP server (Claude Code auto-detected, or specify --client)
 4. Install session hooks into `~/.claude/settings.json`
-5. Add an OMEGA block to `~/.claude/CLAUDE.md`
+5. Add an Cairn block to `~/.claude/CLAUDE.md`
 
 ## 60-Second Quickstart
 
-OMEGA works through natural language — no API calls, no configuration. Just talk to Claude.
+Cairn works through natural language — no API calls, no configuration. Just talk to Claude.
 
 **1. Tell Claude to remember something:**
 > "Remember that the auth system uses JWT tokens, not session cookies"
@@ -101,7 +101,7 @@ Claude stores this as a permanent memory with semantic embeddings.
 **3. Ask about it:**
 > "What did I decide about authentication?"
 
-OMEGA surfaces the relevant memory automatically:
+Cairn surfaces the relevant memory automatically:
 ```
 Found 1 relevant memory:
   [decision] "The auth system uses JWT tokens, not session cookies"
@@ -114,19 +114,19 @@ That's it. Memories persist across sessions, accumulate over time, and are surfa
 
 - **Memory & Learning** — Stores decisions, lessons, error patterns, and preferences with semantic search. Claude recalls what matters without you re-explaining everything each session. 25 memory tools including compaction, consolidation, timeline, graph traversal, and context virtualization (checkpoint/resume).
 
-- **Multi-Agent Coordination** *(omega-pro)* — File and branch locking, session management, task queues with dependencies, intent broadcasting, and agent-to-agent messaging. 29 coordination tools that prevent agents from overwriting each other's work.
+- **Multi-Agent Coordination** *(cairn-pro)* — File and branch locking, session management, task queues with dependencies, intent broadcasting, and agent-to-agent messaging. 29 coordination tools that prevent agents from overwriting each other's work.
 
-- **Intelligent LLM Routing** *(omega-pro)* — Classifies tasks and routes to the optimal model. Coding → Claude Sonnet. Quick edit → Llama 8b at 1/60th the cost. 1M token context → Gemini Flash. 5 providers, 4 priority modes, sub-2ms intent classification.
+- **Intelligent LLM Routing** *(cairn-pro)* — Classifies tasks and routes to the optimal model. Coding → Claude Sonnet. Quick edit → Llama 8b at 1/60th the cost. 1M token context → Gemini Flash. 5 providers, 4 priority modes, sub-2ms intent classification.
 
-- **Knowledge Base** *(omega-pro)* — Ingest PDFs, markdown, web pages, and text files into a searchable knowledge base with semantic chunking.
+- **Knowledge Base** *(cairn-pro)* — Ingest PDFs, markdown, web pages, and text files into a searchable knowledge base with semantic chunking.
 
-- **Entity Registry** *(omega-pro)* — Multi-entity corporate memory with relationships, hierarchies, and entity-scoped memories/profiles/documents.
+- **Entity Registry** *(cairn-pro)* — Multi-entity corporate memory with relationships, hierarchies, and entity-scoped memories/profiles/documents.
 
-- **Secure Profile** *(omega-pro)* — AES-256 encrypted personal data storage with macOS Keychain integration.
+- **Secure Profile** *(cairn-pro)* — AES-256 encrypted personal data storage with macOS Keychain integration.
 
-## How OMEGA Compares
+## How Cairn Compares
 
-| Feature | OMEGA | Anthropic Memory | Mem0 | Zep |
+| Feature | Cairn | Anthropic Memory | Mem0 | Zep |
 |---------|:-----:|:----------------:|:----:|:---:|
 | Works with any LLM/agent | **Yes** | Claude only | Yes | Yes |
 | Your data stays on your machine | **Yes** | Partial* | No | No |
@@ -136,9 +136,9 @@ That's it. Memories persist across sessions, accumulate over time, and are surfa
 | Works with Claude Code, Cursor, Claw Code | **Yes** | Claude only | Partial | No |
 | Free & open source | **Yes** (Apache 2.0) | No | Freemium | Freemium |
 
-*Anthropic's Memory Tool stores data client-side but requires Claude API calls for all memory operations. OMEGA runs entirely on-device, including embeddings (ONNX).*
+*Anthropic's Memory Tool stores data client-side but requires Claude API calls for all memory operations. Cairn runs entirely on-device, including embeddings (ONNX).*
 
-**Anthropic Memory is for Anthropic. OMEGA is for everyone.**
+**Anthropic Memory is for Anthropic. Cairn is for everyone.**
 
 ## Architecture
 
@@ -148,7 +148,7 @@ That's it. Memories persist across sessions, accumulate over time, and are surfa
                └─────────┴─────┬───┴──────────────┘
                                │ stdio/MCP
                ┌───────────────▼─────────────┐
-               │   OMEGA MCP Server   │
+               │   Cairn MCP Server   │
                │   25 core tools      │
                └──┬──────────────────┘
                   │
@@ -160,48 +160,48 @@ That's it. Memories persist across sessions, accumulate over time, and are surfa
                │
                ▼
          ┌──────────────────────────────────────┐
-         │         omega.db (SQLite)             │
+         │         cairn.db (SQLite)             │
          │  memories | edges | embeddings        │
          └──────────────────────────────────────┘
 ```
 
-Single database, modular handlers. Optional modules (coordination, router, entity, knowledge, profile) are available via [omega-pro](https://github.com/omega-memory) and register into the same server process. No separate daemons, no microservices.
+Single database, modular handlers. Optional modules (coordination, router, entity, knowledge, profile) are available via [cairn-pro](https://github.com/cairn) and register into the same server process. No separate daemons, no microservices.
 
 ## MCP Tools Reference
 
-OMEGA runs as an MCP server inside Claude Code. The core package provides 25 memory tools. [omega-pro](https://github.com/omega-memory) adds coordination, routing, entity, knowledge, and profile tools.
+Cairn runs as an MCP server inside Claude Code. The core package provides 25 memory tools. [cairn-pro](https://github.com/cairn) adds coordination, routing, entity, knowledge, and profile tools.
 
 ### Memory (25 tools)
 
 | Tool | What it does |
 |------|-------------|
-| `omega_store` | Store typed memory (decision, lesson, error, summary) |
-| `omega_query` | Semantic search with tag filters and contextual re-ranking |
-| `omega_welcome` | Session briefing with recent memories and profile |
-| `omega_profile` | Read or update user profile |
-| `omega_delete_memory` | Delete a specific memory by ID |
-| `omega_edit_memory` | Edit the content of a memory |
-| `omega_list_preferences` | List all stored user preferences |
-| `omega_health` | Detailed health check with memory usage and recommendations |
-| `omega_backup` | Export or import memories for backup/restore |
-| `omega_lessons` | Cross-session lessons ranked by access count |
-| `omega_feedback` | Record feedback on a surfaced memory |
-| `omega_clear_session` | Clear all memories for a specific session |
-| `omega_similar` | Find memories similar to a given one |
-| `omega_timeline` | Memories grouped by day |
-| `omega_consolidate` | Prune stale memories, cap summaries, clean edges |
-| `omega_traverse` | Walk the relationship graph |
-| `omega_compact` | Cluster and summarize related memories |
-| `omega_checkpoint` | Save task state for cross-session continuity |
-| `omega_resume_task` | Resume a previously checkpointed task |
-| `omega_remind` | Set a time-based reminder |
-| `omega_remind_list` | List active reminders |
-| `omega_remind_dismiss` | Dismiss a reminder |
-| `omega_type_stats` | Memory counts grouped by event type |
-| `omega_session_stats` | Memory counts grouped by session |
-| `omega_weekly_digest` | Weekly knowledge digest with stats and trends |
+| `cairn_store` | Store typed memory (decision, lesson, error, summary) |
+| `cairn_query` | Semantic search with tag filters and contextual re-ranking |
+| `cairn_welcome` | Session briefing with recent memories and profile |
+| `cairn_profile` | Read or update user profile |
+| `cairn_delete_memory` | Delete a specific memory by ID |
+| `cairn_edit_memory` | Edit the content of a memory |
+| `cairn_list_preferences` | List all stored user preferences |
+| `cairn_health` | Detailed health check with memory usage and recommendations |
+| `cairn_backup` | Export or import memories for backup/restore |
+| `cairn_lessons` | Cross-session lessons ranked by access count |
+| `cairn_feedback` | Record feedback on a surfaced memory |
+| `cairn_clear_session` | Clear all memories for a specific session |
+| `cairn_similar` | Find memories similar to a given one |
+| `cairn_timeline` | Memories grouped by day |
+| `cairn_consolidate` | Prune stale memories, cap summaries, clean edges |
+| `cairn_traverse` | Walk the relationship graph |
+| `cairn_compact` | Cluster and summarize related memories |
+| `cairn_checkpoint` | Save task state for cross-session continuity |
+| `cairn_resume_task` | Resume a previously checkpointed task |
+| `cairn_remind` | Set a time-based reminder |
+| `cairn_remind_list` | List active reminders |
+| `cairn_remind_dismiss` | Dismiss a reminder |
+| `cairn_type_stats` | Memory counts grouped by event type |
+| `cairn_session_stats` | Memory counts grouped by session |
+| `cairn_weekly_digest` | Weekly knowledge digest with stats and trends |
 
-### Additional tools with omega-pro
+### Additional tools with cairn-pro
 
 | Module | Tools | Description |
 |--------|------:|-------------|
@@ -215,20 +215,20 @@ OMEGA runs as an MCP server inside Claude Code. The core package provides 25 mem
 
 | Command | Description |
 |---------|-------------|
-| `omega setup` | Create dirs, download model, register MCP, install hooks (`--hooks-only` to skip MCP) |
-| `omega doctor` | Verify installation health |
-| `omega status` | Memory count, store size, model status |
-| `omega query <text>` | Search memories by semantic similarity |
-| `omega store <text>` | Store a memory with a specified type |
-| `omega timeline` | Show memory timeline grouped by day |
-| `omega activity` | Show recent session activity overview |
-| `omega stats` | Memory type distribution and health summary |
-| `omega consolidate` | Deduplicate, prune, and optimize memory |
-| `omega compact` | Cluster and summarize related memories |
-| `omega backup` | Back up omega.db (keeps last 5) |
-| `omega validate` | Validate database integrity |
-| `omega logs` | Show recent hook errors |
-| `omega migrate-db` | Migrate legacy JSON to SQLite |
+| `cairn setup` | Create dirs, download model, register MCP, install hooks (`--hooks-only` to skip MCP) |
+| `cairn doctor` | Verify installation health |
+| `cairn status` | Memory count, store size, model status |
+| `cairn query <text>` | Search memories by semantic similarity |
+| `cairn store <text>` | Store a memory with a specified type |
+| `cairn timeline` | Show memory timeline grouped by day |
+| `cairn activity` | Show recent session activity overview |
+| `cairn stats` | Memory type distribution and health summary |
+| `cairn consolidate` | Deduplicate, prune, and optimize memory |
+| `cairn compact` | Cluster and summarize related memories |
+| `cairn backup` | Back up cairn.db (keeps last 5) |
+| `cairn validate` | Validate database integrity |
+| `cairn logs` | Show recent hook errors |
+| `cairn migrate-db` | Migrate legacy JSON to SQLite |
 
 <details>
 <summary><strong>Advanced Details</strong></summary>
@@ -245,16 +245,16 @@ All hooks dispatch via `fast_hook.py` → daemon UDS socket, with fail-open sema
 | PostToolUse | Edit/Write/NotebookEdit | `surface_memories` | Surface relevant memories |
 | PostToolUse | Bash/Read | `surface_memories` | Surface relevant memories |
 
-> With omega-pro, additional coordination handlers register automatically: session lifecycle, file/branch claim guards, heartbeat, and git push guards.
+> With cairn-pro, additional coordination handlers register automatically: session lifecycle, file/branch claim guards, heartbeat, and git push guards.
 
 ### Storage
 
 | Path | Purpose |
 |------|---------|
-| `~/.omega/omega.db` | SQLite database (memories, embeddings, edges) |
-| `~/.omega/profile.json` | User profile |
-| `~/.omega/hooks.log` | Hook error log |
-| `~/.cache/omega/models/bge-small-en-v1.5-onnx/` | ONNX embedding model |
+| `~/.cairn/cairn.db` | SQLite database (memories, embeddings, edges) |
+| `~/.cairn/profile.json` | User profile |
+| `~/.cairn/hooks.log` | Hook error log |
+| `~/.cache/cairn/models/bge-small-en-v1.5-onnx/` | ONNX embedding model |
 
 ### Search Pipeline
 
@@ -280,11 +280,11 @@ All hooks dispatch via `fast_hook.py` → daemon UDS socket, with fail-open sema
 
 ### What Gets Modified
 
-`omega setup` modifies these files outside `~/.omega/`:
+`cairn setup` modifies these files outside `~/.cairn/`:
 
-- `~/.claude.json` — Adds `omega-memory` MCP server entry
+- `~/.claude.json` — Adds `cairn` MCP server entry
 - `~/.claude/settings.json` — Adds hook entries
-- `~/.claude/CLAUDE.md` — Adds a managed `<!-- OMEGA:BEGIN -->` block
+- `~/.claude/CLAUDE.md` — Adds a managed `<!-- Cairn:BEGIN -->` block
 
 All changes are idempotent.
 
@@ -292,21 +292,21 @@ All changes are idempotent.
 
 ## Troubleshooting
 
-**`omega doctor` shows FAIL on import:**
+**`cairn doctor` shows FAIL on import:**
 - Ensure `pip install -e ".[server]"` from the repo root
-- Check `python3 -c "import omega"` works
+- Check `python3 -c "import cairn"` works
 
 **MCP server fails to start:**
-- Run `pip install omega-memory[server]` (the `[server]` extra includes the MCP package)
+- Run `pip install cairn[server]` (the `[server]` extra includes the MCP package)
 
 **MCP server not registered:**
 ```bash
-claude mcp add omega-memory -- python3 -m omega.server.mcp_server
+claude mcp add cairn -- python3 -m cairn.server.mcp_server
 ```
 
 **Hooks not firing:**
-- Check `~/.claude/settings.json` has OMEGA hook entries
-- Check `~/.omega/hooks.log` for errors
+- Check `~/.claude/settings.json` has Cairn hook entries
+- Check `~/.cairn/hooks.log` for errors
 
 ## Development
 
@@ -319,19 +319,19 @@ ruff check src/              # Lint
 ## Uninstall
 
 ```bash
-claude mcp remove omega-memory
-rm -rf ~/.omega ~/.cache/omega
-pip uninstall omega-memory
+claude mcp remove cairn
+rm -rf ~/.cairn ~/.cache/cairn
+pip uninstall cairn
 ```
 
-Manually remove OMEGA entries from `~/.claude/settings.json` and the `<!-- OMEGA:BEGIN -->` block from `~/.claude/CLAUDE.md`.
+Manually remove Cairn entries from `~/.claude/settings.json` and the `<!-- Cairn:BEGIN -->` block from `~/.claude/CLAUDE.md`.
 
 ## Contributing
 
 - [Contributing Guide](CONTRIBUTING.md)
 - [Security Policy](SECURITY.md)
 - [Changelog](CHANGELOG.md)
-- [Report a Bug](https://github.com/omega-memory/omega/issues)
+- [Report a Bug](https://github.com/TracqiTechnology/cairn/issues)
 
 ## License
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Simulated before/after OMEGA demo for README GIF
+# Simulated before/after Cairn demo for README GIF
 # Run: vhs assets/demo.tape
 
 # ── Colors ───────────────────────────────────────────────────────
@@ -80,17 +80,17 @@ printf "  ${BRED}  Same problem. Same investigation. From scratch.${RESET}\n"
 pause 2.5
 
 # ══════════════════════════════════════════════════════════════════
-# ACT 2: WITH OMEGA
+# ACT 2: WITH Cairn
 # ══════════════════════════════════════════════════════════════════
 clear
 printf "\n"
 printf "  ${DGRAY}───────────────────────────────────────${RESET}\n"
-printf "  ${WHITE}${BOLD}  With OMEGA${RESET}\n"
+printf "  ${WHITE}${BOLD}  With Cairn${RESET}\n"
 printf "  ${DGRAY}───────────────────────────────────────${RESET}\n"
 printf "\n"
 pause 1
 
-printf "  ${WHITE}${BOLD}Session 1${RESET}  ${DGRAY}|${RESET}  ${BPURPLE}OMEGA${RESET} ${DGRAY}47 memories${RESET}\n\n"
+printf "  ${WHITE}${BOLD}Session 1${RESET}  ${DGRAY}|${RESET}  ${BPURPLE}Cairn${RESET} ${DGRAY}47 memories${RESET}\n\n"
 pause 0.5
 
 printf "  ${BGREEN}>${RESET} "
@@ -104,7 +104,7 @@ pause 0.3
 printf "  ${GRAY}Fix:${RESET} ${CYAN}npm install node-fetch@3${RESET}\n\n"
 pause 0.6
 
-printf "  ${BGREEN}✓${RESET} ${BPURPLE}OMEGA${RESET} ${DGRAY}auto-captured:${RESET}\n"
+printf "  ${BGREEN}✓${RESET} ${BPURPLE}Cairn${RESET} ${DGRAY}auto-captured:${RESET}\n"
 printf "    ${BCYAN}[lesson]${RESET} ${DGRAY}CJS/ESM mismatch: upgrade to ESM-native version${RESET}\n"
 pause 2
 
@@ -114,10 +114,10 @@ printf "\n\n\n"
 printf "  ${DGRAY}              - - -${RESET}  ${WHITE}${BOLD}3 days later${RESET}  ${DGRAY}- - -${RESET}\n\n\n"
 pause 1.8
 
-# Session 2 with OMEGA
+# Session 2 with Cairn
 clear
 printf "\n"
-printf "  ${WHITE}${BOLD}Session 2${RESET}  ${DGRAY}|${RESET}  ${BPURPLE}OMEGA${RESET} ${DGRAY}53 memories${RESET}\n\n"
+printf "  ${WHITE}${BOLD}Session 2${RESET}  ${DGRAY}|${RESET}  ${BPURPLE}Cairn${RESET} ${DGRAY}53 memories${RESET}\n\n"
 pause 0.5
 
 printf "  ${BGREEN}>${RESET} "
@@ -125,7 +125,7 @@ type_slow "Same \"require() of ES Module\" in analytics service" 0.025
 printf "\n\n"
 pause 0.5
 
-printf "  ${BPURPLE}● OMEGA recalled:${RESET}\n"
+printf "  ${BPURPLE}● Cairn recalled:${RESET}\n"
 pause 0.2
 printf "    ${BCYAN}[lesson]${RESET} ${GRAY}CJS/ESM mismatch: upgrade to ESM-native version.${RESET}\n"
 printf "    ${DGRAY}Stored 3 days ago  |  confidence 0.94${RESET}\n\n"

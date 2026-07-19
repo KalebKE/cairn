@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OMEGA PreToolUse hook — Alignment gate (fallback mode).
+"""Cairn PreToolUse hook — Alignment gate (fallback mode).
 
 Degraded fallback for when the hook daemon is unavailable.
 Checks if the target file's domain has active decisions and surfaces them.
@@ -20,7 +20,7 @@ from pathlib import Path
 
 def _log_hook_error(hook_name, error):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         tb = traceback.format_exc()
@@ -69,7 +69,7 @@ def main():
             return
 
         # Single-agent fast path
-        from omega.coordination import get_manager
+        from cairn.coordination import get_manager
 
         mgr = get_manager()
         if mgr.active_session_count() <= 1:
@@ -102,7 +102,7 @@ def main():
         lines = [f"[ALIGNMENT] {len(decisions)} active decision(s) in domain '{domain}':"]
         for d in decisions:
             lines.append(f"  #{d['id']} [{d['domain']}]: {d['decision'][:120]}")
-        lines.append("  Comply with these decisions or supersede with omega_decision_register.")
+        lines.append("  Comply with these decisions or supersede with cairn_decision_register.")
         print("\n".join(lines))
 
     except Exception as e:

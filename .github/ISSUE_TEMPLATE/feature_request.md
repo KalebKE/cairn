@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest a feature for OMEGA
+about: Suggest a feature for Cairn
 title: '[Feature] '
 labels: enhancement
 assignees: ''

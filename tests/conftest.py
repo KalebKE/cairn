@@ -1,45 +1,45 @@
-"""OMEGA test configuration."""
+"""Cairn test configuration."""
 import os
 import sys
 import pytest
 from pathlib import Path
 
-# Ensure omega package and hooks are importable
+# Ensure cairn package and hooks are importable
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "hooks"))
 
 
 @pytest.fixture
-def tmp_omega_dir(tmp_path):
-    """Create a temporary OMEGA directory for testing."""
-    omega_dir = tmp_path / ".omega"
-    omega_dir.mkdir()
-    os.environ["OMEGA_HOME"] = str(omega_dir)
+def tmp_cairn_dir(tmp_path):
+    """Create a temporary Cairn directory for testing."""
+    cairn_dir = tmp_path / ".cairn"
+    cairn_dir.mkdir()
+    os.environ["CAIRN_HOME"] = str(cairn_dir)
     # Default: disable encryption in tests for deterministic output
-    old_encrypt = os.environ.get("OMEGA_ENCRYPT")
-    os.environ["OMEGA_ENCRYPT"] = "0"
-    yield omega_dir
-    os.environ.pop("OMEGA_HOME", None)
+    old_encrypt = os.environ.get("CAIRN_ENCRYPT")
+    os.environ["CAIRN_ENCRYPT"] = "0"
+    yield cairn_dir
+    os.environ.pop("CAIRN_HOME", None)
     if old_encrypt is not None:
-        os.environ["OMEGA_ENCRYPT"] = old_encrypt
+        os.environ["CAIRN_ENCRYPT"] = old_encrypt
     else:
-        os.environ.pop("OMEGA_ENCRYPT", None)
-    from omega.crypto import reset_crypto_state
+        os.environ.pop("CAIRN_ENCRYPT", None)
+    from cairn.crypto import reset_crypto_state
     reset_crypto_state()
 
 
 @pytest.fixture
-def tmp_omega_dir_encrypted(tmp_path):
-    """Create a temporary OMEGA directory with encryption enabled."""
-    omega_dir = tmp_path / ".omega"
-    omega_dir.mkdir()
-    os.environ["OMEGA_HOME"] = str(omega_dir)
-    os.environ["OMEGA_ENCRYPT"] = "1"
-    from omega.crypto import reset_crypto_state
+def tmp_cairn_dir_encrypted(tmp_path):
+    """Create a temporary Cairn directory with encryption enabled."""
+    cairn_dir = tmp_path / ".cairn"
+    cairn_dir.mkdir()
+    os.environ["CAIRN_HOME"] = str(cairn_dir)
+    os.environ["CAIRN_ENCRYPT"] = "1"
+    from cairn.crypto import reset_crypto_state
     reset_crypto_state()
-    yield omega_dir
-    os.environ.pop("OMEGA_HOME", None)
-    os.environ.pop("OMEGA_ENCRYPT", None)
+    yield cairn_dir
+    os.environ.pop("CAIRN_HOME", None)
+    os.environ.pop("CAIRN_ENCRYPT", None)
     reset_crypto_state()
 
 
@@ -47,12 +47,12 @@ def tmp_omega_dir_encrypted(tmp_path):
 def _reset_embeddings_after_test():
     """Reset embedding circuit-breaker after every test to prevent state leaks."""
     yield
-    from omega.embedding import reset_embedding_state
+    from cairn.embedding import reset_embedding_state
     reset_embedding_state()
 
 
 @pytest.fixture
-def _reset_bridge(tmp_omega_dir):
+def _reset_bridge(tmp_cairn_dir):
     """Reset the bridge singleton so each test gets a fresh store.
 
     Centralized definition: test modules can use this via
@@ -60,7 +60,7 @@ def _reset_bridge(tmp_omega_dir):
     Modules that need autouse behavior can define a local autouse fixture
     that depends on this one.
     """
-    from omega.bridge import reset_memory
+    from cairn.bridge import reset_memory
 
     reset_memory()
     yield
@@ -68,10 +68,10 @@ def _reset_bridge(tmp_omega_dir):
 
 
 @pytest.fixture
-def store(tmp_omega_dir):
+def store(tmp_cairn_dir):
     """Create a fresh SQLiteStore for testing."""
-    from omega.sqlite_store import SQLiteStore
-    db_path = tmp_omega_dir / "test.db"
+    from cairn.sqlite_store import SQLiteStore
+    db_path = tmp_cairn_dir / "test.db"
     s = SQLiteStore(db_path=db_path)
     yield s
     s.close()

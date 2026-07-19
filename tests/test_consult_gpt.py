@@ -1,12 +1,12 @@
-"""Tests for omega_consult_gpt tool: handler + gpt_complete function."""
+"""Tests for cairn_consult_gpt tool: handler + gpt_complete function."""
 
 import os
 from unittest.mock import patch
 
 import pytest
 
-from omega.server.tool_schemas import TOOL_SCHEMAS
-from omega.server.handlers import HANDLERS
+from cairn.server.tool_schemas import TOOL_SCHEMAS
+from cairn.server.handlers import HANDLERS
 
 
 # ---------------------------------------------------------------------------
@@ -16,11 +16,11 @@ from omega.server.handlers import HANDLERS
 
 def test_schema_registered():
     names = [s["name"] for s in TOOL_SCHEMAS]
-    assert "omega_consult_gpt" in names
+    assert "cairn_consult_gpt" in names
 
 
 def test_handler_registered():
-    assert "omega_consult_gpt" in HANDLERS
+    assert "cairn_consult_gpt" in HANDLERS
 
 
 # ---------------------------------------------------------------------------
@@ -30,7 +30,7 @@ def test_handler_registered():
 
 @pytest.mark.asyncio
 async def test_missing_prompt():
-    handler = HANDLERS["omega_consult_gpt"]
+    handler = HANDLERS["cairn_consult_gpt"]
     result = await handler({})
     assert result["isError"] is True
     assert "prompt" in result["content"][0]["text"].lower()
@@ -38,15 +38,15 @@ async def test_missing_prompt():
 
 @pytest.mark.asyncio
 async def test_empty_prompt():
-    handler = HANDLERS["omega_consult_gpt"]
+    handler = HANDLERS["cairn_consult_gpt"]
     result = await handler({"prompt": "   "})
     assert result["isError"] is True
 
 
 @pytest.mark.asyncio
 async def test_successful_consultation():
-    handler = HANDLERS["omega_consult_gpt"]
-    with patch("omega.llm.gpt_complete", return_value="Use connection pooling."):
+    handler = HANDLERS["cairn_consult_gpt"]
+    with patch("cairn.llm.gpt_complete", return_value="Use connection pooling."):
         result = await handler({"prompt": "How to optimize DB connections?"})
     assert "isError" not in result
     text = result["content"][0]["text"]
@@ -56,8 +56,8 @@ async def test_successful_consultation():
 
 @pytest.mark.asyncio
 async def test_context_concatenation():
-    handler = HANDLERS["omega_consult_gpt"]
-    with patch("omega.llm.gpt_complete", return_value="Fix the index.") as mock:
+    handler = HANDLERS["cairn_consult_gpt"]
+    with patch("cairn.llm.gpt_complete", return_value="Fix the index.") as mock:
         await handler({"prompt": "Why is this slow?", "context": "SELECT * FROM big_table"})
     call_args = mock.call_args
     full_prompt = call_args[0][0]
@@ -68,8 +68,8 @@ async def test_context_concatenation():
 
 @pytest.mark.asyncio
 async def test_context_not_added_when_empty():
-    handler = HANDLERS["omega_consult_gpt"]
-    with patch("omega.llm.gpt_complete", return_value="Answer.") as mock:
+    handler = HANDLERS["cairn_consult_gpt"]
+    with patch("cairn.llm.gpt_complete", return_value="Answer.") as mock:
         await handler({"prompt": "Simple question"})
     full_prompt = mock.call_args[0][0]
     assert "--- Context ---" not in full_prompt
@@ -77,8 +77,8 @@ async def test_context_not_added_when_empty():
 
 @pytest.mark.asyncio
 async def test_empty_response_is_error():
-    handler = HANDLERS["omega_consult_gpt"]
-    with patch("omega.llm.gpt_complete", return_value=""):
+    handler = HANDLERS["cairn_consult_gpt"]
+    with patch("cairn.llm.gpt_complete", return_value=""):
         result = await handler({"prompt": "Test prompt"})
     assert result["isError"] is True
     assert "OPENAI_API_KEY" in result["content"][0]["text"]
@@ -86,8 +86,8 @@ async def test_empty_response_is_error():
 
 @pytest.mark.asyncio
 async def test_optional_params_forwarded():
-    handler = HANDLERS["omega_consult_gpt"]
-    with patch("omega.llm.gpt_complete", return_value="Response.") as mock:
+    handler = HANDLERS["cairn_consult_gpt"]
+    with patch("cairn.llm.gpt_complete", return_value="Response.") as mock:
         await handler({
             "prompt": "Test",
             "system": "You are a crypto expert.",
@@ -106,9 +106,9 @@ async def test_optional_params_forwarded():
 
 
 def test_gpt_complete_defaults():
-    from omega.llm import gpt_complete
+    from cairn.llm import gpt_complete
 
-    with patch("omega.llm._complete_openai", return_value="GPT says hi") as mock:
+    with patch("cairn.llm._complete_openai", return_value="GPT says hi") as mock:
         result = gpt_complete("Hello")
     assert result == "GPT says hi"
     mock.assert_called_once()
@@ -120,43 +120,43 @@ def test_gpt_complete_defaults():
 
 
 def test_gpt_complete_env_var_model():
-    from omega.llm import gpt_complete
+    from cairn.llm import gpt_complete
 
-    with patch.dict(os.environ, {"OMEGA_GPT_MODEL": "gpt-5.3"}):
-        with patch("omega.llm._complete_openai", return_value="ok") as mock:
+    with patch.dict(os.environ, {"CAIRN_GPT_MODEL": "gpt-5.3"}):
+        with patch("cairn.llm._complete_openai", return_value="ok") as mock:
             gpt_complete("Test")
     assert mock.call_args[1]["model"] == "gpt-5.3"
 
 
 def test_gpt_complete_explicit_model_overrides_env():
-    from omega.llm import gpt_complete
+    from cairn.llm import gpt_complete
 
-    with patch.dict(os.environ, {"OMEGA_GPT_MODEL": "gpt-5.3"}):
-        with patch("omega.llm._complete_openai", return_value="ok") as mock:
+    with patch.dict(os.environ, {"CAIRN_GPT_MODEL": "gpt-5.3"}):
+        with patch("cairn.llm._complete_openai", return_value="ok") as mock:
             gpt_complete("Test", model="gpt-4-turbo")
     assert mock.call_args[1]["model"] == "gpt-4-turbo"
 
 
 def test_gpt_complete_no_api_key():
-    from omega.llm import gpt_complete
+    from cairn.llm import gpt_complete
 
     with patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False):
-        with patch("omega.llm._complete_openai", return_value="") as mock:
+        with patch("cairn.llm._complete_openai", return_value="") as mock:
             result = gpt_complete("Test")
     assert result == ""
 
 
 def test_gpt_complete_exception_returns_empty():
-    from omega.llm import gpt_complete
+    from cairn.llm import gpt_complete
 
-    with patch("omega.llm._complete_openai", side_effect=Exception("API down")):
+    with patch("cairn.llm._complete_openai", side_effect=Exception("API down")):
         result = gpt_complete("Test")
     assert result == ""
 
 
 def test_gpt_complete_custom_system():
-    from omega.llm import gpt_complete
+    from cairn.llm import gpt_complete
 
-    with patch("omega.llm._complete_openai", return_value="ok") as mock:
+    with patch("cairn.llm._complete_openai", return_value="ok") as mock:
         gpt_complete("Test", system="You are a math tutor.")
     assert mock.call_args[0][1] == "You are a math tutor."

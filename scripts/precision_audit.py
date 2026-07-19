@@ -1,5 +1,5 @@
 #!/usr/bin/env python3.11
-"""Precision@K audit for OMEGA's query pipeline.
+"""Precision@K audit for Cairn's query pipeline.
 
 Measures Precision@1, Precision@3, and Precision@5 against a curated set of
 test queries with ground-truth keyword relevance judgments.
@@ -26,7 +26,7 @@ from typing import Dict, List, Tuple
 _project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_project_root / "src"))
 
-from omega.sqlite_store import SQLiteStore  # noqa: E402
+from cairn.sqlite_store import SQLiteStore  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -42,78 +42,78 @@ from omega.sqlite_store import SQLiteStore  # noqa: E402
 # ---------------------------------------------------------------------------
 
 TEST_QUERIES: List[Tuple[str, str, List[str]]] = [
-    # --- Factual: specific facts about OMEGA ---
+    # --- Factual: specific facts about Cairn ---
     (
         "factual",
-        "What embedding model does OMEGA use?",
+        "What embedding model does Cairn use?",
         ["embedding", "onnx", "all-minilm", "sentence-transformer", "384"],
     ),
     (
         "factual",
-        "What Python version does OMEGA require?",
+        "What Python version does Cairn require?",
         ["python", "3.11", "python3.11"],
     ),
     (
         "factual",
-        "How many MCP tools does OMEGA expose?",
+        "How many MCP tools does Cairn expose?",
         ["tool", "schema", "handler", "mcp"],
     ),
     (
         "factual",
-        "What reranker model does OMEGA support?",
+        "What reranker model does Cairn support?",
         ["reranker", "cross-encoder", "bge", "ms-marco", "minilm", "onnx"],
     ),
     # --- Conceptual: architecture and design decisions ---
     (
         "conceptual",
-        "How does OMEGA's query pipeline combine vector and text search?",
+        "How does Cairn's query pipeline combine vector and text search?",
         ["vector", "fts", "fusion", "rrf", "reciprocal rank", "composite", "rerank"],
     ),
     (
         "conceptual",
-        "What is the memory decay model in OMEGA?",
+        "What is the memory decay model in Cairn?",
         ["decay", "lambda", "exponential", "floor", "access_count", "ttl"],
     ),
     (
         "conceptual",
-        "How does OMEGA handle multi-agent coordination?",
+        "How does Cairn handle multi-agent coordination?",
         ["coordination", "agent", "session", "worktree", "peer", "lock", "claim"],
     ),
     (
         "conceptual",
-        "What deduplication strategies does OMEGA use for memories?",
+        "What deduplication strategies does Cairn use for memories?",
         ["dedup", "jaccard", "embedding", "cosine", "threshold", "similarity", "duplicate"],
     ),
     (
         "conceptual",
-        "How does the hook system dispatch events in OMEGA?",
+        "How does the hook system dispatch events in Cairn?",
         ["hook", "fast_hook", "dispatch", "event", "pre_", "post_"],
     ),
     # --- Navigational: finding specific code or config ---
     (
         "navigational",
-        "Where is the protocol definition for OMEGA sessions?",
+        "Where is the protocol definition for Cairn sessions?",
         ["protocol", "protocol.py", "session", "operating instruction"],
     ),
     (
         "navigational",
-        "Which file handles the omega_store MCP tool?",
+        "Which file handles the cairn_store MCP tool?",
         ["handler", "store", "server", "tool_schema", "mcp_server"],
     ),
     (
         "navigational",
-        "How is the OMEGA website deployed?",
-        ["vercel", "omegamax", "website", "deploy", "next.js"],
+        "How is the Cairn website deployed?",
+        ["vercel", "cairnmax", "website", "deploy", "next.js"],
     ),
     # --- Temporal: recent events and changes ---
     (
         "temporal",
-        "What recent changes were made to the OMEGA website?",
-        ["website", "omegamax", "vercel", "next.js", "deploy"],
+        "What recent changes were made to the Cairn website?",
+        ["website", "cairnmax", "vercel", "next.js", "deploy"],
     ),
     (
         "temporal",
-        "What was the last benchmark result for OMEGA?",
+        "What was the last benchmark result for Cairn?",
         ["benchmark", "longmemeval", "precision", "accuracy", "score", "f1"],
     ),
     # --- User preference: stored user decisions ---
@@ -124,8 +124,8 @@ TEST_QUERIES: List[Tuple[str, str, List[str]]] = [
     ),
     (
         "preference",
-        "What are the tweet posting rules for @omega_memory?",
-        ["tweet", "approval", "omega_memory", "post", "admin", "403", "gate"],
+        "What are the tweet posting rules for @cairn_memory?",
+        ["tweet", "approval", "cairn_memory", "post", "admin", "403", "gate"],
     ),
     (
         "preference",
@@ -189,7 +189,7 @@ def run_audit(
         results = store.query(
             query_text=query_text,
             limit=max(limit, 5),  # Always fetch at least 5
-            entity_id="omega",
+            entity_id="cairn",
             use_cache=False,  # Disable cache for honest measurement
             include_infrastructure=False,
             scope="global",
@@ -261,7 +261,7 @@ def print_report(summary: Dict, verbose: bool = False) -> None:
     """Print a human-readable precision audit report."""
 
     print("=" * 72)
-    print("  OMEGA Precision@K Audit")
+    print("  Cairn Precision@K Audit")
     print("=" * 72)
     print()
     print(f"  Queries: {summary['num_queries']}    Limit: {summary['limit']}")
@@ -326,7 +326,7 @@ def print_report(summary: Dict, verbose: bool = False) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="OMEGA Precision@K Audit")
+    parser = argparse.ArgumentParser(description="Cairn Precision@K Audit")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="Show ground-truth keywords per query")
     parser.add_argument("--json", "-j", action="store_true", dest="json_output",
@@ -334,7 +334,7 @@ def main():
     parser.add_argument("--limit", "-k", type=int, default=5,
                         help="K value for primary Precision@K (default: 5)")
     parser.add_argument("--db", type=str, default=None,
-                        help="Path to OMEGA SQLite database (default: ~/.omega/omega.db)")
+                        help="Path to Cairn SQLite database (default: ~/.cairn/cairn.db)")
     args = parser.parse_args()
 
     # Instantiate store

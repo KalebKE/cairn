@@ -1,30 +1,30 @@
-"""OMEGA storage backend for CrewAI's unified memory system.
+"""Cairn storage backend for CrewAI's unified memory system.
 
-This module provides ``OmegaStorage``, a CrewAI ``StorageBackend`` implementation
-that persists all crew/agent memories in OMEGA's local SQLite database. It also
-provides ``OmegaMemory``, a convenience factory that returns a CrewAI ``Memory``
-instance pre-configured with the OMEGA backend.
+This module provides ``CairnStorage``, a CrewAI ``StorageBackend`` implementation
+that persists all crew/agent memories in Cairn's local SQLite database. It also
+provides ``CairnMemory``, a convenience factory that returns a CrewAI ``Memory``
+instance pre-configured with the Cairn backend.
 
-OMEGA handles embeddings internally (bge-small-en-v1.5, 384-dim, local ONNX),
+Cairn handles embeddings internally (bge-small-en-v1.5, 384-dim, local ONNX),
 so no OpenAI API key is needed for the storage layer. However, CrewAI's Memory
 class still uses an LLM for analysis (scope inference, consolidation). You can
-either set ``OPENAI_API_KEY`` or pass a different LLM to ``OmegaMemory()``.
+either set ``OPENAI_API_KEY`` or pass a different LLM to ``CairnMemory()``.
 
 Requirements:
-    pip install omega-memory crewai
+    pip install cairn crewai
 
 Usage with CrewAI Crew:
-    from integrations.crewai_memory import OmegaMemory
+    from integrations.crewai_memory import CairnMemory
 
-    memory = OmegaMemory()
+    memory = CairnMemory()
     crew = Crew(agents=[...], tasks=[...], memory=memory)
 
 Usage with CrewAI Flow:
     from crewai.flow.flow import Flow, start
-    from integrations.crewai_memory import OmegaMemory
+    from integrations.crewai_memory import CairnMemory
 
     class MyFlow(Flow):
-        memory = OmegaMemory()
+        memory = CairnMemory()
 
         @start()
         def begin(self):
@@ -33,9 +33,9 @@ Usage with CrewAI Flow:
 
 Usage as standalone storage backend:
     from crewai.memory import Memory
-    from integrations.crewai_memory import OmegaStorage
+    from integrations.crewai_memory import CairnStorage
 
-    storage = OmegaStorage(project="my-project")
+    storage = CairnStorage(project="my-project")
     memory = Memory(storage=storage)
 
 See README.md in this directory for full documentation.
@@ -56,16 +56,16 @@ logger = logging.getLogger(__name__)
 # Lazy imports -- fail clearly if dependencies are missing
 # ---------------------------------------------------------------------------
 
-def _import_omega():
-    """Import OMEGA modules with a clear error if not installed."""
+def _import_cairn():
+    """Import Cairn modules with a clear error if not installed."""
     try:
-        from omega.sqlite_store import SQLiteStore
-        from omega import bridge
+        from cairn.sqlite_store import SQLiteStore
+        from cairn import bridge
         return SQLiteStore, bridge
     except ImportError as e:
         raise ImportError(
-            "omega-memory is required for OmegaStorage. "
-            "Install it with: pip install omega-memory"
+            "cairn is required for CairnStorage. "
+            "Install it with: pip install cairn"
         ) from e
 
 
@@ -76,7 +76,7 @@ def _import_crewai_types():
         return MemoryRecord, ScopeInfo
     except ImportError as e:
         raise ImportError(
-            "crewai is required for OmegaStorage. "
+            "crewai is required for CairnStorage. "
             "Install it with: pip install crewai"
         ) from e
 
@@ -85,7 +85,7 @@ def _import_crewai_types():
 # Mapping helpers
 # ---------------------------------------------------------------------------
 
-# Maps CrewAI category names to OMEGA event_type values.
+# Maps CrewAI category names to Cairn event_type values.
 _CATEGORY_TO_EVENT_TYPE = {
     "task_result": "task_completion",
     "observation": "lesson_learned",
@@ -99,7 +99,7 @@ _CATEGORY_TO_EVENT_TYPE = {
 
 
 def _categories_to_event_type(categories: list[str] | None) -> str:
-    """Convert CrewAI categories to a single OMEGA event_type."""
+    """Convert CrewAI categories to a single Cairn event_type."""
     if not categories:
         return "memory"
     for cat in categories:
@@ -113,7 +113,7 @@ def _scope_to_project(scope: str | None) -> str | None:
     """Extract a project-like identifier from a CrewAI scope path.
 
     CrewAI scopes look like '/company/team/project'. We use the last
-    non-empty segment as the OMEGA project identifier.
+    non-empty segment as the Cairn project identifier.
     """
     if not scope or scope == "/":
         return None
@@ -121,8 +121,8 @@ def _scope_to_project(scope: str | None) -> str | None:
     return parts[-1] if parts else None
 
 
-def _omega_node_to_crewai_record(node: Any, MemoryRecord: type) -> Any:
-    """Convert an OMEGA query result node to a CrewAI MemoryRecord."""
+def _cairn_node_to_crewai_record(node: Any, MemoryRecord: type) -> Any:
+    """Convert an Cairn query result node to a CrewAI MemoryRecord."""
     meta = dict(node.metadata or {})
     event_type = meta.pop("event_type", "memory")
 
@@ -141,7 +141,7 @@ def _omega_node_to_crewai_record(node: Any, MemoryRecord: type) -> Any:
     project = meta.pop("project", None)
     scope = f"/{project}" if project else "/"
 
-    # Importance: OMEGA uses relevance (0-1 float from query), default 0.5
+    # Importance: Cairn uses relevance (0-1 float from query), default 0.5
     importance = getattr(node, "relevance", 0.5) or 0.5
 
     return MemoryRecord(
@@ -153,31 +153,31 @@ def _omega_node_to_crewai_record(node: Any, MemoryRecord: type) -> Any:
         importance=min(max(importance, 0.0), 1.0),
         created_at=node.created_at or datetime.now(timezone.utc),
         last_accessed=datetime.now(timezone.utc),
-        embedding=None,  # OMEGA manages embeddings internally
+        embedding=None,  # Cairn manages embeddings internally
         source=meta.get("source"),
         private=False,
     )
 
 
 # ---------------------------------------------------------------------------
-# OmegaStorage -- CrewAI StorageBackend implementation
+# CairnStorage -- CrewAI StorageBackend implementation
 # ---------------------------------------------------------------------------
 
-class OmegaStorage:
-    """CrewAI StorageBackend backed by OMEGA's SQLite memory graph.
+class CairnStorage:
+    """CrewAI StorageBackend backed by Cairn's SQLite memory graph.
 
     This class implements the ``crewai.memory.storage.backend.StorageBackend``
     protocol so it can be passed directly to ``crewai.memory.Memory(storage=...)``.
 
-    All memories are persisted in OMEGA's local SQLite database (``~/.omega/omega.db``
-    by default). OMEGA handles its own embedding generation (bge-small-en-v1.5,
+    All memories are persisted in Cairn's local SQLite database (``~/.cairn/cairn.db``
+    by default). Cairn handles its own embedding generation (bge-small-en-v1.5,
     384-dim), deduplication, contradiction detection, and time-decay scoring.
 
     Args:
         project: Optional project name. Used to scope stored memories so that
             different CrewAI projects don't collide.
         session_id: Optional session identifier. Defaults to a generated UUID.
-        omega_home: Path to the OMEGA data directory. Defaults to ``~/.omega``.
+        cairn_home: Path to the Cairn data directory. Defaults to ``~/.cairn``.
         agent_type: Optional agent type identifier stored in metadata.
     """
 
@@ -185,24 +185,24 @@ class OmegaStorage:
         self,
         project: str | None = None,
         session_id: str | None = None,
-        omega_home: str | Path | None = None,
+        cairn_home: str | Path | None = None,
         agent_type: str = "crewai",
     ) -> None:
         self._project = project
         self._session_id = session_id or str(uuid4())
         self._agent_type = agent_type
 
-        # Configure OMEGA home if provided
-        if omega_home:
-            os.environ["OMEGA_HOME"] = str(omega_home)
+        # Configure Cairn home if provided
+        if cairn_home:
+            os.environ["CAIRN_HOME"] = str(cairn_home)
 
-        # Initialize OMEGA store
-        SQLiteStore, _ = _import_omega()
+        # Initialize Cairn store
+        SQLiteStore, _ = _import_cairn()
         self._store = SQLiteStore.get_instance()
         self._MemoryRecord, self._ScopeInfo = _import_crewai_types()
 
         logger.info(
-            "OmegaStorage initialized (project=%s, session=%s)",
+            "CairnStorage initialized (project=%s, session=%s)",
             self._project,
             self._session_id[:12],
         )
@@ -212,15 +212,15 @@ class OmegaStorage:
     # ------------------------------------------------------------------
 
     def save(self, records: list[Any]) -> None:
-        """Save CrewAI MemoryRecord objects into OMEGA.
+        """Save CrewAI MemoryRecord objects into Cairn.
 
-        Each record is stored via ``omega.bridge.store()`` which handles
+        Each record is stored via ``cairn.bridge.store()`` which handles
         embedding generation, deduplication, and graph edge creation.
         """
-        _, bridge = _import_omega()
+        _, bridge = _import_cairn()
 
         for record in records:
-            # Build OMEGA metadata from CrewAI record fields
+            # Build Cairn metadata from CrewAI record fields
             meta: dict[str, Any] = dict(record.metadata or {})
             if record.categories:
                 meta["tags"] = record.categories
@@ -242,7 +242,7 @@ class OmegaStorage:
                     agent_type=self._agent_type,
                 )
             except Exception as e:
-                logger.warning("Failed to save record %s to OMEGA: %s", record.id, e)
+                logger.warning("Failed to save record %s to Cairn: %s", record.id, e)
 
     # ------------------------------------------------------------------
     # StorageBackend protocol: search
@@ -257,24 +257,24 @@ class OmegaStorage:
         limit: int = 10,
         min_score: float = 0.0,
     ) -> list[tuple[Any, float]]:
-        """Search OMEGA memories by semantic similarity.
+        """Search Cairn memories by semantic similarity.
 
-        CrewAI passes an embedding vector, but OMEGA generates its own
+        CrewAI passes an embedding vector, but Cairn generates its own
         embeddings (different model/dimensions). Instead of using the
         provided embedding directly, we perform a semantic text search
         using a synthetic query derived from the most recent save context.
 
         For best results, use ``recall()`` on the Memory object which
-        passes the original text query through to OMEGA's search pipeline.
+        passes the original text query through to Cairn's search pipeline.
         """
-        # OMEGA's search is text-based, not embedding-based from the caller.
+        # Cairn's search is text-based, not embedding-based from the caller.
         # We can't reverse an embedding into text, so we fall through to
         # a listing approach filtered by scope/categories.
         # The real search happens in the _text_search method called by recall flow.
         project = _scope_to_project(scope_prefix) or self._project
         event_type = _categories_to_event_type(categories) if categories else None
 
-        _, bridge = _import_omega()
+        _, bridge = _import_cairn()
 
         try:
             results = bridge.query_structured(
@@ -285,7 +285,7 @@ class OmegaStorage:
                 event_type=event_type if event_type != "memory" else None,
             )
         except Exception as e:
-            logger.warning("OMEGA search failed: %s", e)
+            logger.warning("Cairn search failed: %s", e)
             return []
 
         output = []
@@ -316,15 +316,15 @@ class OmegaStorage:
         limit: int = 10,
         min_score: float = 0.0,
     ) -> list[tuple[Any, float]]:
-        """Search OMEGA using a text query (preferred over embedding search).
+        """Search Cairn using a text query (preferred over embedding search).
 
         This is an extension method not in the base StorageBackend protocol,
-        but it is what ``OmegaMemory`` uses for the most effective retrieval.
+        but it is what ``CairnMemory`` uses for the most effective retrieval.
         """
         project = _scope_to_project(scope_prefix) or self._project
         event_type = _categories_to_event_type(categories) if categories else None
 
-        _, bridge = _import_omega()
+        _, bridge = _import_cairn()
 
         try:
             results = bridge.query_structured(
@@ -335,7 +335,7 @@ class OmegaStorage:
                 event_type=event_type if event_type != "memory" else None,
             )
         except Exception as e:
-            logger.warning("OMEGA text search failed: %s", e)
+            logger.warning("Cairn text search failed: %s", e)
             return []
 
         output = []
@@ -370,8 +370,8 @@ class OmegaStorage:
         older_than: datetime | None = None,
         metadata_filter: dict[str, Any] | None = None,
     ) -> int:
-        """Delete memories from OMEGA matching the given criteria."""
-        _, bridge = _import_omega()
+        """Delete memories from Cairn matching the given criteria."""
+        _, bridge = _import_cairn()
         deleted = 0
 
         if record_ids:
@@ -381,7 +381,7 @@ class OmegaStorage:
                     if result.get("success"):
                         deleted += 1
                 except Exception as e:
-                    logger.warning("Failed to delete OMEGA memory %s: %s", rid, e)
+                    logger.warning("Failed to delete Cairn memory %s: %s", rid, e)
 
         return deleted
 
@@ -390,12 +390,12 @@ class OmegaStorage:
     # ------------------------------------------------------------------
 
     def update(self, record: Any) -> None:
-        """Update an existing memory record in OMEGA."""
-        _, bridge = _import_omega()
+        """Update an existing memory record in Cairn."""
+        _, bridge = _import_cairn()
         try:
             bridge.edit_memory(record.id, record.content)
         except Exception as e:
-            logger.warning("Failed to update OMEGA memory %s: %s", record.id, e)
+            logger.warning("Failed to update Cairn memory %s: %s", record.id, e)
 
     # ------------------------------------------------------------------
     # StorageBackend protocol: get_record
@@ -403,16 +403,16 @@ class OmegaStorage:
 
     def get_record(self, record_id: str) -> Any | None:
         """Retrieve a single memory record by ID."""
-        SQLiteStore, _ = _import_omega()
+        SQLiteStore, _ = _import_cairn()
         store = SQLiteStore.get_instance()
 
         try:
             node = store.get_node(record_id)
             if node is None:
                 return None
-            return _omega_node_to_crewai_record(node, self._MemoryRecord)
+            return _cairn_node_to_crewai_record(node, self._MemoryRecord)
         except Exception as e:
-            logger.warning("Failed to get OMEGA record %s: %s", record_id, e)
+            logger.warning("Failed to get Cairn record %s: %s", record_id, e)
             return None
 
     # ------------------------------------------------------------------
@@ -426,7 +426,7 @@ class OmegaStorage:
         offset: int = 0,
     ) -> list[Any]:
         """List memory records, newest first."""
-        _, bridge = _import_omega()
+        _, bridge = _import_cairn()
         project = _scope_to_project(scope_prefix) or self._project
 
         try:
@@ -436,7 +436,7 @@ class OmegaStorage:
                 project=project,
             )
         except Exception as e:
-            logger.warning("Failed to list OMEGA records: %s", e)
+            logger.warning("Failed to list Cairn records: %s", e)
             return []
 
         records = []
@@ -461,7 +461,7 @@ class OmegaStorage:
 
     def get_scope_info(self, scope: str) -> Any:
         """Return scope information."""
-        _, bridge = _import_omega()
+        _, bridge = _import_cairn()
         project = _scope_to_project(scope) or self._project
 
         try:
@@ -480,16 +480,16 @@ class OmegaStorage:
         )
 
     def list_scopes(self, parent: str = "/") -> list[str]:
-        """List child scopes. OMEGA uses flat project-based scoping."""
+        """List child scopes. Cairn uses flat project-based scoping."""
         return []
 
     def list_categories(self, scope_prefix: str | None = None) -> dict[str, int]:
         """List categories and counts."""
-        _, bridge = _import_omega()
+        _, bridge = _import_cairn()
         try:
             stats = bridge.type_stats()
             if isinstance(stats, dict):
-                # Map OMEGA event types to CrewAI categories
+                # Map Cairn event types to CrewAI categories
                 reverse_map = {v: k for k, v in _CATEGORY_TO_EVENT_TYPE.items()}
                 return {
                     reverse_map.get(k, k): v
@@ -507,8 +507,8 @@ class OmegaStorage:
     def reset(self, scope_prefix: str | None = None) -> None:
         """Reset (delete all) memories. Use with caution."""
         logger.warning(
-            "OmegaStorage.reset() called -- OMEGA does not support bulk deletion. "
-            "Use `omega consolidate` or manual deletion via the CLI."
+            "CairnStorage.reset() called -- Cairn does not support bulk deletion. "
+            "Use `cairn consolidate` or manual deletion via the CLI."
         )
 
     # ------------------------------------------------------------------
@@ -557,26 +557,26 @@ class OmegaStorage:
 
 
 # ---------------------------------------------------------------------------
-# OmegaMemory -- convenience factory
+# CairnMemory -- convenience factory
 # ---------------------------------------------------------------------------
 
-def OmegaMemory(
+def CairnMemory(
     project: str | None = None,
     session_id: str | None = None,
-    omega_home: str | Path | None = None,
+    cairn_home: str | Path | None = None,
     agent_type: str = "crewai",
     llm: Any = "gpt-4o-mini",
     **memory_kwargs: Any,
 ) -> Any:
-    """Create a CrewAI Memory instance backed by OMEGA.
+    """Create a CrewAI Memory instance backed by Cairn.
 
-    This is the recommended entry point. It creates an ``OmegaStorage``
+    This is the recommended entry point. It creates an ``CairnStorage``
     backend and wraps it in CrewAI's ``Memory`` class.
 
     Args:
         project: Optional project name for scoping memories.
         session_id: Optional session identifier.
-        omega_home: Path to OMEGA data directory (default ``~/.omega``).
+        cairn_home: Path to Cairn data directory (default ``~/.cairn``).
         agent_type: Agent type identifier (default ``"crewai"``).
         llm: LLM for CrewAI's memory analysis (scope inference, consolidation).
             Defaults to ``"gpt-4o-mini"``. Set to any litellm model string
@@ -586,21 +586,21 @@ def OmegaMemory(
             ``consolidation_threshold``.
 
     Returns:
-        A ``crewai.memory.Memory`` instance configured with OMEGA storage.
+        A ``crewai.memory.Memory`` instance configured with Cairn storage.
 
     Example:
-        from integrations.crewai_memory import OmegaMemory
+        from integrations.crewai_memory import CairnMemory
 
-        memory = OmegaMemory(project="my-app")
+        memory = CairnMemory(project="my-app")
         memory.remember("Users prefer dark mode by default")
         results = memory.recall("user preferences")
     """
     from crewai.memory import Memory
 
-    storage = OmegaStorage(
+    storage = CairnStorage(
         project=project,
         session_id=session_id,
-        omega_home=omega_home,
+        cairn_home=cairn_home,
         agent_type=agent_type,
     )
 

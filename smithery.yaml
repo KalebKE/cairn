@@ -7,5 +7,5 @@ startCommand:
   commandFunction: |-
     (config) => ({
       command: 'python3',
-      args: ['-m', 'omega.server.mcp_server']
+      args: ['-m', 'cairn.server.mcp_server']
     })

@@ -1,9 +1,9 @@
-"""Tests for omega.task_utils text cleaning and summarization."""
+"""Tests for cairn.task_utils text cleaning and summarization."""
 
 import pytest
 from unittest.mock import patch
 
-from omega.task_utils import _basic_clean, clean_task_text, summarize_task_text
+from cairn.task_utils import _basic_clean, clean_task_text, summarize_task_text
 
 
 class TestCleanTaskText:
@@ -96,10 +96,10 @@ class TestSummarizeTaskText:
         assert summarize_task_text("MEMORY HANDOFF data here with enough chars") == ""
 
     def test_uses_llm_complete(self, monkeypatch):
-        """summarize_task_text uses omega.llm.llm_complete under the hood."""
+        """summarize_task_text uses cairn.llm.llm_complete under the hood."""
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
-        with patch("omega.task_utils.llm_complete", return_value="fix auth token refresh") as mock_llm:
+        with patch("cairn.task_utils.llm_complete", return_value="fix auth token refresh") as mock_llm:
             result = summarize_task_text(
                 "We need to fix the authentication token refresh bug that causes users to be logged out"
             )

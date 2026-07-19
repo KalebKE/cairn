@@ -41,7 +41,7 @@ class CostSnapshot:
 class MemorySystemAdapter(ABC):
     """Abstract base for memory system adapters.
 
-    Each adapter wraps a memory backend (OMEGA, raw context, etc.) and
+    Each adapter wraps a memory backend (Cairn, raw context, etc.) and
     exposes a uniform interface for the benchmark harness.
     """
 

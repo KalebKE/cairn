@@ -1,19 +1,19 @@
 ---
 title: Quickstart
-description: Store your first memory and see OMEGA in action
+description: Store your first memory and see Cairn in action
 ---
 
 # Quickstart
 
 ## 60-second demo
 
-OMEGA works through natural conversation with Claude Code. No special commands needed.
+Cairn works through natural conversation with Claude Code. No special commands needed.
 
 **Session 1** — Tell Claude something worth remembering:
 
 > "Remember that our API rate limit is 100 requests per minute per user."
 
-Claude stores this as a memory via OMEGA. Close the session.
+Claude stores this as a memory via Cairn. Close the session.
 
 **Session 2** — Ask about it later:
 
@@ -27,7 +27,7 @@ That's it. The memory persisted across sessions with zero manual work.
 
 ## Storing memories
 
-OMEGA captures memories in two ways: **explicitly** (you tell it) and **automatically** (hooks detect patterns).
+Cairn captures memories in two ways: **explicitly** (you tell it) and **automatically** (hooks detect patterns).
 
 ### Explicit storage
 
@@ -53,7 +53,7 @@ Use natural language with Claude Code:
 
 ### Automatic capture
 
-OMEGA's hooks watch your conversations and auto-capture:
+Cairn's hooks watch your conversations and auto-capture:
 
 - **Decisions** — When Claude detects language like "let's go with X" or "the approach is Y"
 - **Lessons** — When debugging sessions resolve with an insight
@@ -72,41 +72,41 @@ Just ask Claude naturally:
 > "Have I seen this error before?"
 > "What's the architecture of the auth system?"
 
-OMEGA uses semantic search — you don't need to remember exact wording. A query about "authentication approach" will find a memory stored as "auth uses JWT tokens."
+Cairn uses semantic search — you don't need to remember exact wording. A query about "authentication approach" will find a memory stored as "auth uses JWT tokens."
 
 ### From the CLI
 
 ```bash
 # Semantic search across all memories
-omega query "authentication"
+cairn query "authentication"
 
 # Store a memory directly
-omega store "API rate limit is 100 req/min" --type decision
+cairn store "API rate limit is 100 req/min" --type decision
 
 # See what was captured recently
-omega timeline --days 7
+cairn timeline --days 7
 
 # Memory statistics
-omega stats
+cairn stats
 ```
 
 ## What happens automatically
 
-OMEGA's 7 hook processes run in the background during every Claude Code session. Here's what they do without any action from you:
+Cairn's 7 hook processes run in the background during every Claude Code session. Here's what they do without any action from you:
 
 ### Session start
 
-When you open Claude Code, OMEGA delivers a welcome briefing:
+When you open Claude Code, Cairn delivers a welcome briefing:
 
 ```
-## Welcome back! OMEGA ready — 254 memories | my-project | main
+## Welcome back! Cairn ready — 254 memories | my-project | main
 [CONTEXT] Recent: deployed v2.1, fixed auth bug, added rate limiting
 [TODO] Next: implement webhook retry logic
 ```
 
 ### Memory surfacing
 
-When you edit or read files, OMEGA surfaces relevant memories:
+When you edit or read files, Cairn surfaces relevant memories:
 
 ```
 [MEMORY] (2 days ago) Decision: webhook payloads use HMAC-SHA256 signatures
@@ -115,15 +115,15 @@ When you edit or read files, OMEGA surfaces relevant memories:
 
 ### File claims (multi-agent)
 
-When you edit a file, OMEGA automatically claims it so other agents know not to touch it. When another agent already owns a file, you'll see a warning before the edit proceeds.
+When you edit a file, Cairn automatically claims it so other agents know not to touch it. When another agent already owns a file, you'll see a warning before the edit proceeds.
 
 ### Session end
 
-When you close the session, OMEGA captures a summary of what was accomplished and releases all file and branch claims.
+When you close the session, Cairn captures a summary of what was accomplished and releases all file and branch claims.
 
 ## Multi-agent coordination
 
-If you run multiple Claude Code sessions on the same project, OMEGA keeps them from stepping on each other:
+If you run multiple Claude Code sessions on the same project, Cairn keeps them from stepping on each other:
 
 ```
 [COORD] Team (2 active):

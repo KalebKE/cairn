@@ -1,4 +1,4 @@
-"""Tests for OMEGA HTTP server (Streamable HTTP transport)."""
+"""Tests for Cairn HTTP server (Streamable HTTP transport)."""
 
 import stat
 import pytest
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 # starlette is a transitive dep of mcp[server], not installed in base CI
 pytest.importorskip("starlette", reason="starlette not installed (requires 'server' extra)")
 
-from omega.server.http_server import create_http_app, get_or_create_api_key
+from cairn.server.http_server import create_http_app, get_or_create_api_key
 
 
 # ============================================================================
@@ -18,7 +18,7 @@ from omega.server.http_server import create_http_app, get_or_create_api_key
 def mock_server():
     """Create a mock MCP Server object for testing."""
     server = MagicMock()
-    server.name = "omega-memory"
+    server.name = "cairn"
     return server
 
 
@@ -66,7 +66,7 @@ def test_health_endpoint(app):
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ok"
-        assert data["server"] == "omega-memory"
+        assert data["server"] == "cairn"
 
 
 # ============================================================================
@@ -81,7 +81,7 @@ def test_server_card_endpoint(app):
         resp = client.get("/.well-known/mcp.json")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["name"] == "omega-memory"
+        assert data["name"] == "cairn"
         assert "version" in data
         assert "transports" in data
         assert isinstance(data["tools_count"], int)
@@ -165,7 +165,7 @@ def test_no_auth_mode(app):
 def test_api_key_generation(tmp_path):
     """get_or_create_api_key creates a file with correct permissions."""
     key_path = tmp_path / "api_key"
-    with patch("omega.server.http_server.API_KEY_PATH", key_path):
+    with patch("cairn.server.http_server.API_KEY_PATH", key_path):
         key = get_or_create_api_key()
         assert len(key) > 20  # URL-safe token is ~43 chars for 32 bytes
         assert key_path.exists()
@@ -177,7 +177,7 @@ def test_api_key_generation(tmp_path):
 def test_api_key_persistence(tmp_path):
     """Second call returns the same key."""
     key_path = tmp_path / "api_key"
-    with patch("omega.server.http_server.API_KEY_PATH", key_path):
+    with patch("cairn.server.http_server.API_KEY_PATH", key_path):
         key1 = get_or_create_api_key()
         key2 = get_or_create_api_key()
         assert key1 == key2
@@ -187,6 +187,6 @@ def test_api_key_reads_existing(tmp_path):
     """get_or_create_api_key reads an existing key file."""
     key_path = tmp_path / "api_key"
     key_path.write_text("my-custom-key\n")
-    with patch("omega.server.http_server.API_KEY_PATH", key_path):
+    with patch("cairn.server.http_server.API_KEY_PATH", key_path):
         key = get_or_create_api_key()
         assert key == "my-custom-key"

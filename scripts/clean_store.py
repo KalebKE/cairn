@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""One-shot cleanup script for OMEGA memory store.
+"""One-shot cleanup script for Cairn memory store.
 
 Phase 1 of Memory Quality & Noise Reduction.
-Operates directly on ~/.omega/omega.db.
+Operates directly on ~/.cairn/cairn.db.
 
 Steps:
 1. Delete near-duplicates (same first 80 chars appearing >2 times)
@@ -24,12 +24,12 @@ import sqlite3
 import sys
 from pathlib import Path
 
-# Ensure omega is importable
+# Ensure cairn is importable
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
-OMEGA_HOME = Path(os.environ.get("OMEGA_HOME", str(Path.home() / ".omega")))
-DB_PATH = OMEGA_HOME / "omega.db"
+CAIRN_HOME = Path(os.environ.get("CAIRN_HOME", str(Path.home() / ".cairn")))
+DB_PATH = CAIRN_HOME / "cairn.db"
 
 # Noise patterns to delete (matched against content start)
 NOISE_PATTERNS = [
@@ -47,10 +47,10 @@ TEST_STRINGS = [
     "Smoke test after cleanup",
     "Test user pref 3",
     "Test auto-capture",
-    "OMEGA switchover test",
+    "Cairn switchover test",
     "Test memory from migration verification",
     "Test auto-capture for verification",
-    "OMEGA native MCP test",
+    "Cairn native MCP test",
 ]
 
 # Session IDs that contain only synthetic/test data
@@ -65,7 +65,7 @@ TEST_SESSION_PREFIXES = [
 def backup_db(db_path: Path) -> Path:
     """Create a backup before cleanup."""
     from datetime import datetime
-    backups_dir = OMEGA_HOME / "backups"
+    backups_dir = CAIRN_HOME / "backups"
     backups_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     backup_path = backups_dir / f"pre-cleanup-{timestamp}.db"
@@ -346,8 +346,8 @@ def step5_backfill_tags(conn: sqlite3.Connection, dry_run: bool) -> int:
     """Backfill tags on untagged memories."""
     print("\n=== Step 5: Backfill tags ===")
 
-    from omega import json_compat as json
-    from omega.bridge import _extract_tags
+    from cairn import json_compat as json
+    from cairn.bridge import _extract_tags
 
     rows = conn.execute(
         "SELECT node_id, content, metadata, project FROM memories"
@@ -399,7 +399,7 @@ def step7_run_compaction(dry_run: bool):
         print("  Would run compaction on lesson_learned, error_pattern, decision")
         return
 
-    from omega.bridge import compact
+    from cairn.bridge import compact
 
     for event_type in ("lesson_learned", "error_pattern", "decision"):
         print(f"\n  Compacting {event_type}...")

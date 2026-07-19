@@ -1,4 +1,4 @@
-# OMEGA Benchmark Report: The State of AI Memory
+# Cairn Benchmark Report: The State of AI Memory
 
 > **76.8% on LongMemEval** — competitive with funded competitors, fully local-first, with the broadest tool integration in the AI memory space.
 
@@ -8,9 +8,9 @@
 
 AI agents are transforming software development, but they share a critical flaw: **amnesia**. Every new session starts from zero. Developers lose an estimated 200 hours per year re-explaining context, architecture decisions, and preferences to their AI tools.
 
-OMEGA solves this with a local-first persistent memory system that achieves 76.8% on the official LongMemEval benchmark (ICLR 2025) — outperforming graph-based systems like Zep (71.2%) and matching full-context baselines — while being the only system that combines persistent memory, multi-agent coordination, intelligent routing, entity management, and context virtualization in a single privacy-respecting MCP server. All built with zero external funding.
+Cairn solves this with a local-first persistent memory system that achieves 76.8% on the official LongMemEval benchmark (ICLR 2025) — outperforming graph-based systems like Zep (71.2%) and matching full-context baselines — while being the only system that combines persistent memory, multi-agent coordination, intelligent routing, entity management, and context virtualization in a single privacy-respecting MCP server. All built with zero external funding.
 
-This report presents the competitive benchmark data, architectural analysis, and market context that positions OMEGA as a uniquely comprehensive memory layer for the agentic AI era.
+This report presents the competitive benchmark data, architectural analysis, and market context that positions Cairn as a uniquely comprehensive memory layer for the agentic AI era.
 
 ---
 
@@ -49,10 +49,10 @@ flowchart LR
         L2 --> D3["Session 3\n⚠️ Start from zero\n..."]
     end
 
-    subgraph with["With OMEGA"]
+    subgraph with["With Cairn"]
         direction LR
-        O1["Session 1\n✅ Context built\n✅ Auto-captured"] -->|"OMEGA persists"| O2["Session 2\n✅ Full context\n✅ Decisions recalled\n✅ Preferences loaded"]
-        O2 -->|"OMEGA persists"| O3["Session 3\n✅ Accumulated\n    knowledge"]
+        O1["Session 1\n✅ Context built\n✅ Auto-captured"] -->|"Cairn persists"| O2["Session 2\n✅ Full context\n✅ Decisions recalled\n✅ Preferences loaded"]
+        O2 -->|"Cairn persists"| O3["Session 3\n✅ Accumulated\n    knowledge"]
     end
 
     style without fill:#1a1a2e,stroke:#e74c3c,color:#fff
@@ -116,7 +116,7 @@ Scoring uses GPT-4o (or GPT-4.1) as judge, with official grading rubrics per que
 %%{init: {'theme': 'dark'}}%%
 xychart-beta
     title "LongMemEval_S Benchmark Scores (%)"
-    x-axis ["Hindsight", "Emergence", "Supermemory", "Mastra OM", "Oracle GPT-4o", "OMEGA", "Zep", "RAG baseline", "Full-ctx GPT-4o"]
+    x-axis ["Hindsight", "Emergence", "Supermemory", "Mastra OM", "Oracle GPT-4o", "Cairn", "Zep", "RAG baseline", "Full-ctx GPT-4o"]
     y-axis "Accuracy (%)" 0 --> 100
     bar [91.4, 86, 85.2, 84.23, 82.4, 76.8, 71.2, 72, 63.8]
 ```
@@ -128,12 +128,12 @@ xychart-beta
 | 3 | Supermemory | 85.2% | Gemini 3 | Cloud-hosted | No | No | ~10 |
 | 4 | Mastra OM | 84.23% | GPT-4o | Cloud-hosted | No | No | ~10 |
 | 5 | Oracle GPT-4o | 82.4% | GPT-4o | Oracle sessions | — | — | — |
-| **6** | **OMEGA** | **76.8%** | GPT-4.1 | **SQLite + vec + FTS5** | **Yes** | **28 tools** | **73** |
+| **6** | **Cairn** | **76.8%** | GPT-4.1 | **SQLite + vec + FTS5** | **Yes** | **28 tools** | **73** |
 | 7 | RAG baseline | ~72% | GPT-4o | Vector-only | — | — | — |
 | 8 | Zep/Graphiti | 71.2% | GPT-4o | Neo4j graph | No | No | ~15 |
 | 9 | Full-context GPT-4o | 63.8% | GPT-4o | No memory | — | — | — |
 
-### OMEGA Category Breakdown (Best Run: 76.8%)
+### Cairn Category Breakdown (Best Run: 76.8%)
 
 | Category | Score | Notes |
 |----------|-------|-------|
@@ -144,13 +144,13 @@ xychart-beta
 | Multi-Session Reasoning | 87/133 (65.4%) | Key area for future work |
 | Single-Session (preference) | 15/30 (50.0%) | Primary improvement target |
 
-### OMEGA Retrieval Quality (Internal Benchmark)
+### Cairn Retrieval Quality (Internal Benchmark)
 
-Separately from LongMemEval, OMEGA maintains an internal retrieval quality benchmark (`longmemeval_bench.py`) that tests component-level retrieval across 100 synthetic queries in 5 categories. This self-test scores **100/100**, confirming that OMEGA's core retrieval pipeline (BM25 + vector blend, abstention floor, temporal penalty, word/tag overlap boost) correctly identifies relevant memories for known query patterns.
+Separately from LongMemEval, Cairn maintains an internal retrieval quality benchmark (`longmemeval_bench.py`) that tests component-level retrieval across 100 synthetic queries in 5 categories. This self-test scores **100/100**, confirming that Cairn's core retrieval pipeline (BM25 + vector blend, abstention floor, temporal penalty, word/tag overlap boost) correctly identifies relevant memories for known query patterns.
 
 *Note: This internal benchmark tests retrieval precision against synthetic data and is not comparable to end-to-end LongMemEval scores, which also require LLM generation quality.*
 
-### Where OMEGA Wins (And Where It Doesn't)
+### Where Cairn Wins (And Where It Doesn't)
 
 **Strengths:**
 - Outperforms Zep/Graphiti (71.2%) and RAG baseline (~72%) without requiring Neo4j
@@ -165,11 +165,11 @@ Separately from LongMemEval, OMEGA maintains an internal retrieval quality bench
 
 ### Methodology Note
 
-> All LongMemEval scores cited in this report use the standard evaluation protocol: 500 questions from LongMemEval_S, with GPT-4o or GPT-4.1 as judge using official grading rubrics. Scores achieved with different LLM backends across systems — OMEGA uses GPT-4.1 for generation with a custom retrieval pipeline (BM25 + vector blend, abstention floor, temporal penalty). Cross-system comparison reflects real-world architectural choices, including infrastructure, privacy model, and deployment complexity. All OMEGA results are reproducible from the open-source codebase.
+> All LongMemEval scores cited in this report use the standard evaluation protocol: 500 questions from LongMemEval_S, with GPT-4o or GPT-4.1 as judge using official grading rubrics. Scores achieved with different LLM backends across systems — Cairn uses GPT-4.1 for generation with a custom retrieval pipeline (BM25 + vector blend, abstention floor, temporal penalty). Cross-system comparison reflects real-world architectural choices, including infrastructure, privacy model, and deployment complexity. All Cairn results are reproducible from the open-source codebase.
 
 ---
 
-## 4. The OMEGA Architecture
+## 4. The Cairn Architecture
 
 ### System Overview
 
@@ -183,7 +183,7 @@ flowchart TB
         ANY["Any MCP Client"]
     end
 
-    subgraph omega["OMEGA MCP Server — 73 Tools"]
+    subgraph cairn["Cairn MCP Server — 73 Tools"]
         direction TB
         subgraph core["Core Memory (27 tools)"]
             MEM["Persistent Memory\nStore · Query · Traverse\nCheckpoint · Resume"]
@@ -203,7 +203,7 @@ flowchart TB
     end
 
     subgraph storage["Local Storage"]
-        DB[("SQLite + vec + FTS5\n~/.omega/omega.db")]
+        DB[("SQLite + vec + FTS5\n~/.cairn/cairn.db")]
         KEY["Keyring\nEncrypted Profiles"]
         CACHE["ONNX Models\nbge-small-en-v1.5"]
     end
@@ -212,11 +212,11 @@ flowchart TB
         SUP["Supabase Sync\n(when you choose)"]
     end
 
-    clients -->|"stdio / MCP protocol"| omega
-    omega --> storage
-    omega -.->|"opt-in"| optional
+    clients -->|"stdio / MCP protocol"| cairn
+    cairn --> storage
+    cairn -.->|"opt-in"| optional
 
-    style omega fill:#1a1a2e,stroke:#3498db,color:#fff
+    style cairn fill:#1a1a2e,stroke:#3498db,color:#fff
     style core fill:#2c3e50,stroke:#2ecc71,color:#fff
     style coord fill:#2c3e50,stroke:#e67e22,color:#fff
     style router fill:#2c3e50,stroke:#9b59b6,color:#fff
@@ -224,20 +224,20 @@ flowchart TB
     style knowledge fill:#2c3e50,stroke:#f39c12,color:#fff
 ```
 
-### Why OMEGA's Position Is Unique
+### Why Cairn's Position Is Unique
 
 The benchmark table reveals an important pattern: **no other system in the top 6 offers multi-agent coordination or breadth of tooling**. The trade-off in the current landscape is:
 
 - **High accuracy** (Hindsight 91.4%, Emergence 86%) — but memory only, no coordination, limited tools
-- **Broad integration** (OMEGA: 73 tools, 28 coordination) — with competitive accuracy and full local-first privacy
+- **Broad integration** (Cairn: 73 tools, 28 coordination) — with competitive accuracy and full local-first privacy
 
-This isn't an accident. It reflects a design choice: OMEGA is built as **infrastructure**, not just a memory system.
+This isn't an accident. It reflects a design choice: Cairn is built as **infrastructure**, not just a memory system.
 
 ### Four Core Benefits
 
 #### Benefit 1: Your AI Remembers — Automatically
 
-OMEGA automatically captures decisions, lessons, preferences, and context through Claude Code hooks — no manual "save this" required. The retrieval pipeline combines:
+Cairn automatically captures decisions, lessons, preferences, and context through Claude Code hooks — no manual "save this" required. The retrieval pipeline combines:
 
 - **BM25 text search** for precise keyword matching
 - **Vector similarity** (bge-small-en-v1.5, ONNX) for semantic understanding
@@ -247,11 +247,11 @@ OMEGA automatically captures decisions, lessons, preferences, and context throug
 - **Word/tag overlap boost** (Phase 2.5, 50% max) for contextual relevance
 - **Feedback dampening** for memories rated unhelpful
 
-Context virtualization via `omega_checkpoint` and `omega_resume_task` enables mid-task saving and cross-session continuation with full working memory.
+Context virtualization via `cairn_checkpoint` and `cairn_resume_task` enables mid-task saving and cross-session continuation with full working memory.
 
 #### Benefit 2: Your Agents Work as a Team
 
-OMEGA is the only memory system that solves multi-agent coordination:
+Cairn is the only memory system that solves multi-agent coordination:
 
 | Capability | Tools | Description |
 |-----------|-------|-------------|
@@ -262,25 +262,25 @@ OMEGA is the only memory system that solves multi-agent coordination:
 | Conflict Detection | `intent_announce`, `intent_check`, `coord_status` | Real-time overlap alerts |
 | Session Lifecycle | `register`, `heartbeat`, `deregister`, `snapshot`, `recover` | Crash recovery, handoffs |
 
-80% of enterprises plan multi-agent deployments, but fewer than 10% succeed. The primary failure mode is coordination — agents stepping on each other's work, creating merge conflicts, duplicating effort. OMEGA's 28 coordination tools address this directly, and **no competing memory system offers anything equivalent**.
+80% of enterprises plan multi-agent deployments, but fewer than 10% succeed. The primary failure mode is coordination — agents stepping on each other's work, creating merge conflicts, duplicating effort. Cairn's 28 coordination tools address this directly, and **no competing memory system offers anything equivalent**.
 
 #### Benefit 3: Your Data Never Leaves Your Machine
 
 | Privacy Feature | Implementation |
 |----------------|----------------|
-| Local-first storage | SQLite database at `~/.omega/omega.db` |
+| Local-first storage | SQLite database at `~/.cairn/cairn.db` |
 | Zero external dependencies | No Neo4j, no cloud DB, no API keys for core memory |
 | Encrypted profiles | macOS Keychain / system keyring (AES-256) |
 | Optional cloud sync | Supabase — activated only when you choose |
 | Minimal footprint | ~31MB startup, ~337MB after first query |
 
-This directly addresses the #1 enterprise barrier: 77% of leaders cite data privacy as their primary concern with AI tooling. While Hindsight also offers local operation, it lacks OMEGA's coordination and routing capabilities.
+This directly addresses the #1 enterprise barrier: 77% of leaders cite data privacy as their primary concern with AI tooling. While Hindsight also offers local operation, it lacks Cairn's coordination and routing capabilities.
 
 #### Benefit 4: One System, Not Twelve
 
 ### Feature Comparison Matrix
 
-| Feature | OMEGA | Hindsight | Mem0 | Zep/Graphiti | Letta | Mastra | Supermemory |
+| Feature | Cairn | Hindsight | Mem0 | Zep/Graphiti | Letta | Mastra | Supermemory |
 |---------|-------|-----------|------|--------------|-------|--------|-------------|
 | LongMemEval Score | 76.8% | **91.4%** | — | 71.2% | — | 84.23% | 85.2% |
 | Local-First | **Yes** | Yes | No | No | No | No | No |
@@ -307,7 +307,7 @@ quadrantChart
     quadrant-2 "Accurate but limited"
     quadrant-3 "Needs work"
     quadrant-4 "Broad but inaccurate"
-    OMEGA: [0.95, 0.77]
+    Cairn: [0.95, 0.77]
     Hindsight: [0.22, 0.91]
     Supermemory: [0.15, 0.85]
     Mastra: [0.15, 0.84]
@@ -316,7 +316,7 @@ quadrantChart
     Mem0: [0.08, 0.70]
 ```
 
-The quadrant chart reveals the trade-off clearly: OMEGA occupies a unique position — broadest tooling with competitive accuracy. No other system is in the upper-right quadrant.
+The quadrant chart reveals the trade-off clearly: Cairn occupies a unique position — broadest tooling with competitive accuracy. No other system is in the upper-right quadrant.
 
 ---
 
@@ -337,19 +337,19 @@ The quadrant chart reveals the trade-off clearly: OMEGA occupies a unique positi
 
 ### The Missing Layer
 
-MCP standardizes how AI agents communicate with tools and data sources. It does **not** standardize how agents remember, coordinate, or learn. OMEGA fills this gap — the persistent memory and coordination layer that the MCP ecosystem needs but doesn't yet have.
+MCP standardizes how AI agents communicate with tools and data sources. It does **not** standardize how agents remember, coordinate, or learn. Cairn fills this gap — the persistent memory and coordination layer that the MCP ecosystem needs but doesn't yet have.
 
 ### Competitive Funding Landscape
 
 | System | Funding | LongMemEval | Multi-Agent | Total Tools |
 |--------|---------|-------------|-------------|-------------|
-| OMEGA | **$0** (bootstrapped) | 76.8% | **28 tools** | **73** |
+| Cairn | **$0** (bootstrapped) | 76.8% | **28 tools** | **73** |
 | Mem0 | $24M Series A | — | No | ~5 |
 | Letta/MemGPT | $10M seed | — | Partial | — |
 | Supermemory | $2.6M seed | 85.2% | No | ~10 |
 | CrewAI | $18M Series A | — | Framework | — |
 
-OMEGA delivers the broadest integrated AI memory platform in the space — 73 MCP tools across 5 modules — with zero external funding. The competitive focus is shifting from pure memory accuracy (where Hindsight leads at 91.4%) toward integrated platforms that handle memory, coordination, and routing together. OMEGA is the only system positioned at that intersection.
+Cairn delivers the broadest integrated AI memory platform in the space — 73 MCP tools across 5 modules — with zero external funding. The competitive focus is shifting from pure memory accuracy (where Hindsight leads at 91.4%) toward integrated platforms that handle memory, coordination, and routing together. Cairn is the only system positioned at that intersection.
 
 ---
 
@@ -382,7 +382,7 @@ OMEGA delivers the broadest integrated AI memory platform in the space — 73 MC
 
 ### Hook System (Automatic Memory Capture)
 
-OMEGA installs 11 hook handlers across 6 processes that run automatically during Claude Code sessions:
+Cairn installs 11 hook handlers across 6 processes that run automatically during Claude Code sessions:
 
 | Event | What Happens |
 |-------|-------------|
@@ -399,7 +399,7 @@ Zero manual intervention required. The system learns from normal development act
 
 ## 7. Roadmap: Closing the Accuracy Gap
 
-OMEGA's 76.8% on LongMemEval is competitive but not leading. The path to 85%+ is clear:
+Cairn's 76.8% on LongMemEval is competitive but not leading. The path to 85%+ is clear:
 
 | Improvement Area | Current | Target | Approach |
 |-----------------|---------|--------|----------|
@@ -414,7 +414,7 @@ The architecture supports these improvements without structural changes — the 
 
 ## 8. Reproducibility
 
-All OMEGA benchmark results are fully reproducible:
+All Cairn benchmark results are fully reproducible:
 
 1. **Source code**: Open source (Apache 2.0)
 2. **Official evaluation harness**: `benchmarks/longmemeval/scripts/longmemeval_official.py` runs the full 500-question LongMemEval_S protocol
@@ -429,10 +429,10 @@ All OMEGA benchmark results are fully reproducible:
 
 The AI memory landscape is rapidly evolving. Systems like Hindsight (91.4%) are pushing accuracy forward, while the market demands broader capabilities — coordination, routing, privacy, and ecosystem integration.
 
-OMEGA occupies a unique position: **the only system that combines competitive memory accuracy with multi-agent coordination, multi-LLM routing, entity management, and full local-first privacy in a single MCP server**. At 76.8% on LongMemEval, the accuracy gap with leaders like Hindsight is real but closeable. The integration gap — 73 tools vs. 5-15 for any competitor — is OMEGA's structural advantage.
+Cairn occupies a unique position: **the only system that combines competitive memory accuracy with multi-agent coordination, multi-LLM routing, entity management, and full local-first privacy in a single MCP server**. At 76.8% on LongMemEval, the accuracy gap with leaders like Hindsight is real but closeable. The integration gap — 73 tools vs. 5-15 for any competitor — is Cairn's structural advantage.
 
-For developers tired of being memory bridges for their AI tools, and teams struggling with multi-agent coordination, OMEGA offers something no other system does: the complete package.
+For developers tired of being memory bridges for their AI tools, and teams struggling with multi-agent coordination, Cairn offers something no other system does: the complete package.
 
 ---
 
-*Report generated February 2026. All benchmark data sourced from published results and reproducible testing. Official LongMemEval scores use the standard 500-question LongMemEval_S evaluation protocol with GPT-4o/GPT-4.1 grading. OMEGA is open source under the Apache 2.0 license.*
+*Report generated February 2026. All benchmark data sourced from published results and reproducible testing. Official LongMemEval scores use the standard 500-question LongMemEval_S evaluation protocol with GPT-4o/GPT-4.1 grading. Cairn is open source under the Apache 2.0 license.*

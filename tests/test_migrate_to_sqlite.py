@@ -1,4 +1,4 @@
-"""Tests for omega.migrate_to_sqlite — helper functions and auto-migration."""
+"""Tests for cairn.migrate_to_sqlite — helper functions and auto-migration."""
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from omega import json_compat as json
-from omega.migrate_to_sqlite import (
+from cairn import json_compat as json
+from cairn.migrate_to_sqlite import (
     _load_jsonl_entries,
     _normalize_metadata,
     auto_migrate_if_needed,
@@ -99,68 +99,68 @@ class TestLoadJsonlEntries:
 
 
 class TestAutoMigrateIfNeeded:
-    def test_fresh_install_no_migration(self, tmp_omega_dir):
+    def test_fresh_install_no_migration(self, tmp_cairn_dir):
         """No graphs, no JSONL, no DB — returns False."""
-        with patch("omega.migrate_to_sqlite.OMEGA_DIR", tmp_omega_dir), \
-             patch("omega.migrate_to_sqlite.GRAPHS_DIR", tmp_omega_dir / "graphs"), \
-             patch("omega.migrate_to_sqlite.DB_PATH", tmp_omega_dir / "omega.db"):
+        with patch("cairn.migrate_to_sqlite.CAIRN_DIR", tmp_cairn_dir), \
+             patch("cairn.migrate_to_sqlite.GRAPHS_DIR", tmp_cairn_dir / "graphs"), \
+             patch("cairn.migrate_to_sqlite.DB_PATH", tmp_cairn_dir / "cairn.db"):
             assert auto_migrate_if_needed() is False
 
-    def test_existing_db_with_data_skips(self, tmp_omega_dir):
+    def test_existing_db_with_data_skips(self, tmp_cairn_dir):
         """If DB already has data, returns False."""
         import sqlite3
-        db_path = tmp_omega_dir / "omega.db"
+        db_path = tmp_cairn_dir / "cairn.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("CREATE TABLE memories (id TEXT, content TEXT)")
         conn.execute("INSERT INTO memories VALUES ('1', 'test')")
         conn.commit()
         conn.close()
 
-        with patch("omega.migrate_to_sqlite.OMEGA_DIR", tmp_omega_dir), \
-             patch("omega.migrate_to_sqlite.GRAPHS_DIR", tmp_omega_dir / "graphs"), \
-             patch("omega.migrate_to_sqlite.DB_PATH", db_path):
+        with patch("cairn.migrate_to_sqlite.CAIRN_DIR", tmp_cairn_dir), \
+             patch("cairn.migrate_to_sqlite.GRAPHS_DIR", tmp_cairn_dir / "graphs"), \
+             patch("cairn.migrate_to_sqlite.DB_PATH", db_path):
             assert auto_migrate_if_needed() is False
 
-    def test_existing_db_no_table_proceeds(self, tmp_omega_dir):
+    def test_existing_db_no_table_proceeds(self, tmp_cairn_dir):
         """If DB exists but no memories table, should not crash."""
         import sqlite3
-        db_path = tmp_omega_dir / "omega.db"
+        db_path = tmp_cairn_dir / "cairn.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("CREATE TABLE other (id TEXT)")
         conn.commit()
         conn.close()
 
         # No graphs or JSONL either — should return False (nothing to migrate)
-        with patch("omega.migrate_to_sqlite.OMEGA_DIR", tmp_omega_dir), \
-             patch("omega.migrate_to_sqlite.GRAPHS_DIR", tmp_omega_dir / "graphs"), \
-             patch("omega.migrate_to_sqlite.DB_PATH", db_path):
+        with patch("cairn.migrate_to_sqlite.CAIRN_DIR", tmp_cairn_dir), \
+             patch("cairn.migrate_to_sqlite.GRAPHS_DIR", tmp_cairn_dir / "graphs"), \
+             patch("cairn.migrate_to_sqlite.DB_PATH", db_path):
             assert auto_migrate_if_needed() is False
 
-    def test_conn_closed_on_exception(self, tmp_omega_dir):
+    def test_conn_closed_on_exception(self, tmp_cairn_dir):
         """Connection should be closed even if execute raises."""
         import sqlite3
-        db_path = tmp_omega_dir / "omega.db"
+        db_path = tmp_cairn_dir / "cairn.db"
         # Create an empty DB (no tables)
         conn = sqlite3.connect(str(db_path))
         conn.close()
 
-        with patch("omega.migrate_to_sqlite.OMEGA_DIR", tmp_omega_dir), \
-             patch("omega.migrate_to_sqlite.GRAPHS_DIR", tmp_omega_dir / "graphs"), \
-             patch("omega.migrate_to_sqlite.DB_PATH", db_path):
+        with patch("cairn.migrate_to_sqlite.CAIRN_DIR", tmp_cairn_dir), \
+             patch("cairn.migrate_to_sqlite.GRAPHS_DIR", tmp_cairn_dir / "graphs"), \
+             patch("cairn.migrate_to_sqlite.DB_PATH", db_path):
             # Should not raise — the try/finally should handle the missing table
             result = auto_migrate_if_needed()
             assert result is False
 
-    def test_migration_failure_returns_false(self, tmp_omega_dir):
+    def test_migration_failure_returns_false(self, tmp_cairn_dir):
         """If migrate() raises, auto_migrate returns False."""
-        graphs_dir = tmp_omega_dir / "graphs"
+        graphs_dir = tmp_cairn_dir / "graphs"
         graphs_dir.mkdir()
         # Create a minimal semantic.json to trigger migration
         (graphs_dir / "semantic.json").write_text('{"nodes": [{"id": "1", "content": "test"}]}')
 
-        with patch("omega.migrate_to_sqlite.OMEGA_DIR", tmp_omega_dir), \
-             patch("omega.migrate_to_sqlite.GRAPHS_DIR", graphs_dir), \
-             patch("omega.migrate_to_sqlite.DB_PATH", tmp_omega_dir / "omega.db"), \
-             patch("omega.migrate_to_sqlite.migrate", side_effect=RuntimeError("boom")):
+        with patch("cairn.migrate_to_sqlite.CAIRN_DIR", tmp_cairn_dir), \
+             patch("cairn.migrate_to_sqlite.GRAPHS_DIR", graphs_dir), \
+             patch("cairn.migrate_to_sqlite.DB_PATH", tmp_cairn_dir / "cairn.db"), \
+             patch("cairn.migrate_to_sqlite.migrate", side_effect=RuntimeError("boom")):
             result = auto_migrate_if_needed()
             assert result is False

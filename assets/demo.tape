@@ -1,5 +1,5 @@
-# OMEGA Demo — Before/After Memory
-# Run: cd ~/Projects/omega-public && vhs assets/demo.tape
+# Cairn Demo — Before/After Memory
+# Run: cd ~/Projects/cairn-public && vhs assets/demo.tape
 
 Output assets/demo.gif
 
@@ -20,7 +20,7 @@ Set PlaybackSpeed 1
 Set LoopOffset 0
 Set CursorBlink false
 
-Set Theme {"name":"omega","background":"#0f1117","foreground":"#e2e8f0","cursor":"#a78bfa","selection":"#2d2b55","black":"#0f1117","red":"#f87171","green":"#4ade80","yellow":"#fbbf24","blue":"#60a5fa","magenta":"#a78bfa","cyan":"#67e8f9","white":"#e2e8f0","brightBlack":"#4a5568","brightRed":"#fca5a5","brightGreen":"#86efac","brightYellow":"#fde68a","brightBlue":"#93c5fd","brightMagenta":"#c4b5fd","brightCyan":"#a5f3fc","brightWhite":"#ffffff"}
+Set Theme {"name":"cairn","background":"#0f1117","foreground":"#e2e8f0","cursor":"#a78bfa","selection":"#2d2b55","black":"#0f1117","red":"#f87171","green":"#4ade80","yellow":"#fbbf24","blue":"#60a5fa","magenta":"#a78bfa","cyan":"#67e8f9","white":"#e2e8f0","brightBlack":"#4a5568","brightRed":"#fca5a5","brightGreen":"#86efac","brightYellow":"#fde68a","brightBlue":"#93c5fd","brightMagenta":"#c4b5fd","brightCyan":"#a5f3fc","brightWhite":"#ffffff"}
 
 Hide
 Type "bash assets/demo.sh"

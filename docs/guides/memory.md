@@ -2,7 +2,7 @@
 
 ## Overview
 
-OMEGA stores memories as semantically embedded nodes in a graph, enabling cross-session recall for AI coding agents. Each memory has:
+Cairn stores memories as semantically embedded nodes in a graph, enabling cross-session recall for AI coding agents. Each memory has:
 
 - **Event type**: `decision`, `lesson_learned`, `error_pattern`, `task_completion`, `session_summary`, `user_preference`, `checkpoint`
 - **Priority**: 1-5 (5 = highest). Auto-set from event type if omitted.
@@ -18,43 +18,43 @@ Use memory when you need to persist decisions, capture lessons from debugging se
 
 ```
 # Store a decision
-omega_store(content="Use PostgreSQL for the analytics service — need window functions and JSONB", event_type="decision")
+cairn_store(content="Use PostgreSQL for the analytics service — need window functions and JSONB", event_type="decision")
 
 # Query later
-omega_query(query="database choice for analytics")
+cairn_query(query="database choice for analytics")
 
 # User says "remember this"
-omega_remember(text="Deploy window is Tuesdays 2-4pm PST")
+cairn_remember(text="Deploy window is Tuesdays 2-4pm PST")
 ```
 
 ## Tools Reference
 
 | Tool | Purpose |
 |------|---------|
-| `omega_remember` | Store permanent memory (use when user says "remember this") |
-| `omega_store` | Store typed memory with event_type, priority, entity_id, metadata |
-| `omega_query` | Semantic search with filters (entity_id, event_type, filter_tags, temporal_range, context_file, context_tags) |
-| `omega_phrase_search` | Exact substring/phrase match via FTS5 (case-insensitive by default) |
-| `omega_lessons` | Cross-session/project lessons ranked by verification count and access frequency |
-| `omega_similar` | Find memories similar to a given memory ID |
-| `omega_traverse` | Walk the relationship graph from a memory (1-5 hops, min_weight filter) |
-| `omega_timeline` | View memories grouped by day (configurable lookback and limit per day) |
-| `omega_checkpoint` | Save task state: plan, progress, files touched, decisions, key context, next steps |
-| `omega_resume_task` | Resume a checkpointed task with full/summary/minimal verbosity |
-| `omega_compact` | Cluster similar memories and create summary nodes (Jaccard similarity threshold) |
-| `omega_consolidate` | Prune stale zero-access memories, cap session summaries, clean orphaned edges |
-| `omega_feedback` | Rate a memory as helpful, unhelpful, or outdated (affects future retrieval scoring) |
-| `omega_delete_memory` | Delete a specific memory by ID |
-| `omega_edit_memory` | Edit the content of a specific memory by ID |
-| `omega_type_stats` | Memory counts grouped by event type |
-| `omega_session_stats` | Memory counts grouped by session (top 20) |
-| `omega_welcome` | Session briefing with recent relevant memories and user profile |
-| `omega_health` | Detailed health check: memory usage, node counts, cache stats, warnings |
-| `omega_backup` | Export or import memories for backup/restore |
-| `omega_list_preferences` | List all stored user preferences |
-| `omega_save_profile` | Save or update user profile (name, timezone, role, preferences) |
-| `omega_profile` | Show the user profile built from memory patterns |
-| `omega_clear_session` | Clear all memories for a specific session |
+| `cairn_remember` | Store permanent memory (use when user says "remember this") |
+| `cairn_store` | Store typed memory with event_type, priority, entity_id, metadata |
+| `cairn_query` | Semantic search with filters (entity_id, event_type, filter_tags, temporal_range, context_file, context_tags) |
+| `cairn_phrase_search` | Exact substring/phrase match via FTS5 (case-insensitive by default) |
+| `cairn_lessons` | Cross-session/project lessons ranked by verification count and access frequency |
+| `cairn_similar` | Find memories similar to a given memory ID |
+| `cairn_traverse` | Walk the relationship graph from a memory (1-5 hops, min_weight filter) |
+| `cairn_timeline` | View memories grouped by day (configurable lookback and limit per day) |
+| `cairn_checkpoint` | Save task state: plan, progress, files touched, decisions, key context, next steps |
+| `cairn_resume_task` | Resume a checkpointed task with full/summary/minimal verbosity |
+| `cairn_compact` | Cluster similar memories and create summary nodes (Jaccard similarity threshold) |
+| `cairn_consolidate` | Prune stale zero-access memories, cap session summaries, clean orphaned edges |
+| `cairn_feedback` | Rate a memory as helpful, unhelpful, or outdated (affects future retrieval scoring) |
+| `cairn_delete_memory` | Delete a specific memory by ID |
+| `cairn_edit_memory` | Edit the content of a specific memory by ID |
+| `cairn_type_stats` | Memory counts grouped by event type |
+| `cairn_session_stats` | Memory counts grouped by session (top 20) |
+| `cairn_welcome` | Session briefing with recent relevant memories and user profile |
+| `cairn_health` | Detailed health check: memory usage, node counts, cache stats, warnings |
+| `cairn_backup` | Export or import memories for backup/restore |
+| `cairn_list_preferences` | List all stored user preferences |
+| `cairn_save_profile` | Save or update user profile (name, timezone, role, preferences) |
+| `cairn_profile` | Show the user profile built from memory patterns |
+| `cairn_clear_session` | Clear all memories for a specific session |
 
 ## Common Workflows
 
@@ -64,12 +64,12 @@ There are three ways memories enter the system:
 
 **1. Explicit remember** --- when the user says "remember this":
 ```
-omega_remember(text="The staging environment uses port 8443")
+cairn_remember(text="The staging environment uses port 8443")
 ```
 
 **2. Typed store** --- for structured capture with metadata:
 ```
-omega_store(
+cairn_store(
     content="Switched from REST to gRPC for inter-service calls — 3x latency improvement",
     event_type="decision",
     priority=4,
@@ -83,12 +83,12 @@ omega_store(
 
 **Semantic search** --- finds conceptually related memories:
 ```
-omega_query(query="authentication flow for mobile app")
+cairn_query(query="authentication flow for mobile app")
 ```
 
 **Filtered search** --- narrow by type, tags, entity, or time:
 ```
-omega_query(
+cairn_query(
     query="database migration",
     event_type="decision",
     filter_tags=["postgres"],
@@ -99,7 +99,7 @@ omega_query(
 
 **Context-aware search** --- boost results relevant to what you are editing:
 ```
-omega_query(
+cairn_query(
     query="error handling patterns",
     context_file="src/api/handler.py",
     context_tags=["python", "fastapi"]
@@ -108,12 +108,12 @@ omega_query(
 
 **Exact phrase search** --- for specific strings, error messages, or known terms:
 ```
-omega_phrase_search(phrase="ECONNREFUSED", event_type="error_pattern")
+cairn_phrase_search(phrase="ECONNREFUSED", event_type="error_pattern")
 ```
 
 **Cross-session lessons** --- ranked by how often they have been verified:
 ```
-omega_lessons(task="setting up CI pipeline", limit=5, cross_project=True)
+cairn_lessons(task="setting up CI pipeline", limit=5, cross_project=True)
 ```
 
 ### Memory Types and TTLs
@@ -133,7 +133,7 @@ omega_lessons(task="setting up CI pipeline", limit=5, cross_project=True)
 When the context window is getting full (>70% capacity), checkpoint your work:
 
 ```
-omega_checkpoint(
+cairn_checkpoint(
     task_title="API redesign Phase 2",
     plan="Migrate all endpoints to v2 schema",
     progress="Completed users and orders endpoints. Auth endpoints remain.",
@@ -147,7 +147,7 @@ omega_checkpoint(
 In a new session, resume where you left off:
 
 ```
-omega_resume_task(task_title="API redesign", verbosity="full")
+cairn_resume_task(task_title="API redesign", verbosity="full")
 ```
 
 Verbosity levels:
@@ -160,52 +160,52 @@ Verbosity levels:
 Memories form a graph through automatic relationship edges. Traverse to discover related context:
 
 ```
-omega_traverse(memory_id="mem_abc123", max_hops=2, min_weight=0.3)
+cairn_traverse(memory_id="mem_abc123", max_hops=2, min_weight=0.3)
 ```
 
 Find memories similar to a known one:
 
 ```
-omega_similar(memory_id="mem_abc123", limit=5)
+cairn_similar(memory_id="mem_abc123", limit=5)
 ```
 
 ### Maintenance
 
 **Consolidate** --- prune stale memories and clean up (run weekly, auto-triggered by hooks):
 ```
-omega_consolidate(prune_days=30, max_summaries=50)
+cairn_consolidate(prune_days=30, max_summaries=50)
 ```
 
 **Compact** --- cluster similar memories into summary nodes (run biweekly):
 ```
-omega_compact(event_type="lesson_learned", similarity_threshold=0.6, min_cluster_size=3)
+cairn_compact(event_type="lesson_learned", similarity_threshold=0.6, min_cluster_size=3)
 ```
 
 Preview clusters without compacting:
 ```
-omega_compact(dry_run=True)
+cairn_compact(dry_run=True)
 ```
 
 **Timeline** --- review what was captured recently:
 ```
-omega_timeline(days=7, limit_per_day=10)
+cairn_timeline(days=7, limit_per_day=10)
 ```
 
 **Feedback** --- improve retrieval quality over time:
 ```
-omega_feedback(memory_id="mem_abc123", rating="helpful")
-omega_feedback(memory_id="mem_xyz789", rating="outdated", reason="We switched to Redis")
+cairn_feedback(memory_id="mem_abc123", rating="helpful")
+cairn_feedback(memory_id="mem_xyz789", rating="outdated", reason="We switched to Redis")
 ```
 
 ## Tips
 
-- **Query before you work.** Run `omega_query` at the start of non-trivial tasks to surface prior decisions, gotchas, and lessons. This prevents re-discovering known issues.
-- **Check OMEGA on errors.** Before debugging from scratch, search for prior solutions with `omega_phrase_search` on the error message.
+- **Query before you work.** Run `cairn_query` at the start of non-trivial tasks to surface prior decisions, gotchas, and lessons. This prevents re-discovering known issues.
+- **Check Cairn on errors.** Before debugging from scratch, search for prior solutions with `cairn_phrase_search` on the error message.
 - **Let hooks do the work.** Auto-capture detects decisions and lessons in conversation. You do not need to manually store everything.
 - **Checkpoint early.** Do not wait until the context window is completely full. Checkpoint at major milestones or when you notice things slowing down.
 - **Use entity scoping.** If you work across multiple organizations or projects, scope memories with `entity_id` to keep contexts separate.
-- **Rate memories.** Using `omega_feedback` with `helpful` or `unhelpful` directly affects future retrieval scoring. Marking memories `outdated` dampens them.
-- **Compact periodically.** If you accumulate many similar lessons (e.g., repeated debugging insights for the same system), `omega_compact` clusters them into clean summaries.
-- **Phrase search for exact matches.** Semantic search is fuzzy by design. When you need an exact error message or specific identifier, use `omega_phrase_search`.
+- **Rate memories.** Using `cairn_feedback` with `helpful` or `unhelpful` directly affects future retrieval scoring. Marking memories `outdated` dampens them.
+- **Compact periodically.** If you accumulate many similar lessons (e.g., repeated debugging insights for the same system), `cairn_compact` clusters them into clean summaries.
+- **Phrase search for exact matches.** Semantic search is fuzzy by design. When you need an exact error message or specific identifier, use `cairn_phrase_search`.
 - **Temporal ranges narrow results.** If you know roughly when something happened, add `temporal_range` to your query to avoid pulling in old, irrelevant memories.
-- **Backup regularly.** `omega_backup(filepath="~/omega-backup.json")` exports everything. The auto-maintenance hooks back up weekly, but manual backups before risky operations are wise.
+- **Backup regularly.** `cairn_backup(filepath="~/cairn-backup.json")` exports everything. The auto-maintenance hooks back up weekly, but manual backups before risky operations are wise.

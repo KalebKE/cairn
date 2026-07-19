@@ -15,7 +15,7 @@ import pytest
 import unicodedata
 from datetime import datetime, timedelta, timezone
 
-from omega.sqlite_store import SQLiteStore
+from cairn.sqlite_store import SQLiteStore
 
 
 # ============================================================================
@@ -24,9 +24,9 @@ from omega.sqlite_store import SQLiteStore
 
 
 @pytest.fixture(autouse=True)
-def _reset_bridge(tmp_omega_dir):
+def _reset_bridge(tmp_cairn_dir):
     """Reset the bridge singleton so each test gets a fresh store."""
-    from omega.bridge import reset_memory
+    from cairn.bridge import reset_memory
 
     reset_memory()
     yield
@@ -34,7 +34,7 @@ def _reset_bridge(tmp_omega_dir):
 
 
 def _get_store():
-    from omega.bridge import _get_store
+    from cairn.bridge import _get_store
 
     return _get_store()
 
@@ -360,7 +360,7 @@ class TestSemanticDedup:
     def test_semantic_dedup_disabled_by_threshold(self):
         """Threshold 1.0 effectively disables semantic dedup."""
         store = _get_store()
-        from omega.sqlite_store import MemoryResult
+        from cairn.sqlite_store import MemoryResult
         from datetime import datetime, timezone
 
         now = datetime.now(timezone.utc)
@@ -375,7 +375,7 @@ class TestSemanticDedup:
     def test_semantic_dedup_single_item_passthrough(self):
         """Single item should pass through unchanged."""
         store = _get_store()
-        from omega.sqlite_store import MemoryResult
+        from cairn.sqlite_store import MemoryResult
         from datetime import datetime, timezone
 
         now = datetime.now(timezone.utc)
@@ -386,18 +386,18 @@ class TestSemanticDedup:
         assert result[0].id == "a"
 
     def test_semantic_dedup_env_var_override(self):
-        """OMEGA_SEMANTIC_DEDUP_THRESHOLD env var should control the threshold."""
-        old = os.environ.get("OMEGA_SEMANTIC_DEDUP_THRESHOLD")
+        """CAIRN_SEMANTIC_DEDUP_THRESHOLD env var should control the threshold."""
+        old = os.environ.get("CAIRN_SEMANTIC_DEDUP_THRESHOLD")
         try:
-            os.environ["OMEGA_SEMANTIC_DEDUP_THRESHOLD"] = "1.0"
+            os.environ["CAIRN_SEMANTIC_DEDUP_THRESHOLD"] = "1.0"
             # Re-read to verify env var is parsed (tested in query flow)
-            val = float(os.environ.get("OMEGA_SEMANTIC_DEDUP_THRESHOLD", "0.92"))
+            val = float(os.environ.get("CAIRN_SEMANTIC_DEDUP_THRESHOLD", "0.92"))
             assert val == 1.0
         finally:
             if old is not None:
-                os.environ["OMEGA_SEMANTIC_DEDUP_THRESHOLD"] = old
+                os.environ["CAIRN_SEMANTIC_DEDUP_THRESHOLD"] = old
             else:
-                os.environ.pop("OMEGA_SEMANTIC_DEDUP_THRESHOLD", None)
+                os.environ.pop("CAIRN_SEMANTIC_DEDUP_THRESHOLD", None)
 
     def test_semantic_dedup_stats_tracking(self):
         """Semantic dedup should increment stats counter when items are dropped."""
@@ -408,7 +408,7 @@ class TestSemanticDedup:
         # Even without vec, the stats key should exist if method runs
         initial = store.stats.get("semantic_dedup_query", 0)
         # Method gracefully handles missing embeddings (no vec in test)
-        from omega.sqlite_store import MemoryResult
+        from cairn.sqlite_store import MemoryResult
         now = datetime.now(timezone.utc)
         r1 = MemoryResult(id=id1, content="test", metadata={}, created_at=now,
                           access_count=0, last_accessed=now, relevance=1.0, ttl_seconds=None)

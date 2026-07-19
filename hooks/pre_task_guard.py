@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OMEGA PreToolUse hook — Task declaration guard for multi-agent coordination.
+"""Cairn PreToolUse hook — Task declaration guard for multi-agent coordination.
 
 Triggered on Edit/Write/NotebookEdit. Blocks the tool call unless the session
 has an active (in_progress) task. Enforcement is opt-in per project: only
@@ -8,7 +8,7 @@ activates once a project has at least one non-terminal task.
 Exit code 2 = block the tool call in Claude Code.
 Exit code 0 = allow (including fail-open on any error).
 
-Design: Fail-open — OMEGA unavailable must never block edits.
+Design: Fail-open — Cairn unavailable must never block edits.
 """
 import json
 import os
@@ -21,7 +21,7 @@ from pathlib import Path
 
 def _log_hook_error(hook_name, error):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         tb = traceback.format_exc()
@@ -37,7 +37,7 @@ def _log_hook_error(hook_name, error):
 
 def _log_timing(hook_name, elapsed_ms):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         data = f"[{timestamp}] {hook_name}: OK ({elapsed_ms:.0f}ms)\n"
@@ -57,8 +57,8 @@ def _block_no_task(file_path, project):
     print(
         f"\n[TASK-GUARD] BLOCKED: No active task for this session on {project_name}.\n"
         f"  Create and claim a task before editing {filename}:\n"
-        f"    1. omega_task_create(title=\"Your task\", project=\"{project}\")\n"
-        f"    2. omega_task_claim(task_id=<id>, session_id=\"<session-id>\")\n"
+        f"    1. cairn_task_create(title=\"Your task\", project=\"{project}\")\n"
+        f"    2. cairn_task_claim(task_id=<id>, session_id=\"<session-id>\")\n"
         f"  Or complete/cancel existing tasks to disable enforcement."
     )
     sys.exit(2)
@@ -95,7 +95,7 @@ def main():
         return
 
     try:
-        from omega.coordination import get_manager
+        from cairn.coordination import get_manager
         mgr = get_manager()
 
         # Opt-in check: only enforce if project has active tasks
@@ -111,10 +111,10 @@ def main():
         _block_no_task(file_path, project_dir)
 
     except ImportError:
-        # OMEGA not installed — fail-open
+        # Cairn not installed — fail-open
         pass
     except Exception as e:
-        # Any error — fail-open, never block when OMEGA is unavailable
+        # Any error — fail-open, never block when Cairn is unavailable
         _log_hook_error("pre_task_guard", e)
 
 

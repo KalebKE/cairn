@@ -1,6 +1,6 @@
 """Tests for strength surfacing in query results."""
 import pytest
-from omega.sqlite_store import SQLiteStore
+from cairn.sqlite_store import SQLiteStore
 
 
 class TestStrengthField:
@@ -24,7 +24,7 @@ class TestStrengthField:
             assert 0.0 <= r.strength <= 1.0, f"strength {r.strength} not in [0, 1]"
 
     def test_strength_default_is_zero(self):
-        from omega.sqlite_store import MemoryResult
+        from cairn.sqlite_store import MemoryResult
         mr = MemoryResult(id="test-123", content="test")
         assert mr.strength == 0.0
 
@@ -100,14 +100,14 @@ class TestStrengthComputation:
 @pytest.mark.usefixtures("_reset_bridge")
 class TestStrengthInBridgeOutput:
 
-    def test_query_markdown_includes_strength(self, tmp_omega_dir):
-        from omega.bridge import store, query
+    def test_query_markdown_includes_strength(self, tmp_cairn_dir):
+        from cairn.bridge import store, query
         store(content="Architecture: we use event sourcing", event_type="decision")
         result = query(query_text="event sourcing")
         assert "str:" in result.lower(), f"Strength not found in query output: {result[:300]}"
 
-    def test_query_structured_includes_strength(self, tmp_omega_dir):
-        from omega.bridge import store, query_structured
+    def test_query_structured_includes_strength(self, tmp_cairn_dir):
+        from cairn.bridge import store, query_structured
         store(content="Architecture: we use event sourcing", event_type="decision")
         results = query_structured(query_text="event sourcing")
         assert len(results) > 0
@@ -118,16 +118,16 @@ class TestStrengthInBridgeOutput:
 @pytest.mark.usefixtures("_reset_bridge")
 class TestStrengthMinFilter:
 
-    def test_strength_min_filters_weak_results(self, tmp_omega_dir):
-        from omega.bridge import store, query
+    def test_strength_min_filters_weak_results(self, tmp_cairn_dir):
+        from cairn.bridge import store, query
         store(content="Critical architecture decision about database", event_type="decision")
         store(content="Random task completion note about database indexing", event_type="task_completion")
         all_results = query(query_text="database")
         filtered = query(query_text="database", strength_min=0.8)
         assert len(filtered.split("##")) <= len(all_results.split("##"))
 
-    def test_strength_min_zero_returns_all(self, tmp_omega_dir):
-        from omega.bridge import store, query
+    def test_strength_min_zero_returns_all(self, tmp_cairn_dir):
+        from cairn.bridge import store, query
         store(content="Test memory for strength filtering", event_type="decision")
         all_results = query(query_text="strength filtering")
         filtered = query(query_text="strength filtering", strength_min=0.0)

@@ -7,36 +7,36 @@ description: Storage paths, environment variables, hooks, and MCP server setting
 
 ## Storage paths
 
-OMEGA stores all data locally. Here's where everything lives:
+Cairn stores all data locally. Here's where everything lives:
 
 | Path | Purpose |
 |------|---------|
-| `~/.omega/omega.db` | SQLite database (memories, coordination, entities) |
-| `~/.omega/profile.json` | User profile (greeting name, timezone, role) |
-| `~/.omega/secrets.json` | Router API keys (chmod 600, never committed) |
-| `~/.omega/hooks.log` | Hook error log (for debugging hook failures) |
-| `~/.omega/documents/` | Drop folder for auto-ingestion (knowledge base) |
-| `~/.omega/backups/` | Automatic weekly backups |
-| `~/.cache/omega/models/bge-small-en-v1.5-onnx/` | Primary ONNX embedding model |
-| `~/.cache/omega/models/all-MiniLM-L6-v2-onnx/` | Fallback embedding model |
+| `~/.cairn/cairn.db` | SQLite database (memories, coordination, entities) |
+| `~/.cairn/profile.json` | User profile (greeting name, timezone, role) |
+| `~/.cairn/secrets.json` | Router API keys (chmod 600, never committed) |
+| `~/.cairn/hooks.log` | Hook error log (for debugging hook failures) |
+| `~/.cairn/documents/` | Drop folder for auto-ingestion (knowledge base) |
+| `~/.cairn/backups/` | Automatic weekly backups |
+| `~/.cache/cairn/models/bge-small-en-v1.5-onnx/` | Primary ONNX embedding model |
+| `~/.cache/cairn/models/all-MiniLM-L6-v2-onnx/` | Fallback embedding model |
 
 !!! tip "Portable storage"
-    Set the `OMEGA_HOME` environment variable to move the storage directory anywhere. The cache directory for models stays at `~/.cache/omega/` regardless.
+    Set the `CAIRN_HOME` environment variable to move the storage directory anywhere. The cache directory for models stays at `~/.cache/cairn/` regardless.
 
-## Files modified outside `~/.omega`
+## Files modified outside `~/.cairn`
 
-`omega setup` modifies three files in your Claude Code configuration:
+`cairn setup` modifies three files in your Claude Code configuration:
 
 ### `~/.claude.json` — MCP server registration
 
-Adds an `omega-memory` entry to the `mcpServers` section:
+Adds an `cairn` entry to the `mcpServers` section:
 
 ```json
 {
   "mcpServers": {
-    "omega-memory": {
+    "cairn": {
       "command": "python3",
-      "args": ["-m", "omega.server.mcp_server"],
+      "args": ["-m", "cairn.server.mcp_server"],
       "env": {},
       "timeout": 3600
     }
@@ -44,7 +44,7 @@ Adds an `omega-memory` entry to the `mcpServers` section:
 }
 ```
 
-This tells Claude Code how to spawn the OMEGA MCP server.
+This tells Claude Code how to spawn the Cairn MCP server.
 
 ### `~/.claude/settings.json` — Hook entries
 
@@ -52,32 +52,32 @@ Adds 7 hook entries that power automatic memory capture, surfacing, and coordina
 
 ### `~/.claude/CLAUDE.md` — Agent instructions
 
-Adds a managed block between `<!-- OMEGA:BEGIN -->` and `<!-- OMEGA:END -->` markers with instructions for using memory and coordination tools. This block is updated on each `omega setup` run.
+Adds a managed block between `<!-- Cairn:BEGIN -->` and `<!-- Cairn:END -->` markers with instructions for using memory and coordination tools. This block is updated on each `cairn setup` run.
 
 ## Environment variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OMEGA_HOME` | `~/.omega` | Override the storage directory for database, profile, secrets, and logs |
-| `OMEGA_IDLE_TIMEOUT` | `3600` | MCP server idle timeout in seconds. Server auto-shuts down after this period of inactivity |
+| `CAIRN_HOME` | `~/.cairn` | Override the storage directory for database, profile, secrets, and logs |
+| `CAIRN_IDLE_TIMEOUT` | `3600` | MCP server idle timeout in seconds. Server auto-shuts down after this period of inactivity |
 | `NO_COLOR` | (unset) | When set, disables Rich formatting in CLI output |
 
 === "Set temporarily"
 
     ```bash
-    OMEGA_HOME=/path/to/storage omega doctor
+    CAIRN_HOME=/path/to/storage cairn doctor
     ```
 
 === "Set permanently (zsh)"
 
     ```bash
-    echo 'export OMEGA_HOME=/path/to/storage' >> ~/.zshrc
+    echo 'export CAIRN_HOME=/path/to/storage' >> ~/.zshrc
     source ~/.zshrc
     ```
 
 ## Hooks
 
-OMEGA uses 7 hook processes (batched from 11 handlers) that run automatically during Claude Code sessions. All hooks are **fail-open** — if a hook errors, it logs to `~/.omega/hooks.log` and lets the operation proceed.
+Cairn uses 7 hook processes (batched from 11 handlers) that run automatically during Claude Code sessions. All hooks are **fail-open** — if a hook errors, it logs to `~/.cairn/hooks.log` and lets the operation proceed.
 
 | # | Hook Event | Trigger | What it does |
 |---|-----------|---------|--------------|
@@ -94,25 +94,25 @@ OMEGA uses 7 hook processes (batched from 11 handlers) that run automatically du
 To disable a specific hook, remove its entry from `~/.claude/settings.json`. To disable all hooks:
 
 ```bash
-omega setup --uninstall-hooks
+cairn setup --uninstall-hooks
 ```
 
 To reinstall them later:
 
 ```bash
-omega setup --install-hooks
+cairn setup --install-hooks
 ```
 
 !!! warning "Disabling hooks reduces functionality"
-    Without hooks, OMEGA still works as an MCP tool server — you can manually query and store memories. But automatic capture, surfacing, coordination guards, and session management won't function.
+    Without hooks, Cairn still works as an MCP tool server — you can manually query and store memories. But automatic capture, surfacing, coordination guards, and session management won't function.
 
 ## MCP server
 
-OMEGA runs as a **stdio MCP server** spawned by Claude Code on demand. Key characteristics:
+Cairn runs as a **stdio MCP server** spawned by Claude Code on demand. Key characteristics:
 
 - **Transport**: stdio (stdin/stdout JSON-RPC). No network ports, no HTTP.
-- **Lifecycle**: Claude Code spawns the server process when it first needs an OMEGA tool. The server stays alive for the duration of the session.
-- **Idle timeout**: Auto-shuts down after 1 hour (3600s) of inactivity. Configurable via `OMEGA_IDLE_TIMEOUT`.
+- **Lifecycle**: Claude Code spawns the server process when it first needs an Cairn tool. The server stays alive for the duration of the session.
+- **Idle timeout**: Auto-shuts down after 1 hour (3600s) of inactivity. Configurable via `CAIRN_IDLE_TIMEOUT`.
 - **Memory**: ~31MB at startup, ~337MB after first query (loads ONNX embedding model into RAM).
 - **Tool count**: Up to 70 tools depending on installed extras (24 memory + 28 coordination + 10 router + 8 entity).
 
@@ -120,15 +120,15 @@ OMEGA runs as a **stdio MCP server** spawned by Claude Code on demand. Key chara
 
 ```bash
 # Verify MCP registration
-omega doctor
+cairn doctor
 
 # Check if the server process is running
-ps aux | grep omega.server.mcp_server
+ps aux | grep cairn.server.mcp_server
 ```
 
 ## Router configuration (optional)
 
-If you installed `omega-memory[router]`, configure API keys in `~/.omega/secrets.json`:
+If you installed `cairn[router]`, configure API keys in `~/.cairn/secrets.json`:
 
 ```json
 {
@@ -141,7 +141,7 @@ If you installed `omega-memory[router]`, configure API keys in `~/.omega/secrets
 ```
 
 !!! warning "Protect your secrets"
-    `omega setup` creates `secrets.json` with `chmod 600` (owner read/write only). Never commit this file to version control.
+    `cairn setup` creates `secrets.json` with `chmod 600` (owner read/write only). Never commit this file to version control.
 
 You can also set API keys as environment variables:
 
@@ -155,26 +155,26 @@ export XAI_API_KEY="<xai-api-key>"
 
 ## Cloud sync configuration (optional)
 
-If you installed `omega-memory[cloud]`, configure Supabase credentials:
+If you installed `cairn[cloud]`, configure Supabase credentials:
 
 ```bash
-omega cloud setup
+cairn cloud setup
 ```
 
-This prompts for your Supabase URL and anon key, stored in `~/.omega/secrets.json`. Sync runs automatically:
+This prompts for your Supabase URL and anon key, stored in `~/.cairn/secrets.json`. Sync runs automatically:
 
 - **Pull**: Once per day at session start
 - **Push**: At session end after `sync_all`
 
 ## Auto-maintenance
 
-OMEGA runs background maintenance tasks on a schedule, tracked by marker files in `~/.omega/`:
+Cairn runs background maintenance tasks on a schedule, tracked by marker files in `~/.cairn/`:
 
 | Task | Cadence | Marker file | What it does |
 |------|---------|-------------|--------------|
 | Consolidate | 7 days | `last-consolidate` | Prunes stale low-value memories, caps session summaries |
 | Compact | 14 days | `last-compact` | Merges similar memories into consolidated nodes |
-| Backup | 7 days | `last-backup` | Exports full database to `~/.omega/backups/` |
+| Backup | 7 days | `last-backup` | Exports full database to `~/.cairn/backups/` |
 | Doctor | 7 days | `last-doctor` | Runs health checks, logs warnings |
 | Cloud pull | 1 day | `last-cloud-pull` | Syncs from Supabase (if configured) |
 | Cloud push | per session | `last-cloud-push` | Syncs to Supabase at session end |
@@ -183,5 +183,5 @@ All maintenance runs at session start and is non-blocking.
 
 ## Next steps
 
-- **[Quickstart](quickstart.md)** — Try OMEGA hands-on with your first memories.
+- **[Quickstart](quickstart.md)** — Try Cairn hands-on with your first memories.
 - **[MCP Tools Reference](../reference/mcp-tools.md)** — Full documentation for all 70 MCP tools.

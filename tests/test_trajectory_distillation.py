@@ -8,9 +8,9 @@ import pytest
 
 def test_quality_gate_skips_short_sessions():
     """Sessions with fewer than 3 memories are not distilled."""
-    from omega.bridge import distill_trajectory
+    from cairn.bridge import distill_trajectory
 
-    with patch("omega.bridge._get_store") as mock_store:
+    with patch("cairn.bridge._get_store") as mock_store:
         mock_db = MagicMock()
         mock_db.get_by_session.return_value = [
             {"content": "error found", "event_type": "error_pattern", "metadata": {}},
@@ -23,9 +23,9 @@ def test_quality_gate_skips_short_sessions():
 
 def test_quality_gate_skips_no_completion():
     """Sessions without task_completion or commit are not distilled."""
-    from omega.bridge import distill_trajectory
+    from cairn.bridge import distill_trajectory
 
-    with patch("omega.bridge._get_store") as mock_store:
+    with patch("cairn.bridge._get_store") as mock_store:
         mock_db = MagicMock()
         mock_db.get_by_session.return_value = [
             {"content": "explored codebase", "event_type": "decision", "metadata": {}},
@@ -40,7 +40,7 @@ def test_quality_gate_skips_no_completion():
 
 def test_quality_gate_passes_with_completion():
     """Sessions with task_completion and 3+ memories pass the gate."""
-    from omega.bridge import distill_trajectory
+    from cairn.bridge import distill_trajectory
 
     mock_llm_response = json.dumps({
         "skill_type": "debugging",
@@ -52,9 +52,9 @@ def test_quality_gate_passes_with_completion():
         "outcome": "success",
     })
 
-    with patch("omega.bridge._get_store") as mock_store, \
-         patch("omega.bridge.llm_complete", return_value=mock_llm_response) as mock_llm, \
-         patch("omega.bridge.auto_capture", return_value="node-123") as mock_capture:
+    with patch("cairn.bridge._get_store") as mock_store, \
+         patch("cairn.bridge.llm_complete", return_value=mock_llm_response) as mock_llm, \
+         patch("cairn.bridge.auto_capture", return_value="node-123") as mock_capture:
         mock_db = MagicMock()
         mock_db.get_by_session.return_value = [
             {"content": "TypeError in auth.py", "event_type": "error_pattern", "metadata": {}},
@@ -74,7 +74,7 @@ def test_quality_gate_passes_with_completion():
 
 def test_quality_gate_passes_with_commit_in_metadata():
     """Sessions with a commit in metadata (no explicit task_completion type) pass."""
-    from omega.bridge import distill_trajectory
+    from cairn.bridge import distill_trajectory
 
     mock_llm_response = json.dumps({
         "skill_type": "feature",
@@ -86,9 +86,9 @@ def test_quality_gate_passes_with_commit_in_metadata():
         "outcome": "success",
     })
 
-    with patch("omega.bridge._get_store") as mock_store, \
-         patch("omega.bridge.llm_complete", return_value=mock_llm_response), \
-         patch("omega.bridge.auto_capture", return_value="node-456"):
+    with patch("cairn.bridge._get_store") as mock_store, \
+         patch("cairn.bridge.llm_complete", return_value=mock_llm_response), \
+         patch("cairn.bridge.auto_capture", return_value="node-456"):
         mock_db = MagicMock()
         mock_db.get_by_session.return_value = [
             {"content": "Design decision", "event_type": "decision", "metadata": {}},
@@ -103,11 +103,11 @@ def test_quality_gate_passes_with_commit_in_metadata():
 
 def test_llm_failure_returns_none():
     """LLM failure is fail-open — returns None, no skill stored."""
-    from omega.bridge import distill_trajectory
+    from cairn.bridge import distill_trajectory
 
-    with patch("omega.bridge._get_store") as mock_store, \
-         patch("omega.bridge.llm_complete", return_value="") as mock_llm, \
-         patch("omega.bridge.auto_capture") as mock_capture:
+    with patch("cairn.bridge._get_store") as mock_store, \
+         patch("cairn.bridge.llm_complete", return_value="") as mock_llm, \
+         patch("cairn.bridge.auto_capture") as mock_capture:
         mock_db = MagicMock()
         mock_db.get_by_session.return_value = [
             {"content": "error", "event_type": "error_pattern", "metadata": {}},
@@ -123,11 +123,11 @@ def test_llm_failure_returns_none():
 
 def test_llm_skip_response_returns_none():
     """LLM returning skip:true means session is too routine."""
-    from omega.bridge import distill_trajectory
+    from cairn.bridge import distill_trajectory
 
-    with patch("omega.bridge._get_store") as mock_store, \
-         patch("omega.bridge.llm_complete", return_value='{"skip": true}'), \
-         patch("omega.bridge.auto_capture") as mock_capture:
+    with patch("cairn.bridge._get_store") as mock_store, \
+         patch("cairn.bridge.llm_complete", return_value='{"skip": true}'), \
+         patch("cairn.bridge.auto_capture") as mock_capture:
         mock_db = MagicMock()
         mock_db.get_by_session.return_value = [
             {"content": "small fix", "event_type": "decision", "metadata": {}},
@@ -143,11 +143,11 @@ def test_llm_skip_response_returns_none():
 
 def test_malformed_json_returns_none():
     """Malformed LLM JSON is fail-open."""
-    from omega.bridge import distill_trajectory
+    from cairn.bridge import distill_trajectory
 
-    with patch("omega.bridge._get_store") as mock_store, \
-         patch("omega.bridge.llm_complete", return_value="not json at all"), \
-         patch("omega.bridge.auto_capture") as mock_capture:
+    with patch("cairn.bridge._get_store") as mock_store, \
+         patch("cairn.bridge.llm_complete", return_value="not json at all"), \
+         patch("cairn.bridge.auto_capture") as mock_capture:
         mock_db = MagicMock()
         mock_db.get_by_session.return_value = [
             {"content": "e", "event_type": "error_pattern", "metadata": {}},

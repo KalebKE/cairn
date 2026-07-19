@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from omega.evaluation.retrieval_eval import (
+from cairn.evaluation.retrieval_eval import (
     EvalReport,
     _extract_key_terms,
     _ndcg,
@@ -17,7 +17,7 @@ from omega.evaluation.retrieval_eval import (
     run_evaluation,
     sample_memories,
 )
-from omega.sqlite_store import SQLiteStore
+from cairn.sqlite_store import SQLiteStore
 
 
 # ---------------------------------------------------------------------------
@@ -26,9 +26,9 @@ from omega.sqlite_store import SQLiteStore
 
 
 @pytest.fixture
-def store(tmp_omega_dir):
+def store(tmp_cairn_dir):
     """Create a SQLiteStore with seed data for evaluation tests."""
-    db_path = str(tmp_omega_dir / "omega.db")
+    db_path = str(tmp_cairn_dir / "cairn.db")
     s = SQLiteStore(db_path)
 
     # Seed diverse memories
@@ -76,16 +76,16 @@ class TestExtractKeyTerms:
         assert "authentication" in terms
         assert "login" in terms
         assert "bug" in terms
-        # Stop words and OMEGA noise words should be filtered
+        # Stop words and Cairn noise words should be filtered
         assert "in" not in terms
-        assert "session" not in terms  # Filtered as OMEGA noise word
+        assert "session" not in terms  # Filtered as Cairn noise word
 
     def test_filters_stop_words(self):
         terms = _extract_key_terms("the quick brown fox jumps over the lazy dog")
         assert "the" not in terms
         assert "over" not in terms
 
-    def test_filters_omega_noise_words(self):
+    def test_filters_cairn_noise_words(self):
         terms = _extract_key_terms("committed files changes to the session memory")
         # All these are in the noise word list
         assert "committed" not in terms
@@ -171,8 +171,8 @@ class TestSampleMemories:
         # Very unlikely to be identical with different seeds
         assert ids1 != ids2
 
-    def test_handles_empty_store(self, tmp_omega_dir):
-        db_path = str(tmp_omega_dir / "empty.db")
+    def test_handles_empty_store(self, tmp_cairn_dir):
+        db_path = str(tmp_cairn_dir / "empty.db")
         empty_store = SQLiteStore(db_path)
         samples = sample_memories(empty_store, sample_size=10)
         assert samples == []
@@ -223,8 +223,8 @@ class TestNDCG:
 
 
 class TestRunEvaluation:
-    def test_basic_mode_returns_report(self, store, tmp_omega_dir):
-        db_path = str(tmp_omega_dir / "omega.db")
+    def test_basic_mode_returns_report(self, store, tmp_cairn_dir):
+        db_path = str(tmp_cairn_dir / "cairn.db")
         report = run_evaluation(
             db_path=db_path,
             sample_size=10,
@@ -244,8 +244,8 @@ class TestRunEvaluation:
         assert report.ndcg_at_k is None
         assert report.llm_calls == 0
 
-    def test_report_has_probe_results(self, store, tmp_omega_dir):
-        db_path = str(tmp_omega_dir / "omega.db")
+    def test_report_has_probe_results(self, store, tmp_cairn_dir):
+        db_path = str(tmp_cairn_dir / "cairn.db")
         report = run_evaluation(db_path=db_path, sample_size=5, top_k=3, seed=42)
         assert len(report.probe_results) > 0
         for pr in report.probe_results:
@@ -254,8 +254,8 @@ class TestRunEvaluation:
             assert "hit" in pr
             assert "results" in pr
 
-    def test_report_has_type_breakdown(self, store, tmp_omega_dir):
-        db_path = str(tmp_omega_dir / "omega.db")
+    def test_report_has_type_breakdown(self, store, tmp_cairn_dir):
+        db_path = str(tmp_cairn_dir / "cairn.db")
         report = run_evaluation(db_path=db_path, sample_size=15, top_k=5, seed=42)
         assert len(report.by_event_type) > 0
         for etype, metrics in report.by_event_type.items():
@@ -263,9 +263,9 @@ class TestRunEvaluation:
             assert "hit_rate" in metrics
             assert "mrr" in metrics
 
-    def test_saves_json_output(self, store, tmp_omega_dir):
-        db_path = str(tmp_omega_dir / "omega.db")
-        output_path = str(tmp_omega_dir / "report.json")
+    def test_saves_json_output(self, store, tmp_cairn_dir):
+        db_path = str(tmp_cairn_dir / "cairn.db")
+        output_path = str(tmp_cairn_dir / "report.json")
         run_evaluation(
             db_path=db_path,
             sample_size=5,
@@ -280,15 +280,15 @@ class TestRunEvaluation:
         assert "mrr" in data
         assert "probe_results" in data
 
-    def test_empty_store_returns_empty_report(self, tmp_omega_dir):
-        db_path = str(tmp_omega_dir / "empty.db")
+    def test_empty_store_returns_empty_report(self, tmp_cairn_dir):
+        db_path = str(tmp_cairn_dir / "empty.db")
         SQLiteStore(db_path)  # Create empty DB
         report = run_evaluation(db_path=db_path, sample_size=10)
         assert report.sample_size == 0
         assert report.hit_rate == 0.0
 
-    def test_deterministic_results(self, store, tmp_omega_dir):
-        db_path = str(tmp_omega_dir / "omega.db")
+    def test_deterministic_results(self, store, tmp_cairn_dir):
+        db_path = str(tmp_cairn_dir / "cairn.db")
         r1 = run_evaluation(db_path=db_path, sample_size=10, seed=42)
         r2 = run_evaluation(db_path=db_path, sample_size=10, seed=42)
         assert r1.hit_rate == r2.hit_rate
@@ -395,9 +395,9 @@ class TestFormatReport:
 
 
 class TestLLMProbeGeneration:
-    @patch("omega.evaluation.retrieval_eval._call_llm")
+    @patch("cairn.evaluation.retrieval_eval._call_llm")
     def test_generate_llm_probe(self, mock_llm):
-        from omega.evaluation.retrieval_eval import generate_llm_probe
+        from cairn.evaluation.retrieval_eval import generate_llm_probe
 
         mock_llm.return_value = ("How to fix database connection pool issues", 150, 12)
         probe, in_tok, out_tok = generate_llm_probe(
@@ -409,35 +409,35 @@ class TestLLMProbeGeneration:
         assert in_tok == 150
         assert out_tok == 12
 
-    @patch("omega.evaluation.retrieval_eval._call_llm")
+    @patch("cairn.evaluation.retrieval_eval._call_llm")
     def test_generate_llm_probe_handles_failure(self, mock_llm):
-        from omega.evaluation.retrieval_eval import generate_llm_probe
+        from cairn.evaluation.retrieval_eval import generate_llm_probe
 
         mock_llm.side_effect = Exception("API error")
         probe, in_tok, out_tok = generate_llm_probe("mem-123", "Some content", "decision")
         assert probe is None
         assert in_tok == 0
 
-    @patch("omega.evaluation.retrieval_eval._call_llm")
+    @patch("cairn.evaluation.retrieval_eval._call_llm")
     def test_judge_relevance(self, mock_llm):
-        from omega.evaluation.retrieval_eval import judge_relevance
+        from cairn.evaluation.retrieval_eval import judge_relevance
 
         mock_llm.return_value = ("3", 100, 3)
         score, in_tok, out_tok = judge_relevance("database pooling", "Connection pool config")
         assert score == 3
         assert in_tok == 100
 
-    @patch("omega.evaluation.retrieval_eval._call_llm")
+    @patch("cairn.evaluation.retrieval_eval._call_llm")
     def test_judge_relevance_handles_bad_output(self, mock_llm):
-        from omega.evaluation.retrieval_eval import judge_relevance
+        from cairn.evaluation.retrieval_eval import judge_relevance
 
         mock_llm.return_value = ("not a number", 100, 5)
         score, _, _ = judge_relevance("query", "content")
         assert score == 1  # Defaults to 1
 
-    @patch("omega.evaluation.retrieval_eval._call_llm")
+    @patch("cairn.evaluation.retrieval_eval._call_llm")
     def test_judge_relevance_clamps_score(self, mock_llm):
-        from omega.evaluation.retrieval_eval import judge_relevance
+        from cairn.evaluation.retrieval_eval import judge_relevance
 
         mock_llm.return_value = ("9", 100, 3)
         score, _, _ = judge_relevance("query", "content")
@@ -450,8 +450,8 @@ class TestLLMProbeGeneration:
 
 
 class TestRunEvaluationJudgeMode:
-    @patch("omega.evaluation.retrieval_eval._call_llm")
-    def test_judge_mode_computes_extra_metrics(self, mock_llm, store, tmp_omega_dir):
+    @patch("cairn.evaluation.retrieval_eval._call_llm")
+    def test_judge_mode_computes_extra_metrics(self, mock_llm, store, tmp_cairn_dir):
         # Mock LLM to return probe queries and relevance scores
         call_count = [0]
 
@@ -466,7 +466,7 @@ class TestRunEvaluationJudgeMode:
 
         mock_llm.side_effect = fake_llm
 
-        db_path = str(tmp_omega_dir / "omega.db")
+        db_path = str(tmp_cairn_dir / "cairn.db")
         report = run_evaluation(
             db_path=db_path,
             sample_size=5,

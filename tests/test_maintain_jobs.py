@@ -1,4 +1,4 @@
-"""Tests for the async-job path on long-running omega_maintain actions.
+"""Tests for the async-job path on long-running cairn_maintain actions.
 
 Verifies that heavy maintenance actions default to non-blocking job submission
 (prevents MCP client RPC timeouts / "Server disconnected") and that job_status
@@ -24,24 +24,24 @@ def _is_error(result: dict) -> bool:
 @pytest.mark.asyncio
 async def test_consolidate_returns_job_id_when_async():
     """Default (no wait) submits a job and returns a job_id."""
-    from omega.server.handlers import handle_omega_maintain
+    from cairn.server.handlers import handle_cairn_maintain
 
-    with patch("omega.bridge.consolidate", return_value="OK"):
-        result = await handle_omega_maintain({"action": "consolidate"})
+    with patch("cairn.bridge.consolidate", return_value="OK"):
+        result = await handle_cairn_maintain({"action": "consolidate"})
 
     assert not _is_error(result)
     text = _text(result)
     assert text.startswith("Job submitted:"), text
-    assert "Poll with: omega_maintain action=job_status job_id=" in text
+    assert "Poll with: cairn_maintain action=job_status job_id=" in text
 
 
 @pytest.mark.asyncio
 async def test_consolidate_blocks_when_wait_true():
     """wait=True bypasses the job registry and returns the result inline."""
-    from omega.server.handlers import handle_omega_maintain
+    from cairn.server.handlers import handle_cairn_maintain
 
-    with patch("omega.bridge.consolidate", return_value="Consolidation Report"):
-        result = await handle_omega_maintain({"action": "consolidate", "wait": True})
+    with patch("cairn.bridge.consolidate", return_value="Consolidation Report"):
+        result = await handle_cairn_maintain({"action": "consolidate", "wait": True})
 
     assert not _is_error(result)
     assert _text(result) == "Consolidation Report"
@@ -50,10 +50,10 @@ async def test_consolidate_blocks_when_wait_true():
 @pytest.mark.asyncio
 async def test_job_status_returns_succeeded_after_completion():
     """Submit, poll until done, verify result is included."""
-    from omega.server.handlers import handle_omega_maintain
+    from cairn.server.handlers import handle_cairn_maintain
 
-    with patch("omega.bridge.backfill_embeddings", return_value={"processed": 7}):
-        submit = await handle_omega_maintain({"action": "backfill_embeddings"})
+    with patch("cairn.bridge.backfill_embeddings", return_value={"processed": 7}):
+        submit = await handle_cairn_maintain({"action": "backfill_embeddings"})
 
     job_line = next(
         line for line in _text(submit).splitlines() if line.startswith("Job submitted:")
@@ -63,7 +63,7 @@ async def test_job_status_returns_succeeded_after_completion():
     # Poll up to 5s
     final = None
     for _ in range(50):
-        status = await handle_omega_maintain({"action": "job_status", "job_id": job_id})
+        status = await handle_cairn_maintain({"action": "job_status", "job_id": job_id})
         assert not _is_error(status)
         text = _text(status)
         if "Status: succeeded" in text or "Status: failed" in text:
@@ -79,9 +79,9 @@ async def test_job_status_returns_succeeded_after_completion():
 @pytest.mark.asyncio
 async def test_job_status_missing_job_id():
     """job_status without job_id returns a usage error."""
-    from omega.server.handlers import handle_omega_maintain
+    from cairn.server.handlers import handle_cairn_maintain
 
-    result = await handle_omega_maintain({"action": "job_status"})
+    result = await handle_cairn_maintain({"action": "job_status"})
     assert _is_error(result)
     assert "job_id is required" in _text(result)
 
@@ -89,9 +89,9 @@ async def test_job_status_missing_job_id():
 @pytest.mark.asyncio
 async def test_job_status_unknown_id():
     """Unknown job_id returns a not-found error."""
-    from omega.server.handlers import handle_omega_maintain
+    from cairn.server.handlers import handle_cairn_maintain
 
-    result = await handle_omega_maintain({"action": "job_status", "job_id": "deadbeef00"})
+    result = await handle_cairn_maintain({"action": "job_status", "job_id": "deadbeef00"})
     assert _is_error(result)
     assert "not found" in _text(result).lower()
 
@@ -99,10 +99,10 @@ async def test_job_status_unknown_id():
 @pytest.mark.asyncio
 async def test_job_records_failure_when_bridge_raises():
     """Bridge exceptions are captured as Job.error, not raised to the caller."""
-    from omega.server.handlers import handle_omega_maintain
+    from cairn.server.handlers import handle_cairn_maintain
 
-    with patch("omega.bridge.compact", side_effect=RuntimeError("boom")):
-        submit = await handle_omega_maintain({"action": "compact"})
+    with patch("cairn.bridge.compact", side_effect=RuntimeError("boom")):
+        submit = await handle_cairn_maintain({"action": "compact"})
 
     job_id = next(
         line for line in _text(submit).splitlines() if line.startswith("Job submitted:")
@@ -110,7 +110,7 @@ async def test_job_records_failure_when_bridge_raises():
 
     final = None
     for _ in range(50):
-        status = await handle_omega_maintain({"action": "job_status", "job_id": job_id})
+        status = await handle_cairn_maintain({"action": "job_status", "job_id": job_id})
         text = _text(status)
         if "Status: succeeded" in text or "Status: failed" in text:
             final = text
@@ -124,7 +124,7 @@ async def test_job_records_failure_when_bridge_raises():
 
 def test_job_registry_evicts_expired():
     """Finished jobs older than TTL are evicted on next submit."""
-    from omega.server import jobs
+    from cairn.server import jobs
 
     registry = jobs.JobRegistry(_DirectExecutor())
     j = registry.submit("test", lambda: "ok")

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OMEGA PreToolUse hook — Git commit coordination guard (fallback mode).
+"""Cairn PreToolUse hook — Git commit coordination guard (fallback mode).
 
 BLOCKS commits that stage files claimed by other sessions (exit code 2).
 WARNS when staging files not in own claim list (exit code 0).
@@ -16,7 +16,7 @@ from pathlib import Path
 
 def _log_hook_error(hook_name, error):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         tb = traceback.format_exc()
@@ -32,7 +32,7 @@ def _log_hook_error(hook_name, error):
 
 def _log_timing(hook_name, elapsed_ms):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         data = f"[{timestamp}] {hook_name}: OK ({elapsed_ms:.0f}ms)\n"
@@ -85,7 +85,7 @@ def main():
         pass
 
     # --- Commit scope / atomicity check (no coordination needed) ---
-    if staged_files and not os.environ.get("OMEGA_SKIP_SCOPE_CHECK"):
+    if staged_files and not os.environ.get("CAIRN_SKIP_SCOPE_CHECK"):
         command = json.loads(os.environ.get("TOOL_INPUT", "{}")).get("command", "")
         is_merge = "--amend" in command or "merge" in command.lower()
         if not is_merge:
@@ -128,13 +128,13 @@ def main():
                         file_list += f" +{len(files) - 4}"
                     lines.append(f"  {dir_name}/ ({len(files)} files): {file_list}")
                 lines.append("")
-                lines.append("To override: set OMEGA_SKIP_SCOPE_CHECK=1")
+                lines.append("To override: set CAIRN_SKIP_SCOPE_CHECK=1")
                 print("\n".join(lines))
                 exit(2)
 
     # --- Peer coordination check ---
     try:
-        from omega.coordination import get_manager
+        from cairn.coordination import get_manager
 
         mgr = get_manager()
         sessions = mgr.list_sessions(auto_clean=True)
@@ -202,7 +202,7 @@ def main():
                 lines.append(f"  {fname} (claimed by {peer_sid})")
             lines.append("")
             lines.append("Unstage peer files with: git reset HEAD <file>")
-            lines.append("Or coordinate via omega_send_message to request file release.")
+            lines.append("Or coordinate via cairn_send_message to request file release.")
             print("\n".join(lines))
             exit(2)
 
@@ -217,7 +217,7 @@ def main():
             lines.append("")
             lines.append("If these changes are intentional:")
             lines.append("  1. Review with: git diff --cached -- <file>")
-            lines.append("  2. Claim the file: omega_file_claim(session_id, file_path)")
+            lines.append("  2. Claim the file: cairn_file_claim(session_id, file_path)")
             lines.append("  3. Or unstage: git reset HEAD <file>")
             print("\n".join(lines))
             exit(2)

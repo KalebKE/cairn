@@ -19,13 +19,13 @@ import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-# Ensure omega is importable
+# Ensure cairn is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 # Disable cross-encoder during tuning to isolate RRF effects
-# (set OMEGA_CROSS_ENCODER=1 to include reranker in evaluation)
-if "OMEGA_CROSS_ENCODER" not in os.environ:
-    os.environ["OMEGA_CROSS_ENCODER"] = "0"
+# (set CAIRN_CROSS_ENCODER=1 to include reranker in evaluation)
+if "CAIRN_CROSS_ENCODER" not in os.environ:
+    os.environ["CAIRN_CROSS_ENCODER"] = "0"
 
 
 # ---------------------------------------------------------------------------
@@ -36,7 +36,7 @@ if "OMEGA_CROSS_ENCODER" not in os.environ:
 # Precision@5 = (relevant results in top 5) / 5
 #
 # IMPORTANT: Customize these queries to match YOUR memory store contents.
-# Run `python3.11 -c "from omega.sqlite_store import SQLiteStore; s=SQLiteStore(); print(s.stats)"`
+# Run `python3.11 -c "from cairn.sqlite_store import SQLiteStore; s=SQLiteStore(); print(s.stats)"`
 # to verify your store has data, then adjust queries and keywords below.
 # ---------------------------------------------------------------------------
 
@@ -62,7 +62,7 @@ EVAL_QUERIES: List[EvalQuery] = [
         description="Conceptual: reranker architecture",
     ),
     EvalQuery(
-        query="what embedding model does omega use",
+        query="what embedding model does cairn use",
         expected_keywords=["embedding", "onnx", "384", "all-MiniLM", "generate_embedding"],
         description="Factual: embedding model",
     ),
@@ -74,7 +74,7 @@ EVAL_QUERIES: List[EvalQuery] = [
     ),
     EvalQuery(
         query="decision about multi-model support",
-        expected_keywords=["multi-model", "openai", "provider", "OMEGA_LLM_PROVIDER"],
+        expected_keywords=["multi-model", "openai", "provider", "CAIRN_LLM_PROVIDER"],
         query_hint="decision",
         description="Decision lookup with type hint",
     ),
@@ -93,7 +93,7 @@ EVAL_QUERIES: List[EvalQuery] = [
 
     # --- Conceptual / broad ---
     EvalQuery(
-        query="how does memory consolidation work in omega",
+        query="how does memory consolidation work in cairn",
         expected_keywords=["consolidat", "compact", "merge", "knowledge", "quality"],
         description="Conceptual: consolidation mechanism",
     ),
@@ -247,8 +247,8 @@ class Patcher:
         self._originals = {}
 
     def __enter__(self):
-        import omega.sqlite_store._types as types_mod
-        import omega.sqlite_store._search as search_mod
+        import cairn.sqlite_store._types as types_mod
+        import cairn.sqlite_store._search as search_mod
 
         c = self.config
 
@@ -282,7 +282,7 @@ class Patcher:
 
         # 4. Temporal channel weight -- patched in _query_phase_fusion
         # We monkey-patch the method to use our weight
-        from omega.sqlite_store._query import QueryMixin
+        from cairn.sqlite_store._query import QueryMixin
         original_fusion = QueryMixin._query_phase_fusion
         self._originals["_query_phase_fusion"] = original_fusion
         temporal_w = c.temporal_channel_weight
@@ -346,7 +346,7 @@ class Patcher:
             _RERANK_CANDIDATES = 20
             if node_scores and len(node_scores) > 1:
                 try:
-                    from omega.reranker import cross_encoder_score
+                    from cairn.reranker import cross_encoder_score
                     top_ids_for_rerank = sorted(
                         node_scores, key=node_scores.get, reverse=True
                     )[:_RERANK_CANDIDATES]
@@ -465,9 +465,9 @@ class Patcher:
         return patched_fusion
 
     def __exit__(self, *args):
-        import omega.sqlite_store._types as types_mod
-        import omega.sqlite_store._search as search_mod
-        from omega.sqlite_store._query import QueryMixin
+        import cairn.sqlite_store._types as types_mod
+        import cairn.sqlite_store._search as search_mod
+        from cairn.sqlite_store._query import QueryMixin
 
         # Restore all originals
         if "_RRF_K" in self._originals:
@@ -501,7 +501,7 @@ def run_evaluation(store, config: RRFConfig) -> Dict[str, float]:
                 limit=10,
                 use_cache=False,
                 query_hint=eq.query_hint,
-                entity_id="omega",
+                entity_id="cairn",
             )
             elapsed_ms = (time.monotonic() - t0) * 1000
             latencies.append(elapsed_ms)
@@ -532,7 +532,7 @@ def run_per_query_detail(store, config: RRFConfig) -> List[Dict]:
                 limit=10,
                 use_cache=False,
                 query_hint=eq.query_hint,
-                entity_id="omega",
+                entity_id="cairn",
             )
             p5 = precision_at_k(results, eq.expected_keywords, k=5)
             m = mrr(results, eq.expected_keywords, k=5)
@@ -553,12 +553,12 @@ def run_per_query_detail(store, config: RRFConfig) -> List[Dict]:
 
 def main():
     print("=" * 80)
-    print("OMEGA RRF Weight Tuner")
+    print("Cairn RRF Weight Tuner")
     print("=" * 80)
     print()
 
     # Initialize store (read-only usage)
-    from omega.sqlite_store import SQLiteStore
+    from cairn.sqlite_store import SQLiteStore
     store = SQLiteStore()
 
     # Verify store has data
@@ -569,7 +569,7 @@ def main():
         sys.exit(1)
 
     # Check if cross-encoder is enabled
-    ce_status = "DISABLED" if os.environ.get("OMEGA_CROSS_ENCODER") == "0" else "ENABLED"
+    ce_status = "DISABLED" if os.environ.get("CAIRN_CROSS_ENCODER") == "0" else "ENABLED"
     print(f"Cross-encoder: {ce_status}")
     print(f"Eval queries: {len(EVAL_QUERIES)}")
     print(f"Configurations: {len(CONFIGS)}")

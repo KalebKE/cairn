@@ -1,20 +1,20 @@
-# OMEGA CLI Reference
+# Cairn CLI Reference
 
-Complete reference for all `omega` CLI commands.
+Complete reference for all `cairn` CLI commands.
 
 ## Setup & Diagnostics
 
-### `omega setup`
+### `cairn setup`
 
-Set up OMEGA: download embedding model, initialize database, and configure your editor.
+Set up Cairn: download embedding model, initialize database, and configure your editor.
 
 ```bash
-omega setup                          # auto-detect Claude Code
-omega setup --client cursor          # configure Cursor
-omega setup --client windsurf        # configure Windsurf
-omega setup --client zed             # configure Zed
-omega setup --client codex           # configure OpenAI Codex CLI
-omega setup --client antigravity     # configure Antigravity IDE
+cairn setup                          # auto-detect Claude Code
+cairn setup --client cursor          # configure Cursor
+cairn setup --client windsurf        # configure Windsurf
+cairn setup --client zed             # configure Zed
+cairn setup --client codex           # configure OpenAI Codex CLI
+cairn setup --client antigravity     # configure Antigravity IDE
 ```
 
 | Flag | Description |
@@ -24,14 +24,14 @@ omega setup --client antigravity     # configure Antigravity IDE
 | `--skip-model` | Skip embedding model download (text-only search, no semantic search) |
 | `--hooks-only` | Configure hooks and CLAUDE.md without MCP server (saves ~600 MB RAM) |
 
-### `omega doctor`
+### `cairn doctor`
 
 Verify installation health: checks Python imports, embedding model, database, and optionally client-specific config.
 
 ```bash
-omega doctor                         # basic checks
-omega doctor --client claude-code    # include Claude Code-specific checks (MCP, hooks)
-omega doctor --fix                   # auto-fix issues by running missing setup steps
+cairn doctor                         # basic checks
+cairn doctor --client claude-code    # include Claude Code-specific checks (MCP, hooks)
+cairn doctor --fix                   # auto-fix issues by running missing setup steps
 ```
 
 | Flag | Description |
@@ -41,40 +41,40 @@ omega doctor --fix                   # auto-fix issues by running missing setup 
 
 **What each check does:**
 
-1. **Import check** — verifies `import omega` succeeds
+1. **Import check** — verifies `import cairn` succeeds
 2. **Model check** — verifies bge-small-en-v1.5 ONNX model is downloaded and loadable
-3. **Database check** — verifies `~/.omega/omega.db` exists and has a valid schema
+3. **Database check** — verifies `~/.cairn/cairn.db` exists and has a valid schema
 4. **MCP check** (with `--client`) — verifies MCP server configuration is registered
 5. **Hook check** (with `--client`) — verifies hook entries in `~/.claude/settings.json`
 
-### `omega status`
+### `cairn status`
 
 Show memory count, database size, model status, and version info.
 
 ```bash
-omega status
-omega status --json
+cairn status
+cairn status --json
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--json` | Output as JSON (also: `OMEGA_JSON=1` env var) |
+| `--json` | Output as JSON (also: `CAIRN_JSON=1` env var) |
 
-### `omega activate`
+### `cairn activate`
 
 Activate a Pro license key.
 
 ```bash
-omega activate <your-license-key>
+cairn activate <your-license-key>
 ```
 
-### `omega license`
+### `cairn license`
 
 Show Pro license status.
 
 ```bash
-omega license
-omega license --deactivate           # remove local license
+cairn license
+cairn license --deactivate           # remove local license
 ```
 
 | Flag | Description |
@@ -85,14 +85,14 @@ omega license --deactivate           # remove local license
 
 ## Memory Operations
 
-### `omega store`
+### `cairn store`
 
 Store a memory with a specified type.
 
 ```bash
-omega store "We chose PostgreSQL for ACID compliance" -t decision
-omega store "Docker volume mount shadows node_modules" -t error
-omega store "Always use early returns" -t preference
+cairn store "We chose PostgreSQL for ACID compliance" -t decision
+cairn store "Docker volume mount shadows node_modules" -t error
+cairn store "Always use early returns" -t preference
 ```
 
 | Flag | Description |
@@ -100,14 +100,14 @@ omega store "Always use early returns" -t preference
 | `-t, --type` | Memory type: `memory` (default), `lesson`, `decision`, `error`, `task`, `preference` |
 | `--json` | Output as JSON |
 
-### `omega query`
+### `cairn query`
 
 Search memories by semantic similarity or exact phrase.
 
 ```bash
-omega query database choice           # semantic search
-omega query "PostgreSQL" --exact       # exact phrase (FTS5)
-omega query auth --limit 5 --json     # limit results, JSON output
+cairn query database choice           # semantic search
+cairn query "PostgreSQL" --exact       # exact phrase (FTS5)
+cairn query auth --limit 5 --json     # limit results, JSON output
 ```
 
 | Flag | Description |
@@ -116,13 +116,13 @@ omega query auth --limit 5 --json     # limit results, JSON output
 | `--limit` | Max results (default: 10) |
 | `--json` | Output as JSON |
 
-### `omega remember`
+### `cairn remember`
 
-Store a permanent user preference (shorthand for `omega store -t preference`).
+Store a permanent user preference (shorthand for `cairn store -t preference`).
 
 ```bash
-omega remember "Always use TypeScript strict mode"
-omega remember "Prefer composition over inheritance"
+cairn remember "Always use TypeScript strict mode"
+cairn remember "Prefer composition over inheritance"
 ```
 
 | Flag | Description |
@@ -133,14 +133,14 @@ omega remember "Prefer composition over inheritance"
 
 ## Analysis & Insights
 
-### `omega stats`
+### `cairn stats`
 
 Show memory type distribution and health summary.
 
 ```bash
-omega stats
-omega stats --json
-omega stats --card                    # formatted stats card with Rich styling
+cairn stats
+cairn stats --json
+cairn stats --card                    # formatted stats card with Rich styling
 ```
 
 | Flag | Description |
@@ -148,13 +148,13 @@ omega stats --card                    # formatted stats card with Rich styling
 | `--json` | Output as JSON |
 | `--card` | Display a formatted stats card |
 
-### `omega timeline`
+### `cairn timeline`
 
 Show memory timeline grouped by day.
 
 ```bash
-omega timeline                        # last 7 days
-omega timeline --days 30              # last 30 days
+cairn timeline                        # last 7 days
+cairn timeline --days 30              # last 30 days
 ```
 
 | Flag | Description |
@@ -162,13 +162,13 @@ omega timeline --days 30              # last 30 days
 | `--days` | Number of days to show (default: 7) |
 | `--json` | Output as JSON |
 
-### `omega activity`
+### `cairn activity`
 
 Show recent session activity overview.
 
 ```bash
-omega activity                        # last 7 days
-omega activity --days 14 --json
+cairn activity                        # last 7 days
+cairn activity --days 14 --json
 ```
 
 | Flag | Description |
@@ -180,28 +180,28 @@ omega activity --days 14 --json
 
 ## Maintenance
 
-### `omega consolidate`
+### `cairn consolidate`
 
 Deduplicate, prune, and optimize the memory store.
 
 ```bash
-omega consolidate                     # prune entries older than 30 days with 0 access
-omega consolidate --prune-days 60     # custom prune threshold
+cairn consolidate                     # prune entries older than 30 days with 0 access
+cairn consolidate --prune-days 60     # custom prune threshold
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--prune-days` | Prune entries older than N days with 0 access (default: 30) |
 
-### `omega compact`
+### `cairn compact`
 
 Cluster and summarize related memories of the same type.
 
 ```bash
-omega compact                         # compact lesson_learned entries
-omega compact -t decision             # compact decisions
-omega compact --threshold 0.75        # higher similarity threshold
-omega compact --dry-run               # preview without changing data
+cairn compact                         # compact lesson_learned entries
+cairn compact -t decision             # compact decisions
+cairn compact --threshold 0.75        # higher similarity threshold
+cairn compact --dry-run               # preview without changing data
 ```
 
 | Flag | Description |
@@ -210,69 +210,69 @@ omega compact --dry-run               # preview without changing data
 | `--threshold` | Similarity threshold (default: 0.60) |
 | `--dry-run` | Show what would be compacted without changing data |
 
-### `omega validate`
+### `cairn validate`
 
 Validate database integrity (SQLite + FTS5 index).
 
 ```bash
-omega validate
-omega validate --repair               # attempt to rebuild FTS5 index if corrupted
+cairn validate
+cairn validate --repair               # attempt to rebuild FTS5 index if corrupted
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--repair` | Attempt to repair FTS5 index if corrupted |
 
-### `omega backup`
+### `cairn backup`
 
-Back up `omega.db` to `~/.omega/backups/`. Keeps the last 5 backups.
+Back up `cairn.db` to `~/.cairn/backups/`. Keeps the last 5 backups.
 
 ```bash
-omega backup
+cairn backup
 ```
 
 ---
 
 ## Export & Import
 
-### `omega export`
+### `cairn export`
 
 Export memories to a JSON file.
 
 ```bash
-omega export memories.json
-omega export decisions.json -t decision   # export only decisions
+cairn export memories.json
+cairn export decisions.json -t decision   # export only decisions
 ```
 
 | Flag | Description |
 |------|-------------|
 | `-t, --type` | Export only this type: `memory`, `decision`, `lesson_learned`, `error_pattern`, `user_preference`, `task_completion` |
 
-### `omega import`
+### `cairn import`
 
 Import memories from a JSON file.
 
 ```bash
-omega import memories.json
-omega import backup.json --clear          # clear existing memories before import
+cairn import memories.json
+cairn import backup.json --clear          # clear existing memories before import
 ```
 
 | Flag | Description |
 |------|-------------|
 | `--clear` | Clear existing memories before import |
 
-### `omega export-obsidian`
+### `cairn export-obsidian`
 
 Export memories as Obsidian-compatible markdown files.
 
 ```bash
-omega export-obsidian
-omega export-obsidian --output-dir ~/vault --project myapp --limit 100
+cairn export-obsidian
+cairn export-obsidian --output-dir ~/vault --project myapp --limit 100
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--output-dir` | Output directory (default: `./omega-vault`) |
+| `--output-dir` | Output directory (default: `./cairn-vault`) |
 | `--project` | Only export memories for this project |
 | `--limit` | Max number of memories to export (default: all) |
 
@@ -280,14 +280,14 @@ omega export-obsidian --output-dir ~/vault --project myapp --limit 100
 
 ## Server
 
-### `omega serve`
+### `cairn serve`
 
 Run the MCP server (stdio or HTTP transport).
 
 ```bash
-omega serve                           # stdio (default, used by editors)
-omega serve --http --port 8787        # HTTP transport
-omega serve --no-condensed            # expose all tools individually
+cairn serve                           # stdio (default, used by editors)
+cairn serve --http --port 8787        # HTTP transport
+cairn serve --no-condensed            # expose all tools individually
 ```
 
 | Flag | Description |
@@ -302,23 +302,23 @@ omega serve --no-condensed            # expose all tools individually
 
 ## Hooks
 
-### `omega hooks`
+### `cairn hooks`
 
 Manage Claude Code hooks configuration.
 
 ```bash
-omega hooks setup                     # configure hooks in ~/.claude/settings.json
-omega hooks path                      # print the hooks directory path
-omega hooks doctor                    # check hook configuration health
+cairn hooks setup                     # configure hooks in ~/.claude/settings.json
+cairn hooks path                      # print the hooks directory path
+cairn hooks doctor                    # check hook configuration health
 ```
 
-### `omega logs`
+### `cairn logs`
 
-Show recent hook errors from `~/.omega/hooks.log`.
+Show recent hook errors from `~/.cairn/hooks.log`.
 
 ```bash
-omega logs                            # last 50 lines
-omega logs -n 200                     # last 200 lines
+cairn logs                            # last 50 lines
+cairn logs -n 200                     # last 200 lines
 ```
 
 | Flag | Description |
@@ -329,17 +329,17 @@ omega logs -n 200                     # last 200 lines
 
 ## Reminders (Experimental)
 
-### `omega remind`
+### `cairn remind`
 
 Manage time-based reminders.
 
 ```bash
-omega remind set "Review PR feedback" -d 2h
-omega remind set "Deploy to staging" -d 1d --context "After QA sign-off"
-omega remind list
-omega remind list --status all
-omega remind check --notify           # check due + send macOS notification
-omega remind dismiss <reminder_id>
+cairn remind set "Review PR feedback" -d 2h
+cairn remind set "Deploy to staging" -d 1d --context "After QA sign-off"
+cairn remind list
+cairn remind list --status all
+cairn remind check --notify           # check due + send macOS notification
+cairn remind dismiss <reminder_id>
 ```
 
 **Subcommands:**
@@ -355,16 +355,16 @@ omega remind dismiss <reminder_id>
 
 ## Knowledge Base
 
-### `omega knowledge` (alias: `omega kb`)
+### `cairn knowledge` (alias: `cairn kb`)
 
 Manage the document knowledge base.
 
 ```bash
-omega kb scan                         # scan ~/.omega/documents/ for new files
-omega kb scan --dir ~/papers          # scan custom directory
-omega kb list                         # list all ingested documents
-omega kb search "transformer architecture" --limit 10
-omega kb sync-kb --batch-size 20      # sync from cloud KB queue
+cairn kb scan                         # scan ~/.cairn/documents/ for new files
+cairn kb scan --dir ~/papers          # scan custom directory
+cairn kb list                         # list all ingested documents
+cairn kb search "transformer architecture" --limit 10
+cairn kb sync-kb --batch-size 20      # sync from cloud KB queue
 ```
 
 **Subcommands:**
@@ -380,26 +380,26 @@ omega kb sync-kb --batch-size 20      # sync from cloud KB queue
 
 ## Cloud & Mobile
 
-### `omega cloud`
+### `cairn cloud`
 
 Cloud sync and mobile access via Supabase.
 
 ```bash
-omega cloud setup --url <url> --key <anon_key>
-omega cloud sync                      # push local data to Supabase
-omega cloud pull                      # pull memories from Supabase
-omega cloud status                    # show sync status
-omega cloud verify                    # verify Supabase connection
-omega cloud schema                    # print Supabase SQL schema
+cairn cloud setup --url <url> --key <anon_key>
+cairn cloud sync                      # push local data to Supabase
+cairn cloud pull                      # pull memories from Supabase
+cairn cloud status                    # show sync status
+cairn cloud verify                    # verify Supabase connection
+cairn cloud schema                    # print Supabase SQL schema
 ```
 
-### `omega mobile`
+### `cairn mobile`
 
 Mobile access via mcp-proxy + Tailscale.
 
 ```bash
-omega mobile setup                    # print setup instructions
-omega mobile serve --port 8089        # start HTTP proxy for mobile
+cairn mobile setup                    # print setup instructions
+cairn mobile serve --port 8089        # start HTTP proxy for mobile
 ```
 
 | Flag | Description |
@@ -411,21 +411,21 @@ omega mobile serve --port 8089        # start HTTP proxy for mobile
 
 ## Database Migration
 
-### `omega migrate-db`
+### `cairn migrate-db`
 
 Migrate legacy JSON graphs to SQLite backend.
 
 ```bash
-omega migrate-db
-omega migrate-db --force              # overwrite existing SQLite database
+cairn migrate-db
+cairn migrate-db --force              # overwrite existing SQLite database
 ```
 
-### `omega reingest`
+### `cairn reingest`
 
 Reload `store.jsonl` entries into the graph system.
 
 ```bash
-omega reingest
+cairn reingest
 ```
 
 ---
@@ -436,4 +436,4 @@ Most commands support these flags:
 
 | Flag | Description |
 |------|-------------|
-| `--json` | Output as JSON (also available as `OMEGA_JSON=1` environment variable) |
+| `--json` | Output as JSON (also available as `CAIRN_JSON=1` environment variable) |

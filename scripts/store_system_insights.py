@@ -1,5 +1,5 @@
 #!/usr/bin/env python3.11
-"""One-shot script to bulk-store system insights from memory/insights.md into OMEGA.
+"""One-shot script to bulk-store system insights from memory/insights.md into Cairn.
 
 Each insight is stored as event_type="advisor_insight" with metadata.category="system_insight"
 and subsystem-specific tags. Run once, then delete or ignore.
@@ -8,10 +8,10 @@ and subsystem-specific tags. Run once, then delete or ignore.
 import sys
 import time
 
-# Ensure omega is importable
+# Ensure cairn is importable
 sys.path.insert(0, "src")
 
-from omega.bridge import store  # noqa: E402
+from cairn.bridge import store  # noqa: E402
 
 INSIGHTS = [
     {
@@ -85,9 +85,9 @@ INSIGHTS = [
     },
     {
         "content": (
-            "vec0 appears broken but isn't: Running SELECT vec_version() on omega.db without "
+            "vec0 appears broken but isn't: Running SELECT vec_version() on cairn.db without "
             "loading the extension first gives 'no such function' -- looks like semantic search is "
-            "down. In reality, OMEGA's _base.py properly calls sqlite_vec.load(conn) on every "
+            "down. In reality, Cairn's _base.py properly calls sqlite_vec.load(conn) on every "
             "connection. Always load the extension before testing. 87% of memories have vectors; "
             "the 13% missing are low-priority gardener observations."
         ),
@@ -105,7 +105,7 @@ INSIGHTS = [
 
 
 def main():
-    print(f"Storing {len(INSIGHTS)} system insights into OMEGA...")
+    print(f"Storing {len(INSIGHTS)} system insights into Cairn...")
     for i, insight in enumerate(INSIGHTS):
         result = store(
             content=insight["content"],
@@ -114,8 +114,8 @@ def main():
                 "category": "system_insight",
                 "tags": insight["tags"],
             },
-            project="omega",
-            entity_id="omega",
+            project="cairn",
+            entity_id="cairn",
         )
         print(f"  [{i+1}/{len(INSIGHTS)}] {result.strip()[:100]}")
         # Brief pause to avoid hammering the store pipeline

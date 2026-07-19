@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OMEGA Coordination SessionStart hook — Register agent session."""
+"""Cairn Coordination SessionStart hook — Register agent session."""
 import os
 import time
 import traceback
@@ -9,7 +9,7 @@ from pathlib import Path
 
 def _log_hook_error(hook_name, error):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         tb = traceback.format_exc()
@@ -24,14 +24,14 @@ def _log_hook_error(hook_name, error):
 
 
 def _kill_orphaned_mcp_servers():
-    """Kill OMEGA MCP server processes whose parent has exited (PPID=1)."""
+    """Kill Cairn MCP server processes whose parent has exited (PPID=1)."""
     import signal
     import subprocess
 
     try:
-        # Find all omega MCP server processes
+        # Find all cairn MCP server processes
         result = subprocess.run(
-            ["pgrep", "-f", "omega.server.mcp_server"],
+            ["pgrep", "-f", "cairn.server.mcp_server"],
             capture_output=True, text=True, timeout=5,
         )
         if result.returncode != 0 or not result.stdout.strip():
@@ -75,7 +75,7 @@ def _kill_orphaned_mcp_servers():
 def _clean_stale_socket():
     """Delete hook.sock if it exists but nothing is listening."""
     import socket as _socket
-    sock_path = os.path.expanduser("~/.omega/hook.sock")
+    sock_path = os.path.expanduser("~/.cairn/hook.sock")
     if not os.path.exists(sock_path):
         return
     s = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
@@ -106,7 +106,7 @@ def main():
     _kill_orphaned_mcp_servers()
 
     try:
-        from omega.coordination import get_manager
+        from cairn.coordination import get_manager
         mgr = get_manager()
         mgr.list_sessions()  # Force-clean stale sessions (bypasses rate limit)
         result = mgr.register_session(
@@ -153,7 +153,7 @@ def main():
                 # Cross-reference tasks against recent decisions to detect completed ones
                 stale_ids = set()
                 try:
-                    from omega import bridge
+                    from cairn import bridge
                     for t in tasks[:5]:
                         title = t.get("title", "")
                         if not title:
@@ -215,9 +215,9 @@ def main():
 
         # Standup Action line — tell agent what to do first
         if peers > 0:
-            action_parts = ["check omega_inbox"]
-            action_parts.append("omega_task_next to claim work")
-            action_parts.append("omega_intent_announce to declare your plan")
+            action_parts = ["check cairn_inbox"]
+            action_parts.append("cairn_task_next to claim work")
+            action_parts.append("cairn_intent_announce to declare your plan")
             print(f"  Action: {', then '.join(action_parts)}")
 
     except ImportError:
@@ -306,7 +306,7 @@ def _check_running_processes(project):
             if not progress and "memorystress" in label.lower():
                 try:
                     import glob as _glob
-                    for d in _glob.glob("/tmp/ms_v*_omega"):
+                    for d in _glob.glob("/tmp/ms_v*_cairn"):
                         if os.path.isdir(d):
                             progress = f" [{os.path.basename(d)}]"
                             break
@@ -469,7 +469,7 @@ def _surface_inbox(session_id, mgr):
             content = subject or body_preview
             print(f"  [{msg_type}] from {sender}: {content}")
         # Note: check_inbox marks these as read; any additional messages
-        # will still appear when agent calls omega_inbox()
+        # will still appear when agent calls cairn_inbox()
     except Exception as e:
         _log_hook_error("surface_inbox", e)
 
@@ -481,7 +481,7 @@ def _surface_recent_peer_decisions(session_id, project):
     while we were offline or in a long wait, we see them at session start.
     """
     try:
-        from omega.bridge import query_structured
+        from cairn.bridge import query_structured
 
         # Query recent decisions from this project (last 2 hours)
         decisions = query_structured(
@@ -616,7 +616,7 @@ def _check_git_sync(session_id, project, mgr):
             print(f"  ... and {len(upstream_lines) - 5} more")
 
         if untracked:
-            print(f"  !! {len(untracked)} commit(s) from UNCOORDINATED agents (not tracked by OMEGA)")
+            print(f"  !! {len(untracked)} commit(s) from UNCOORDINATED agents (not tracked by Cairn)")
             print("  Run 'git pull' before starting work to avoid conflicts.")
 
     except subprocess.TimeoutExpired:
@@ -676,7 +676,7 @@ def _session_resume(session_id, project, mgr):
 
         # Surface recent decisions from predecessor session
         try:
-            from omega.bridge import query_structured
+            from cairn.bridge import query_structured
             decisions = query_structured(
                 query_text="decisions made",
                 limit=5,
@@ -708,7 +708,7 @@ def _session_resume(session_id, project, mgr):
         except Exception:
             pass  # Decision surfacing is best-effort
 
-        lines.append("  Use omega_session_recover for full details.")
+        lines.append("  Use cairn_session_recover for full details.")
         print("\n".join(lines))
     except ImportError:
         pass
@@ -718,7 +718,7 @@ def _session_resume(session_id, project, mgr):
 
 def _log_timing(hook_name, elapsed_ms):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         data = f"[{timestamp}] {hook_name}: OK ({elapsed_ms:.0f}ms)\n"

@@ -1,12 +1,12 @@
-"""Test auto-registration of decisions when omega_store gets a decision type."""
+"""Test auto-registration of decisions when cairn_store gets a decision type."""
 import pytest
 from unittest.mock import patch, MagicMock
 
 
 def test_store_decision_auto_registers_coordination():
-    """When omega_store is called with event_type='decision', it should
+    """When cairn_store is called with event_type='decision', it should
     also register the decision in coordination."""
-    from omega.server.handlers import _auto_register_decision
+    from cairn.server.handlers import _auto_register_decision
 
     mock_mgr = MagicMock()
     mock_mgr.register_decision.return_value = {"id": 1, "status": "active"}
@@ -26,8 +26,8 @@ def test_store_decision_auto_registers_coordination():
 
 
 def test_store_non_decision_does_not_register():
-    """omega_store with event_type='lesson_learned' should NOT register a decision."""
-    from omega.server.handlers import _auto_register_decision
+    """cairn_store with event_type='lesson_learned' should NOT register a decision."""
+    from cairn.server.handlers import _auto_register_decision
 
     # Should return None for non-decision types (mgr is None = signal to skip)
     result = _auto_register_decision(
@@ -42,7 +42,7 @@ def test_store_non_decision_does_not_register():
 
 def test_auto_register_extracts_domain():
     """Domain should be extracted from content heuristically."""
-    from omega.server.handlers import _extract_decision_domain
+    from cairn.server.handlers import _extract_decision_domain
 
     assert _extract_decision_domain("Use PostgreSQL for the auth service") == "auth"
     assert _extract_decision_domain("Deploy to Vercel instead of Netlify") == "deploy"

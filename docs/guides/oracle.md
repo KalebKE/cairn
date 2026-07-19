@@ -2,7 +2,7 @@
 
 ## Overview
 
-The OMEGA Oracle tracks predictions, measures calibration accuracy via Brier scoring, detects regime changes, and generates strategy playbooks from your forecast history. It is a compounding intelligence layer: the more predictions you record and resolve, the more precise your calibration analysis becomes.
+The Cairn Oracle tracks predictions, measures calibration accuracy via Brier scoring, detects regime changes, and generates strategy playbooks from your forecast history. It is a compounding intelligence layer: the more predictions you record and resolve, the more precise your calibration analysis becomes.
 
 The Oracle works with any prediction domain (crypto markets, project outcomes, hiring decisions) but was designed with probabilistic markets in mind.
 
@@ -10,30 +10,30 @@ The Oracle works with any prediction domain (crypto markets, project outcomes, h
 
 ```
 # Record a prediction
-omega_oracle_record(
+cairn_oracle_record(
     record_type="prediction",
     content="The beta launch will reach 100 signups by end of March",
     data={"market_id": "beta-100-signups-march", "our_probability": 0.72, "market_price": 0.65, "edge": 0.07}
 )
 
 # Later, resolve it
-omega_oracle_resolve(market_id="beta-100-signups-march", outcome="yes")
+cairn_oracle_resolve(market_id="beta-100-signups-march", outcome="yes")
 
 # Analyze your calibration
-omega_oracle_analyze(view="calibration")
+cairn_oracle_analyze(view="calibration")
 
 # Get a full briefing
-omega_oracle_analyze(view="briefing")
+cairn_oracle_analyze(view="briefing")
 ```
 
 ## Tools Reference
 
 | Tool | Purpose |
 |------|---------|
-| `omega_oracle_record` | Record a prediction, wallet score, regime change, or signal snapshot. Accepts structured `data` with domain-specific fields. |
-| `omega_oracle_resolve` | Mark a prediction as resolved (yes/no outcome) by `market_id`. Computes P&L. |
-| `omega_oracle_analyze` | Compute analytical views: `calibration`, `signals`, `wallets`, `bias`, `playbook`, or `briefing` (composite). |
-| `omega_oracle_status` | Dashboard: prediction count, resolved count, Brier score, active regime, signal/wallet coverage. |
+| `cairn_oracle_record` | Record a prediction, wallet score, regime change, or signal snapshot. Accepts structured `data` with domain-specific fields. |
+| `cairn_oracle_resolve` | Mark a prediction as resolved (yes/no outcome) by `market_id`. Computes P&L. |
+| `cairn_oracle_analyze` | Compute analytical views: `calibration`, `signals`, `wallets`, `bias`, `playbook`, or `briefing` (composite). |
+| `cairn_oracle_status` | Dashboard: prediction count, resolved count, Brier score, active regime, signal/wallet coverage. |
 
 ## Record Types
 
@@ -62,7 +62,7 @@ omega_oracle_analyze(view="briefing")
 Record the prediction with structured data:
 
 ```
-omega_oracle_record(
+cairn_oracle_record(
     record_type="prediction",
     content="ETH will flip 4k before Q2",
     data={
@@ -81,13 +81,13 @@ omega_oracle_record(
 ### Resolve When Outcome is Known
 
 ```
-omega_oracle_resolve(market_id="eth-4k-q2", outcome="no")
+cairn_oracle_resolve(market_id="eth-4k-q2", outcome="no")
 ```
 
 ### Check Overall Calibration
 
 ```
-omega_oracle_analyze(view="calibration", days=90)
+cairn_oracle_analyze(view="calibration", days=90)
 # Returns: Brier score, calibration curve, sample size
 ```
 
@@ -98,14 +98,14 @@ A Brier score of 0.0 is perfect; 0.25 is random. Aim for below 0.15 for useful p
 Before a prediction session, load historical context:
 
 ```
-omega_oracle_analyze(view="briefing", market_type="btc")
+cairn_oracle_analyze(view="briefing", market_type="btc")
 # Returns: calibration, recent signals, wallet rankings, bias patterns, regime playbook
 ```
 
 ### Track Regime Changes
 
 ```
-omega_oracle_record(
+cairn_oracle_record(
     record_type="regime_change",
     content="Market shifted from accumulation to markup phase",
     data={"from_regime": "accumulation", "to_regime": "markup", "confidence": 0.85}
@@ -117,7 +117,7 @@ omega_oracle_record(
 Quick status check:
 
 ```
-omega_oracle_status()
+cairn_oracle_status()
 # Returns: 47 predictions, 31 resolved, Brier: 0.12, regime: markup, 5 signals tracked
 ```
 

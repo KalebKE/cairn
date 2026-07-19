@@ -1,4 +1,4 @@
-"""Tests for OMEGA cross-encoder reranker module — scoring, fallback, lifecycle, download."""
+"""Tests for Cairn cross-encoder reranker module — scoring, fallback, lifecycle, download."""
 
 import os
 import sys
@@ -9,10 +9,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-import omega.reranker as reranker
+import cairn.reranker as reranker
 
 onnxruntime = pytest.importorskip("onnxruntime", reason="onnxruntime not installed")
-from omega.reranker import (
+from cairn.reranker import (
     cross_encoder_score,
     get_reranker_model_info,
     preload_reranker_model,
@@ -27,7 +27,7 @@ from omega.reranker import (
 
 def _ensure_model():
     """Download the cross-encoder model if not present."""
-    model_dir = Path(os.path.expanduser("~/.cache/omega/models/ms-marco-MiniLM-L-6-v2-onnx"))
+    model_dir = Path(os.path.expanduser("~/.cache/cairn/models/ms-marco-MiniLM-L-6-v2-onnx"))
     if not (model_dir / "model.onnx").exists():
         result = download_model(str(model_dir))
         assert result is not None, "Failed to download cross-encoder model for tests"
@@ -96,18 +96,18 @@ class TestCrossEncoderFallback:
     def teardown_method(self):
         reset_reranker_state()
         # Clean up env vars
-        os.environ.pop("OMEGA_CROSS_ENCODER", None)
+        os.environ.pop("CAIRN_CROSS_ENCODER", None)
 
     def test_fallback_returns_none_when_disabled(self):
-        """OMEGA_CROSS_ENCODER=0 disables reranking, returns None."""
-        os.environ["OMEGA_CROSS_ENCODER"] = "0"
+        """CAIRN_CROSS_ENCODER=0 disables reranking, returns None."""
+        os.environ["CAIRN_CROSS_ENCODER"] = "0"
         reset_reranker_state()
         result = cross_encoder_score("query", ["passage"])
         assert result is None
 
     def test_fallback_returns_none_when_no_model(self):
         """Nonexistent model dir means model can't load, returns None."""
-        os.environ["OMEGA_CROSS_ENCODER"] = "1"
+        os.environ["CAIRN_CROSS_ENCODER"] = "1"
         reset_reranker_state()
         # Point to a nonexistent directory
         with patch.object(reranker, "_RERANKER_DEFAULT_DIR", "/nonexistent/model/dir"):
@@ -159,23 +159,23 @@ class TestCrossEncoderModelLifecycle:
 # ---------------------------------------------------------------------------
 
 class TestPrecisionResolution:
-    """Test OMEGA_RERANKER_PRECISION env var and _resolve_model_config."""
+    """Test CAIRN_RERANKER_PRECISION env var and _resolve_model_config."""
 
     def teardown_method(self):
-        os.environ.pop("OMEGA_RERANKER_PRECISION", None)
+        os.environ.pop("CAIRN_RERANKER_PRECISION", None)
 
     def test_default_precision_is_int8(self):
         """Fork: without env var, bge-reranker defaults to int8 — fp32 is a
-        2.3 GB implicit download; opt in via OMEGA_RERANKER_PRECISION=fp32."""
-        os.environ.pop("OMEGA_RERANKER_PRECISION", None)
+        2.3 GB implicit download; opt in via CAIRN_RERANKER_PRECISION=fp32."""
+        os.environ.pop("CAIRN_RERANKER_PRECISION", None)
         repo_id, dir_path, files = reranker._resolve_model_config("bge-reranker-v2-m3")
         assert "bge-reranker-v2-m3-onnx-int8" in dir_path
         file_names = [remote for remote, _ in files]
         assert "onnx/model_quantized.onnx" in file_names
 
     def test_int8_precision(self):
-        """OMEGA_RERANKER_PRECISION=int8 selects quantized model."""
-        os.environ["OMEGA_RERANKER_PRECISION"] = "int8"
+        """CAIRN_RERANKER_PRECISION=int8 selects quantized model."""
+        os.environ["CAIRN_RERANKER_PRECISION"] = "int8"
         repo_id, dir_path, files = reranker._resolve_model_config("bge-reranker-v2-m3")
         assert "int8" in dir_path
         file_names = [remote for remote, _ in files]
@@ -184,19 +184,19 @@ class TestPrecisionResolution:
 
     def test_invalid_precision_falls_back(self):
         """Unknown precision falls back to default_precision (int8 in fork)."""
-        os.environ["OMEGA_RERANKER_PRECISION"] = "fp64"
+        os.environ["CAIRN_RERANKER_PRECISION"] = "fp64"
         repo_id, dir_path, files = reranker._resolve_model_config("bge-reranker-v2-m3")
         assert "bge-reranker-v2-m3-onnx-int8" in dir_path
 
     def test_precision_ignored_for_msmarco(self):
         """ms-marco has no precision variants; env var is ignored."""
-        os.environ["OMEGA_RERANKER_PRECISION"] = "int8"
+        os.environ["CAIRN_RERANKER_PRECISION"] = "int8"
         repo_id, dir_path, files = reranker._resolve_model_config("ms-marco-MiniLM-L-6-v2")
         assert "ms-marco" in dir_path
 
     def test_explicit_precision_overrides_env(self):
         """Explicit precision param overrides env var."""
-        os.environ["OMEGA_RERANKER_PRECISION"] = "fp32"
+        os.environ["CAIRN_RERANKER_PRECISION"] = "fp32"
         _, dir_path, files = reranker._resolve_model_config("bge-reranker-v2-m3", precision="int8")
         assert "int8" in dir_path
 

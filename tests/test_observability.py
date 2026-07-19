@@ -1,4 +1,4 @@
-"""Tests for OMEGA Phase 4 — Observability & Resilience.
+"""Tests for Cairn Phase 4 — Observability & Resilience.
 
 Tests CLI commands, doctor enhancements, FTS5 auto-repair, hook timing,
 auto-backup, and plan capture.
@@ -13,23 +13,23 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
 class TestCLIBackup:
-    """Test omega backup command."""
+    """Test cairn backup command."""
 
-    def test_backup_creates_file(self, tmp_omega_dir):
+    def test_backup_creates_file(self, tmp_cairn_dir):
         """Backup creates a timestamped .db file."""
-        # Create a minimal omega.db
-        db_path = tmp_omega_dir / "omega.db"
+        # Create a minimal cairn.db
+        db_path = tmp_cairn_dir / "cairn.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("CREATE TABLE test (id INTEGER)")
         conn.execute("INSERT INTO test VALUES (1)")
         conn.commit()
         conn.close()
 
-        from omega.cli import cmd_backup
-        with patch("omega.cli.OMEGA_DIR", tmp_omega_dir):
+        from cairn.cli import cmd_backup
+        with patch("cairn.cli.CAIRN_DIR", tmp_cairn_dir):
             cmd_backup(MagicMock())
 
-        backups = list((tmp_omega_dir / "backups").glob("omega-*.db"))
+        backups = list((tmp_cairn_dir / "backups").glob("cairn-*.db"))
         assert len(backups) == 1
 
         # Verify the backup is a valid SQLite file
@@ -38,77 +38,77 @@ class TestCLIBackup:
         assert val == 1
         bconn.close()
 
-    def test_backup_rotation(self, tmp_omega_dir):
+    def test_backup_rotation(self, tmp_cairn_dir):
         """Backup rotates to keep only 5 most recent."""
-        db_path = tmp_omega_dir / "omega.db"
+        db_path = tmp_cairn_dir / "cairn.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("CREATE TABLE test (id INTEGER)")
         conn.commit()
         conn.close()
 
-        backups_dir = tmp_omega_dir / "backups"
+        backups_dir = tmp_cairn_dir / "backups"
         backups_dir.mkdir()
         # Create 6 fake old backups
         import time
         for i in range(6):
-            fake = backups_dir / f"omega-2026010{i}-000000.db"
+            fake = backups_dir / f"cairn-2026010{i}-000000.db"
             fake.write_text("fake")
             time.sleep(0.01)  # Ensure different mtimes
 
-        from omega.cli import cmd_backup
-        with patch("omega.cli.OMEGA_DIR", tmp_omega_dir):
+        from cairn.cli import cmd_backup
+        with patch("cairn.cli.CAIRN_DIR", tmp_cairn_dir):
             cmd_backup(MagicMock())
 
         # Should now have 5 total (6 old - 2 rotated + 1 new = 5)
         # Actually: 6 old + 1 new = 7, keep 5 = rotate 2
-        backups = list(backups_dir.glob("omega-*.db"))
+        backups = list(backups_dir.glob("cairn-*.db"))
         assert len(backups) == 5
 
-    def test_backup_no_db(self, tmp_omega_dir, capsys):
-        """Backup with no omega.db prints a message."""
-        from omega.cli import cmd_backup
-        with patch("omega.cli.OMEGA_DIR", tmp_omega_dir):
+    def test_backup_no_db(self, tmp_cairn_dir, capsys):
+        """Backup with no cairn.db prints a message."""
+        from cairn.cli import cmd_backup
+        with patch("cairn.cli.CAIRN_DIR", tmp_cairn_dir):
             cmd_backup(MagicMock())
         out = capsys.readouterr().out
         assert "nothing to back up" in out.lower()
 
 
 class TestCLILogs:
-    """Test omega logs command."""
+    """Test cairn logs command."""
 
-    def test_logs_shows_entries(self, tmp_omega_dir, capsys):
+    def test_logs_shows_entries(self, tmp_cairn_dir, capsys):
         """Logs command shows recent hook log entries."""
-        hooks_log = tmp_omega_dir / "hooks.log"
+        hooks_log = tmp_cairn_dir / "hooks.log"
         hooks_log.write_text("line1\nline2\nline3\n")
 
-        from omega.cli import cmd_logs
+        from cairn.cli import cmd_logs
         args = MagicMock()
         args.lines = 50
-        with patch("omega.cli.OMEGA_DIR", tmp_omega_dir):
+        with patch("cairn.cli.CAIRN_DIR", tmp_cairn_dir):
             cmd_logs(args)
 
         out = capsys.readouterr().out
         assert "line1" in out
         assert "line3" in out
 
-    def test_logs_no_file(self, tmp_omega_dir, capsys):
+    def test_logs_no_file(self, tmp_cairn_dir, capsys):
         """Logs with no hooks.log prints a message."""
-        from omega.cli import cmd_logs
+        from cairn.cli import cmd_logs
         args = MagicMock()
         args.lines = 50
-        with patch("omega.cli.OMEGA_DIR", tmp_omega_dir):
+        with patch("cairn.cli.CAIRN_DIR", tmp_cairn_dir):
             cmd_logs(args)
         out = capsys.readouterr().out
         assert "no hook" in out.lower() or "no hooks" in out.lower()
 
 
 class TestCLIValidate:
-    """Test omega validate command."""
+    """Test cairn validate command."""
 
-    def test_validate_healthy_db(self, tmp_omega_dir):
+    def test_validate_healthy_db(self, tmp_cairn_dir):
         """Validate passes on a healthy database."""
         # Create a minimal db with FTS5
-        db_path = tmp_omega_dir / "omega.db"
+        db_path = tmp_cairn_dir / "cairn.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("CREATE TABLE memories (id INTEGER PRIMARY KEY, content TEXT)")
         try:
@@ -118,10 +118,10 @@ class TestCLIValidate:
         conn.commit()
         conn.close()
 
-        from omega.cli import cmd_validate
+        from cairn.cli import cmd_validate
         args = MagicMock()
         args.repair = False
-        with patch("omega.cli.OMEGA_DIR", tmp_omega_dir):
+        with patch("cairn.cli.CAIRN_DIR", tmp_cairn_dir):
             # Should exit with code 0
             with pytest.raises(SystemExit) as exc_info:
                 cmd_validate(args)
@@ -147,18 +147,18 @@ class TestFTS5AutoRepair:
 class TestAutoBackupBeforeConsolidate:
     """Test auto-backup before consolidation."""
 
-    def test_consolidate_creates_backup(self, tmp_omega_dir, store):
+    def test_consolidate_creates_backup(self, tmp_cairn_dir, store):
         """consolidate() creates a pre-consolidate backup."""
-        from omega.bridge import consolidate
+        from cairn.bridge import consolidate
 
         # Store some data
         store.store(content="Test memory for consolidation")
 
-        # Point OMEGA_HOME at the temp dir
-        with patch("omega.bridge.OMEGA_HOME", tmp_omega_dir), \
-             patch("omega.bridge._get_store", return_value=store):
-            # Create a fake omega.db for backup
-            fake_db = tmp_omega_dir / "omega.db"
+        # Point CAIRN_HOME at the temp dir
+        with patch("cairn.bridge.CAIRN_HOME", tmp_cairn_dir), \
+             patch("cairn.bridge._get_store", return_value=store):
+            # Create a fake cairn.db for backup
+            fake_db = tmp_cairn_dir / "cairn.db"
             conn = sqlite3.connect(str(fake_db))
             conn.execute("CREATE TABLE t (id INTEGER)")
             conn.commit()
@@ -166,7 +166,7 @@ class TestAutoBackupBeforeConsolidate:
 
             consolidate(prune_days=30)
 
-        backups = list((tmp_omega_dir / "backups").glob("pre-consolidate-*.db"))
+        backups = list((tmp_cairn_dir / "backups").glob("pre-consolidate-*.db"))
         assert len(backups) == 1
 
 
@@ -193,9 +193,9 @@ class TestHookTiming:
 class TestAutoConsolidation:
     """Test auto-consolidation on session start."""
 
-    def test_skips_if_recent(self, tmp_omega_dir):
+    def test_skips_if_recent(self, tmp_cairn_dir):
         """Auto-consolidation skips if marker is < 7 days old."""
-        marker = tmp_omega_dir / "last-consolidate"
+        marker = tmp_cairn_dir / "last-consolidate"
         from datetime import datetime, timezone
         marker.write_text(datetime.now(timezone.utc).isoformat())
 
@@ -208,9 +208,9 @@ class TestAutoConsolidation:
         age_days = (datetime.now(timezone.utc) - last).days
         assert age_days < 7  # Should skip
 
-    def test_runs_if_stale(self, tmp_omega_dir):
+    def test_runs_if_stale(self, tmp_cairn_dir):
         """Auto-consolidation runs if marker is > 7 days old."""
-        marker = tmp_omega_dir / "last-consolidate"
+        marker = tmp_cairn_dir / "last-consolidate"
         from datetime import datetime, timedelta, timezone
         old_date = datetime.now(timezone.utc) - timedelta(days=8)
         marker.write_text(old_date.isoformat())
@@ -254,13 +254,13 @@ class TestDoctorEnhancements:
 
     def test_doctor_function_exists(self):
         """cmd_doctor is importable."""
-        from omega.cli import cmd_doctor
+        from cairn.cli import cmd_doctor
         assert callable(cmd_doctor)
 
     def test_cli_commands_registered(self):
         """All new CLI commands are registered."""
         # Just verify the function exists — actually running it needs args
-        import omega.cli as cli
+        import cairn.cli as cli
         assert hasattr(cli, 'cmd_backup')
         assert hasattr(cli, 'cmd_logs')
         assert hasattr(cli, 'cmd_validate')
@@ -271,8 +271,8 @@ class TestWeeklyDigest:
 
     def test_digest_empty_store(self, store):
         """Weekly digest works on empty store."""
-        from omega.bridge import get_weekly_digest
-        with patch("omega.bridge._get_store", return_value=store):
+        from cairn.bridge import get_weekly_digest
+        with patch("cairn.bridge._get_store", return_value=store):
             result = get_weekly_digest(days=7)
         assert result["period_days"] == 7
         assert result["total_memories"] == 0
@@ -286,8 +286,8 @@ class TestWeeklyDigest:
         store.store(content="Test memory three", metadata={"event_type": "decision"},
                     session_id="sess-abc")
 
-        from omega.bridge import get_weekly_digest
-        with patch("omega.bridge._get_store", return_value=store):
+        from cairn.bridge import get_weekly_digest
+        with patch("cairn.bridge._get_store", return_value=store):
             result = get_weekly_digest(days=7)
         assert result["total_memories"] == 3
         assert result["period_new"] == 3
@@ -297,11 +297,11 @@ class TestWeeklyDigest:
     def test_digest_handler(self, store):
         """MCP handler returns formatted response."""
         import asyncio
-        from omega.server.handlers import handle_omega_weekly_digest
+        from cairn.server.handlers import handle_cairn_weekly_digest
         store.store(content="Testing the digest handler", metadata={"event_type": "memory"})
-        with patch("omega.bridge._get_store", return_value=store):
+        with patch("cairn.bridge._get_store", return_value=store):
             result = asyncio.run(
-                handle_omega_weekly_digest({"days": 7})
+                handle_cairn_weekly_digest({"days": 7})
             )
         assert not result.get("isError")
 
@@ -311,8 +311,8 @@ class TestTypeStats:
 
     def test_type_stats_empty(self, store):
         """Type stats on empty store."""
-        from omega.bridge import type_stats
-        with patch("omega.bridge._get_store", return_value=store):
+        from cairn.bridge import type_stats
+        with patch("cairn.bridge._get_store", return_value=store):
             stats = type_stats()
         assert stats == {} or isinstance(stats, dict)
 
@@ -322,8 +322,8 @@ class TestTypeStats:
         store.store(content="Lesson one", metadata={"event_type": "lesson_learned"})
         store.store(content="Decision two", metadata={"event_type": "decision"})
 
-        from omega.bridge import type_stats
-        with patch("omega.bridge._get_store", return_value=store):
+        from cairn.bridge import type_stats
+        with patch("cairn.bridge._get_store", return_value=store):
             stats = type_stats()
         assert stats.get("decision") == 2
         assert stats.get("lesson_learned") == 1
@@ -331,11 +331,11 @@ class TestTypeStats:
     def test_type_stats_handler(self, store):
         """MCP handler formats output correctly."""
         import asyncio
-        from omega.server.handlers import handle_omega_type_stats
+        from cairn.server.handlers import handle_cairn_type_stats
         store.store(content="Test mem", metadata={"event_type": "decision"})
-        with patch("omega.bridge._get_store", return_value=store):
+        with patch("cairn.bridge._get_store", return_value=store):
             result = asyncio.run(
-                handle_omega_type_stats({})
+                handle_cairn_type_stats({})
             )
         assert not result.get("isError")
 
@@ -349,8 +349,8 @@ class TestSessionStats:
         store.store(content="Memory B", session_id="sess-1")
         store.store(content="Memory C", session_id="sess-2")
 
-        from omega.bridge import session_stats
-        with patch("omega.bridge._get_store", return_value=store):
+        from cairn.bridge import session_stats
+        with patch("cairn.bridge._get_store", return_value=store):
             stats = session_stats()
         assert stats.get("sess-1") == 2
         assert stats.get("sess-2") == 1
@@ -358,11 +358,11 @@ class TestSessionStats:
     def test_session_stats_handler(self, store):
         """MCP handler returns formatted response."""
         import asyncio
-        from omega.server.handlers import handle_omega_session_stats
+        from cairn.server.handlers import handle_cairn_session_stats
         store.store(content="Test", session_id="sess-x")
-        with patch("omega.bridge._get_store", return_value=store):
+        with patch("cairn.bridge._get_store", return_value=store):
             result = asyncio.run(
-                handle_omega_session_stats({})
+                handle_cairn_session_stats({})
             )
         assert not result.get("isError")
 
@@ -372,18 +372,18 @@ class TestForgettingLog:
 
     def test_forgetting_log_empty(self, store):
         """Forgetting log on fresh store returns header."""
-        from omega.bridge import forgetting_log
-        with patch("omega.bridge._get_store", return_value=store):
+        from cairn.bridge import forgetting_log
+        with patch("cairn.bridge._get_store", return_value=store):
             result = forgetting_log(limit=10)
         assert "Forgetting Log" in result
 
     def test_forgetting_log_handler(self, store):
         """MCP handler returns without error."""
         import asyncio
-        from omega.server.handlers import handle_omega_forgetting_log
-        with patch("omega.bridge._get_store", return_value=store):
+        from cairn.server.handlers import handle_cairn_forgetting_log
+        with patch("cairn.bridge._get_store", return_value=store):
             result = asyncio.run(
-                handle_omega_forgetting_log({"limit": 10})
+                handle_cairn_forgetting_log({"limit": 10})
             )
         assert not result.get("isError")
 

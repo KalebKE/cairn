@@ -32,16 +32,16 @@ jobs:
       - name: Build installer
         working-directory: installer
         shell: powershell
-        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" omega-setup.iss'
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" cairn-setup.iss'
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OMEGA-Memory-1.5.4-Windows
-          path: installer/dist/omega-setup.exe
+          name: Cairn-Memory-1.5.4-Windows
+          path: installer/dist/cairn-setup.exe
 
       - name: Attach to GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: installer/dist/omega-setup.exe
+          files: installer/dist/cairn-setup.exe

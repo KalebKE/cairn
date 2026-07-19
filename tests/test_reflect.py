@@ -1,4 +1,4 @@
-"""Tests for omega.reflect -- memory quality analysis functions."""
+"""Tests for cairn.reflect -- memory quality analysis functions."""
 
 import time
 from datetime import datetime, timedelta, timezone
@@ -12,11 +12,11 @@ import pytest
 
 
 @pytest.fixture
-def store(tmp_omega_dir):
+def store(tmp_cairn_dir):
     """Create a fresh SQLiteStore for testing."""
-    from omega.sqlite_store import SQLiteStore
+    from cairn.sqlite_store import SQLiteStore
 
-    db_path = tmp_omega_dir / "test_reflect.db"
+    db_path = tmp_cairn_dir / "test_reflect.db"
     s = SQLiteStore(db_path=db_path)
     yield s
     s.close()
@@ -48,14 +48,14 @@ def _store_memory(store, content, event_type="memory", priority=3, entity_id=Non
 
 class TestFindContradictions:
     def test_no_memories(self, store):
-        from omega.reflect import find_contradictions
+        from cairn.reflect import find_contradictions
 
         result = find_contradictions(store, "nonexistent topic")
         assert result["memories_analyzed"] == 0
         assert result["contradictions"] == []
 
     def test_single_memory(self, store):
-        from omega.reflect import find_contradictions
+        from cairn.reflect import find_contradictions
 
         _store_memory(store, "Alex prefers dark mode")
         result = find_contradictions(store, "dark mode")
@@ -63,7 +63,7 @@ class TestFindContradictions:
         assert result["contradictions"] == []
 
     def test_detects_known_contradiction(self, store):
-        from omega.reflect import find_contradictions
+        from cairn.reflect import find_contradictions
 
         _store_memory(store, "Alex prefers dark mode for all editors")
         _store_memory(store, "Alex prefers light mode for all editors")
@@ -78,7 +78,7 @@ class TestFindContradictions:
             assert len(c["signals"]) > 0
 
     def test_no_contradiction_unrelated(self, store):
-        from omega.reflect import find_contradictions
+        from cairn.reflect import find_contradictions
 
         _store_memory(store, "Python is a programming language")
         _store_memory(store, "The weather is sunny today")
@@ -87,7 +87,7 @@ class TestFindContradictions:
         assert result["contradictions"] == []
 
     def test_entity_scoping(self, store):
-        from omega.reflect import find_contradictions
+        from cairn.reflect import find_contradictions
 
         _store_memory(store, "Project uses dark mode", entity_id="proj_a")
         _store_memory(store, "Project uses light mode", entity_id="proj_b")
@@ -97,7 +97,7 @@ class TestFindContradictions:
         assert result["contradictions"] == []
 
     def test_limit(self, store):
-        from omega.reflect import find_contradictions
+        from cairn.reflect import find_contradictions
 
         for i in range(10):
             _store_memory(store, f"Memory about testing number {i}")
@@ -106,7 +106,7 @@ class TestFindContradictions:
 
     def test_result_structure(self, store):
         """Verify the return dict has all expected keys."""
-        from omega.reflect import find_contradictions
+        from cairn.reflect import find_contradictions
 
         _store_memory(store, "Always use vim")
         _store_memory(store, "Never use vim")
@@ -124,14 +124,14 @@ class TestFindContradictions:
 
 class TestTraceEvolution:
     def test_no_memories(self, store):
-        from omega.reflect import trace_evolution
+        from cairn.reflect import trace_evolution
 
         result = trace_evolution(store, "nonexistent topic")
         assert result["total_memories"] == 0
         assert result["chains"] == []
 
     def test_single_memory(self, store):
-        from omega.reflect import trace_evolution
+        from cairn.reflect import trace_evolution
 
         _store_memory(store, "Initial understanding of deployment")
         result = trace_evolution(store, "deployment")
@@ -139,7 +139,7 @@ class TestTraceEvolution:
         assert result["chains"] == []
 
     def test_follows_evolution_edges(self, store):
-        from omega.reflect import trace_evolution
+        from cairn.reflect import trace_evolution
 
         id1 = _store_memory(store, "Deployment uses docker compose")
         id2 = _store_memory(store, "Deployment now uses kubernetes")
@@ -155,13 +155,13 @@ class TestTraceEvolution:
         assert id2 in node_ids
 
     def test_follows_supersedes_edges(self, store):
-        from omega.reflect import trace_evolution
+        from cairn.reflect import trace_evolution
 
-        id1 = _store_memory(store, "Use Python 3.9 for omega")
-        id2 = _store_memory(store, "Use Python 3.11 for omega")
+        id1 = _store_memory(store, "Use Python 3.9 for cairn")
+        id2 = _store_memory(store, "Use Python 3.11 for cairn")
         store.add_edge(id2, id1, edge_type="supersedes", weight=1.0)
 
-        result = trace_evolution(store, "Python omega")
+        result = trace_evolution(store, "Python cairn")
         assert len(result["chains"]) >= 1
         chain = result["chains"][0]
         node_ids = [m["node_id"] for m in chain["memories"]]
@@ -169,7 +169,7 @@ class TestTraceEvolution:
         assert id2 in node_ids
 
     def test_chronological_order(self, store):
-        from omega.reflect import trace_evolution
+        from cairn.reflect import trace_evolution
 
         id1 = _store_memory(store, "Version 1 of the API uses REST")
         time.sleep(0.05)  # Ensure different timestamps
@@ -183,7 +183,7 @@ class TestTraceEvolution:
             assert chain["memories"][0]["node_id"] == id1
 
     def test_entity_scoping(self, store):
-        from omega.reflect import trace_evolution
+        from cairn.reflect import trace_evolution
 
         id1 = _store_memory(store, "Scoped deployment v1", entity_id="proj_x")
         id2 = _store_memory(store, "Scoped deployment v2", entity_id="proj_x")
@@ -199,7 +199,7 @@ class TestTraceEvolution:
         assert id3 not in all_node_ids
 
     def test_result_structure(self, store):
-        from omega.reflect import trace_evolution
+        from cairn.reflect import trace_evolution
 
         result = trace_evolution(store, "anything")
         assert "topic" in result
@@ -215,7 +215,7 @@ class TestTraceEvolution:
 
 class TestFindStale:
     def test_no_stale(self, store):
-        from omega.reflect import find_stale
+        from cairn.reflect import find_stale
 
         # Fresh memory should not be stale
         _store_memory(store, "Fresh memory just created")
@@ -224,7 +224,7 @@ class TestFindStale:
         assert result["stale_memories"] == []
 
     def test_finds_zero_access_old(self, store):
-        from omega.reflect import find_stale
+        from cairn.reflect import find_stale
 
         _store_memory(store, "Old forgotten memory about testing", age_days=20)
         result = find_stale(store, min_age_days=14, days=30)
@@ -236,7 +236,7 @@ class TestFindStale:
         assert "never accessed" in stale["reasons"]
 
     def test_respects_min_age(self, store):
-        from omega.reflect import find_stale
+        from cairn.reflect import find_stale
 
         # 10 days old, but min_age is 14
         _store_memory(store, "Not old enough to be stale", age_days=10)
@@ -244,7 +244,7 @@ class TestFindStale:
         assert result["total_candidates"] == 0
 
     def test_protected_types_excluded(self, store):
-        from omega.reflect import find_stale
+        from cairn.reflect import find_stale
 
         _store_memory(store, "User prefers dark mode", event_type="user_preference", age_days=60)
         _store_memory(store, "Never push to main without review", event_type="constraint", age_days=60)
@@ -256,7 +256,7 @@ class TestFindStale:
             assert m["event_type"] not in ("user_preference", "constraint", "behavioral_pattern", "reminder")
 
     def test_score_ordering(self, store):
-        from omega.reflect import find_stale
+        from cairn.reflect import find_stale
 
         # Older memory should have higher staleness score
         _store_memory(store, "Somewhat old memory about analysis", age_days=20, priority=3)
@@ -268,7 +268,7 @@ class TestFindStale:
             assert scores == sorted(scores, reverse=True)
 
     def test_entity_scoping(self, store):
-        from omega.reflect import find_stale
+        from cairn.reflect import find_stale
 
         _store_memory(store, "Entity A old memory", entity_id="ent_a", age_days=30)
         _store_memory(store, "Entity B old memory", entity_id="ent_b", age_days=30)
@@ -278,7 +278,7 @@ class TestFindStale:
             assert "Entity A" in m["content_preview"] or m["content_preview"]
 
     def test_limit(self, store):
-        from omega.reflect import find_stale
+        from cairn.reflect import find_stale
 
         for i in range(10):
             _store_memory(store, f"Old stale memory number {i}", age_days=30)
@@ -286,7 +286,7 @@ class TestFindStale:
         assert len(result["stale_memories"]) <= 3
 
     def test_result_structure(self, store):
-        from omega.reflect import find_stale
+        from cairn.reflect import find_stale
 
         _store_memory(store, "Stale test memory for structure check", age_days=20)
         result = find_stale(store, min_age_days=14, days=30)

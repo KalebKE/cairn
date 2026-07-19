@@ -1,15 +1,15 @@
 #!/bin/bash
-# OMEGA Memory -- macOS postinstall script
-# Runs after .pkg payload is installed to ~/Library/OMEGA.
-# Configures Claude Desktop and initializes OMEGA data directory.
+# Cairn -- macOS postinstall script
+# Runs after .pkg payload is installed to ~/Library/Cairn.
+# Configures Claude Desktop and initializes Cairn data directory.
 
 set -euo pipefail
 
-INSTALL_DIR="$HOME/Library/OMEGA"
+INSTALL_DIR="$HOME/Library/Cairn"
 PYTHON="$INSTALL_DIR/python/bin/python3"
 CONFIGURE="$INSTALL_DIR/configure_claude.py"
 
-echo "OMEGA: Running post-install configuration..."
+echo "Cairn: Running post-install configuration..."
 
 # Configure Claude Desktop (inject MCP server entry)
 if [ -f "$CONFIGURE" ]; then
@@ -19,18 +19,18 @@ else
     exit 1
 fi
 
-# Run omega setup to initialize data directory (~/.omega)
-"$PYTHON" -m omega setup 2>/dev/null || echo "WARNING: omega setup did not complete (will retry on first use)"
+# Run cairn setup to initialize data directory (~/.cairn)
+"$PYTHON" -m cairn setup 2>/dev/null || echo "WARNING: cairn setup did not complete (will retry on first use)"
 
-echo "OMEGA: Installation complete!"
+echo "Cairn: Installation complete!"
 echo ""
 echo "Next steps:"
 echo "  1. Restart Claude Desktop"
-echo "  2. Say 'What MCP tools do you have?' to verify OMEGA loaded"
+echo "  2. Say 'What MCP tools do you have?' to verify Cairn loaded"
 echo ""
 echo "Opening quickstart guide..."
 
 # Open quickstart guide in browser
-open "https://omegamax.co/get-started?ref=installer-mac" 2>/dev/null || true
+open "https://tracqi.com/get-started?ref=installer-mac" 2>/dev/null || true
 
 exit 0

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3.11
-"""Latency profiler for OMEGA query pipeline.
+"""Latency profiler for Cairn query pipeline.
 
 Monkey-patches the query pipeline to add per-phase timing,
 then runs representative queries and outputs a breakdown.
@@ -10,7 +10,7 @@ import sys
 import time
 import functools
 
-# Ensure omega is importable
+# Ensure cairn is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 # ── Phase timing instrumentation ──
@@ -50,7 +50,7 @@ def _wrap_function(module, func_name, phase_label):
 
 def instrument():
     """Apply all timing instrumentation."""
-    from omega.sqlite_store._query import QueryMixin
+    from cairn.sqlite_store._query import QueryMixin
 
     phases = [
         ("_query_phase_vec", "1_vec_search"),
@@ -67,19 +67,19 @@ def instrument():
             _wrap_phase(QueryMixin, method_name, label)
 
     # Instrument embedding generation
-    import omega.embedding as emb_mod
+    import cairn.embedding as emb_mod
     _wrap_function(emb_mod, "generate_embedding", "embed_gen")
 
     # Instrument LLM call for query expansion
-    import omega.llm as llm_mod
+    import cairn.llm as llm_mod
     _wrap_function(llm_mod, "llm_complete", "llm_complete")
 
     # Instrument cross-encoder scoring
-    import omega.reranker as reranker_mod
+    import cairn.reranker as reranker_mod
     _wrap_function(reranker_mod, "cross_encoder_score", "cross_encoder")
 
     # Instrument query expansion function
-    import omega.query_expansion as qe_mod
+    import cairn.query_expansion as qe_mod
     _wrap_function(qe_mod, "expand_query", "qe_expand_query")
 
     # Instrument adaptive retry
@@ -102,7 +102,7 @@ def run_queries(store, queries):
             limit=10,
             use_cache=False,
             expand_query=True,
-            entity_id="omega",
+            entity_id="cairn",
         )
         total_ms = (time.monotonic() - t0) * 1000
         # Snapshot timings
@@ -120,7 +120,7 @@ def run_queries(store, queries):
 def print_report(results):
     """Print formatted latency report."""
     print("\n" + "=" * 80)
-    print("OMEGA QUERY PIPELINE LATENCY PROFILE")
+    print("Cairn QUERY PIPELINE LATENCY PROFILE")
     print("=" * 80)
 
     for r in results:
@@ -175,10 +175,10 @@ def main():
     # Instrument before importing the store
     instrument()
 
-    from omega.sqlite_store import SQLiteStore
+    from cairn.sqlite_store import SQLiteStore
 
     # Find the user's actual store
-    store_path = os.path.expanduser("~/.omega/omega.db")
+    store_path = os.path.expanduser("~/.cairn/cairn.db")
     if not os.path.exists(store_path):
         print(f"Store not found at {store_path}")
         sys.exit(1)
@@ -188,7 +188,7 @@ def main():
 
     # Representative queries (mix of expected fast and slow)
     queries = [
-        ("navigational", "what is the OMEGA version number"),
+        ("navigational", "what is the Cairn version number"),
         ("factual", "project migration convergence status"),
         ("conceptual", "how does the memory system handle conflicts between agents"),
         ("vague", "what happened recently"),
@@ -197,9 +197,9 @@ def main():
 
     # Warmup: pre-load models (don't count cold start)
     print("Warming up models...")
-    from omega.embedding import preload_embedding_model
+    from cairn.embedding import preload_embedding_model
     preload_embedding_model()
-    from omega.reranker import preload_reranker_model
+    from cairn.reranker import preload_reranker_model
     preload_reranker_model()
     _phase_timings.clear()
     print("Models loaded. Running profiling queries...\n")

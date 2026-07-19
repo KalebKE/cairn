@@ -1,19 +1,19 @@
-# OMEGA
+# Cairn
 
 **Agentes de IA que recuerdan, coordinan y aprenden. Todo en tu máquina.** El cerebro de tu agente no debería estar en el servidor de otra persona.
 
-[![PyPI version](https://img.shields.io/pypi/v/omega-memory.svg)](https://pypi.org/project/omega-memory/)
+[![PyPI version](https://img.shields.io/pypi/v/cairn.svg)](https://pypi.org/project/cairn/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![#1 on LongMemEval](https://img.shields.io/badge/LongMemEval-95.4%25_%231_Overall-gold.svg)](https://omegamax.co/benchmarks)
+[![#1 on LongMemEval](https://img.shields.io/badge/LongMemEval-95.4%25_%231_Overall-gold.svg)](https://tracqi.com/benchmarks)
 
 [🇺🇸 English](../README.md) | [🇨🇳 中文](README_zh-CN.md) | [🇯🇵 日本語](README_ja.md) | [🇰🇷 한국어](README_ko.md) | [🇧🇷 Português](README_pt-BR.md) | [🇪🇸 Español](README_es.md) | [🇫🇷 Français](README_fr.md) | [🇩🇪 Deutsch](README_de.md) | [🇷🇺 Русский](README_ru.md)
 
 ## Inicio Rápido
 
 ```bash
-pip3 install omega-memory[server]
-omega setup
+pip3 install cairn[server]
+cairn setup
 ```
 
 Compatible con **Claude Code** | **Cursor** | **Windsurf** | **Zed** | cualquier cliente MCP
@@ -24,13 +24,13 @@ Compatible con **Claude Code** | **Cursor** | **Windsurf** | **Zed** | cualquier
 
 El `CLAUDE.md` integrado en Claude Code es un archivo de texto plano. Funciona para unas pocas notas, pero se queda corto cuando:
 
-- **No se puede buscar.** Pasadas las 200 líneas, dependes de grep. OMEGA usa búsqueda semántica (embeddings bge-small-en-v1.5 + sqlite-vec) para encontrar memorias relevantes aunque la redacción sea diferente.
-- **No captura automáticamente.** Cada lección hay que escribirla a mano. OMEGA detecta decisiones y resultados de depuración automáticamente.
-- **Crece sin control.** Sin deduplicación, sin decaimiento, sin detección de contradicciones. OMEGA resuelve conflictos automáticamente, deduplica entradas semánticamente similares y decae memorias obsoletas.
-- **Un archivo por proyecto.** Sin aprendizaje entre proyectos. El grafo de memoria de OMEGA abarca todo tu historial de desarrollo.
-- **No tiene checkpoint.** Si paras a mitad de un refactoring, no hay forma de retomar. OMEGA guarda el estado de la tarea y continúa exactamente donde lo dejaste.
+- **No se puede buscar.** Pasadas las 200 líneas, dependes de grep. Cairn usa búsqueda semántica (embeddings bge-small-en-v1.5 + sqlite-vec) para encontrar memorias relevantes aunque la redacción sea diferente.
+- **No captura automáticamente.** Cada lección hay que escribirla a mano. Cairn detecta decisiones y resultados de depuración automáticamente.
+- **Crece sin control.** Sin deduplicación, sin decaimiento, sin detección de contradicciones. Cairn resuelve conflictos automáticamente, deduplica entradas semánticamente similares y decae memorias obsoletas.
+- **Un archivo por proyecto.** Sin aprendizaje entre proyectos. El grafo de memoria de Cairn abarca todo tu historial de desarrollo.
+- **No tiene checkpoint.** Si paras a mitad de un refactoring, no hay forma de retomar. Cairn guarda el estado de la tarea y continúa exactamente donde lo dejaste.
 
-CLAUDE.md está bien para anotar "siempre usar tabs." OMEGA es para cuando tu agente necesita aprender de verdad.
+CLAUDE.md está bien para anotar "siempre usar tabs." Cairn es para cuando tu agente necesita aprender de verdad.
 
 ## Benchmark
 
@@ -38,7 +38,7 @@ CLAUDE.md está bien para anotar "siempre usar tabs." OMEGA es para cuando tu ag
 
 | Sistema | Puntuación | Nota |
 |---------|----------:|------|
-| **OMEGA** | **95.4%** | **1º** |
+| **Cairn** | **95.4%** | **1º** |
 | Mastra | 94.87% | 2º |
 | Zep/Graphiti | 71.2% | -- |
 
@@ -54,22 +54,22 @@ CLAUDE.md está bien para anotar "siempre usar tabs." OMEGA es para cuando tu ag
 ## Instalación
 
 ```bash
-pip3 install omega-memory[server]   # instalar desde PyPI (incluye servidor MCP)
-omega setup                         # configura el editor automáticamente
-omega doctor                        # verifica que todo funciona
+pip3 install cairn[server]   # instalar desde PyPI (incluye servidor MCP)
+cairn setup                         # configura el editor automáticamente
+cairn doctor                        # verifica que todo funciona
 ```
 
 ¿Usas Cursor, Windsurf o Zed?
 
 ```bash
-omega setup --client cursor
-omega setup --client windsurf
-omega setup --client zed
+cairn setup --client cursor
+cairn setup --client windsurf
+cairn setup --client zed
 ```
 
 ## Comparación
 
-| Característica | OMEGA | CLAUDE.md | Mem0 |
+| Característica | Cairn | CLAUDE.md | Mem0 |
 |----------------|:-----:|:---------:|:----:|
 | Persistente entre sesiones | ✅ | ✅ | ✅ |
 | Búsqueda semántica | ✅ | ❌ | ✅ |
@@ -81,7 +81,7 @@ omega setup --client zed
 
 Para la documentación completa, consulta el [README en inglés](../README.md).
 
-Sitio web: [omegamax.co](https://omegamax.co) | Docs: [omegamax.co/docs](https://omegamax.co/docs) | Benchmarks: [omegamax.co/benchmarks](https://omegamax.co/benchmarks)
+Sitio web: [tracqi.com](https://tracqi.com) | Docs: [tracqi.com/docs](https://tracqi.com/docs) | Benchmarks: [tracqi.com/benchmarks](https://tracqi.com/benchmarks)
 
 ## Licencia
 

@@ -1,4 +1,4 @@
-"""Tests for OMEGA v0.6.0 SOTA-inspired improvements.
+"""Tests for Cairn v0.6.0 SOTA-inspired improvements.
 
 Tests cover:
   1. Priority column + query boost
@@ -101,7 +101,7 @@ class TestTemporalModel:
 
     def test_infer_temporal_range_last_week(self):
         """'last week' should produce a 7-day range."""
-        from omega.bridge import _infer_temporal_range
+        from cairn.bridge import _infer_temporal_range
 
         result = _infer_temporal_range("what happened last week")
         assert result is not None
@@ -113,7 +113,7 @@ class TestTemporalModel:
         assert 6 <= delta.days <= 8
 
     def test_infer_temporal_range_yesterday(self):
-        from omega.bridge import _infer_temporal_range
+        from cairn.bridge import _infer_temporal_range
 
         result = _infer_temporal_range("what did I do yesterday")
         assert result is not None
@@ -123,7 +123,7 @@ class TestTemporalModel:
         assert (e - s).days == 1
 
     def test_infer_temporal_range_n_days_ago(self):
-        from omega.bridge import _infer_temporal_range
+        from cairn.bridge import _infer_temporal_range
 
         result = _infer_temporal_range("what happened 3 days ago")
         assert result is not None
@@ -134,7 +134,7 @@ class TestTemporalModel:
         assert 2 <= delta.days <= 4
 
     def test_infer_temporal_range_iso_date(self):
-        from omega.bridge import _infer_temporal_range
+        from cairn.bridge import _infer_temporal_range
 
         result = _infer_temporal_range("what happened on 2026-01-15")
         assert result is not None
@@ -142,7 +142,7 @@ class TestTemporalModel:
         assert "2026-01-15" in start
 
     def test_infer_temporal_range_month_name(self):
-        from omega.bridge import _infer_temporal_range
+        from cairn.bridge import _infer_temporal_range
 
         result = _infer_temporal_range("decisions made in January")
         assert result is not None
@@ -150,7 +150,7 @@ class TestTemporalModel:
         assert "-01-01" in start  # January
 
     def test_infer_temporal_range_no_signal(self):
-        from omega.bridge import _infer_temporal_range
+        from cairn.bridge import _infer_temporal_range
 
         result = _infer_temporal_range("how does the authentication system work")
         assert result is None
@@ -236,17 +236,17 @@ class TestObservationCompression:
     """Extractive compression of high-value memories."""
 
     def test_short_content_returns_none(self):
-        from omega.bridge import _compress_to_observation
+        from cairn.bridge import _compress_to_observation
 
         result = _compress_to_observation("Short text.", "decision")
         assert result is None
 
     def test_long_decision_produces_observation(self):
-        from omega.bridge import _compress_to_observation
+        from cairn.bridge import _compress_to_observation
 
         content = (
             "After extensive benchmarking of SQLite, PostgreSQL, and Redis for the "
-            "OMEGA memory backend, we decided to use SQLite with sqlite-vec extension. "
+            "Cairn memory backend, we decided to use SQLite with sqlite-vec extension. "
             "The key factors were: zero-config deployment, embedded operation without a "
             "separate server process, and excellent read performance for our workload. "
             "PostgreSQL was ruled out due to operational complexity for a local-first tool."
@@ -257,7 +257,7 @@ class TestObservationCompression:
         assert len(result) >= 30  # Should have meaningful content
 
     def test_observation_capped_at_200_chars(self):
-        from omega.bridge import _compress_to_observation
+        from cairn.bridge import _compress_to_observation
 
         content = " ".join([
             f"Sentence number {i} contains important information about system architecture "
@@ -268,11 +268,11 @@ class TestObservationCompression:
         if result:
             assert len(result) <= 200
 
-    def test_auto_capture_adds_observation(self, tmp_omega_dir):
+    def test_auto_capture_adds_observation(self, tmp_cairn_dir):
         """auto_capture should add observation to metadata for high-value types."""
-        os.environ["OMEGA_SKIP_EMBEDDINGS"] = "1"
+        os.environ["CAIRN_SKIP_EMBEDDINGS"] = "1"
         try:
-            from omega.bridge import reset_memory, auto_capture, _get_store
+            from cairn.bridge import reset_memory, auto_capture, _get_store
             reset_memory()
 
             content = (
@@ -302,7 +302,7 @@ class TestObservationCompression:
             else:
                 pytest.fail("Did not find the lesson_learned memory")
         finally:
-            os.environ.pop("OMEGA_SKIP_EMBEDDINGS", None)
+            os.environ.pop("CAIRN_SKIP_EMBEDDINGS", None)
 
 
 # ============================================================================
@@ -313,10 +313,10 @@ class TestObservationCompression:
 class TestEnhancedWelcome:
     """Welcome returns observation_prefix and project_context."""
 
-    def test_welcome_has_observation_prefix(self, tmp_omega_dir):
-        os.environ["OMEGA_SKIP_EMBEDDINGS"] = "1"
+    def test_welcome_has_observation_prefix(self, tmp_cairn_dir):
+        os.environ["CAIRN_SKIP_EMBEDDINGS"] = "1"
         try:
-            from omega.bridge import reset_memory, _get_store, welcome
+            from cairn.bridge import reset_memory, _get_store, welcome
             reset_memory()
             store = _get_store()
 
@@ -338,12 +338,12 @@ class TestEnhancedWelcome:
             assert isinstance(result["observation_prefix"], str)
             assert "memory_count" in result
         finally:
-            os.environ.pop("OMEGA_SKIP_EMBEDDINGS", None)
+            os.environ.pop("CAIRN_SKIP_EMBEDDINGS", None)
 
-    def test_welcome_has_relative_time(self, tmp_omega_dir):
-        os.environ["OMEGA_SKIP_EMBEDDINGS"] = "1"
+    def test_welcome_has_relative_time(self, tmp_cairn_dir):
+        os.environ["CAIRN_SKIP_EMBEDDINGS"] = "1"
         try:
-            from omega.bridge import reset_memory, _get_store, welcome
+            from cairn.bridge import reset_memory, _get_store, welcome
             reset_memory()
             store = _get_store()
 
@@ -358,25 +358,25 @@ class TestEnhancedWelcome:
                 assert "type" in recent[0]
                 assert "content" in recent[0]
         finally:
-            os.environ.pop("OMEGA_SKIP_EMBEDDINGS", None)
+            os.environ.pop("CAIRN_SKIP_EMBEDDINGS", None)
 
-    def test_welcome_project_context(self, tmp_omega_dir):
-        os.environ["OMEGA_SKIP_EMBEDDINGS"] = "1"
+    def test_welcome_project_context(self, tmp_cairn_dir):
+        os.environ["CAIRN_SKIP_EMBEDDINGS"] = "1"
         try:
-            from omega.bridge import reset_memory, _get_store, welcome
+            from cairn.bridge import reset_memory, _get_store, welcome
             reset_memory()
             store = _get_store()
 
             store.store(
-                content="OMEGA uses SQLite with sqlite-vec for vector similarity search",
-                metadata={"event_type": "decision", "project": "/Projects/omega"},
+                content="Cairn uses SQLite with sqlite-vec for vector similarity search",
+                metadata={"event_type": "decision", "project": "/Projects/cairn"},
             )
 
-            result = welcome(session_id="test-project", project="/Projects/omega")
+            result = welcome(session_id="test-project", project="/Projects/cairn")
             assert "project_context" in result
             assert isinstance(result["project_context"], str)
         finally:
-            os.environ.pop("OMEGA_SKIP_EMBEDDINGS", None)
+            os.environ.pop("CAIRN_SKIP_EMBEDDINGS", None)
 
 
 # ============================================================================
@@ -388,8 +388,8 @@ class TestSmartExtract:
     """_smart_extract produces diverse, information-dense summaries."""
 
     def test_smart_extract_selects_diverse_sentences(self):
-        from omega.bridge import _smart_extract
-        from omega.sqlite_store import MemoryResult
+        from cairn.bridge import _smart_extract
+        from cairn.sqlite_store import MemoryResult
 
         # Create mock cluster with diverse content
         nodes = [
@@ -406,13 +406,13 @@ class TestSmartExtract:
         assert len(result) <= 1000
 
     def test_smart_extract_caps_at_1000_chars(self):
-        from omega.bridge import _smart_extract
-        from omega.sqlite_store import MemoryResult
+        from cairn.bridge import _smart_extract
+        from cairn.sqlite_store import MemoryResult
 
         # Create cluster with lots of content
         nodes = []
         for i in range(10):
-            content = f"Unique sentence number {i} with completely different words about topic alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega."
+            content = f"Unique sentence number {i} with completely different words about topic alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi cairn."
             nodes.append(MemoryResult(id=f"m{i}", content=content,
                                       created_at=datetime(2026, 1, i + 1, tzinfo=timezone.utc)))
 
@@ -420,14 +420,14 @@ class TestSmartExtract:
         assert len(result) <= 1000
 
     def test_smart_extract_empty_cluster(self):
-        from omega.bridge import _smart_extract
+        from cairn.bridge import _smart_extract
 
         result = _smart_extract([])
         assert result == ""
 
     def test_smart_extract_orders_chronologically(self):
-        from omega.bridge import _smart_extract
-        from omega.sqlite_store import MemoryResult
+        from cairn.bridge import _smart_extract
+        from cairn.sqlite_store import MemoryResult
 
         nodes = [
             MemoryResult(id="m1", content="First lesson about database optimization techniques for production.",
@@ -452,54 +452,54 @@ class TestRelativeTime:
     """_relative_time formats datetimes as human-readable strings."""
 
     def test_just_now(self):
-        from omega.bridge import _relative_time
+        from cairn.bridge import _relative_time
 
         now = datetime.now(timezone.utc)
         assert _relative_time(now) == "just now"
 
     def test_minutes_ago(self):
-        from omega.bridge import _relative_time
+        from cairn.bridge import _relative_time
 
         t = datetime.now(timezone.utc) - timedelta(minutes=15)
         result = _relative_time(t)
         assert "m ago" in result
 
     def test_hours_ago(self):
-        from omega.bridge import _relative_time
+        from cairn.bridge import _relative_time
 
         t = datetime.now(timezone.utc) - timedelta(hours=3)
         result = _relative_time(t)
         assert "h ago" in result
 
     def test_yesterday(self):
-        from omega.bridge import _relative_time
+        from cairn.bridge import _relative_time
 
         t = datetime.now(timezone.utc) - timedelta(days=1, hours=12)
         result = _relative_time(t)
         assert result == "yesterday"
 
     def test_days_ago(self):
-        from omega.bridge import _relative_time
+        from cairn.bridge import _relative_time
 
         t = datetime.now(timezone.utc) - timedelta(days=5)
         result = _relative_time(t)
         assert "5d ago" in result
 
     def test_months_ago(self):
-        from omega.bridge import _relative_time
+        from cairn.bridge import _relative_time
 
         t = datetime.now(timezone.utc) - timedelta(days=65)
         result = _relative_time(t)
         assert "month" in result
 
     def test_empty_input(self):
-        from omega.bridge import _relative_time
+        from cairn.bridge import _relative_time
 
         assert _relative_time(None) == ""
         assert _relative_time("") == ""
 
     def test_iso_string_input(self):
-        from omega.bridge import _relative_time
+        from cairn.bridge import _relative_time
 
         t = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
         result = _relative_time(t)
@@ -514,18 +514,18 @@ class TestRelativeTime:
 class TestToolSchemas:
     """New schema fields are present."""
 
-    def test_omega_store_has_priority(self):
-        from omega.server.tool_schemas import TOOL_SCHEMAS
+    def test_cairn_store_has_priority(self):
+        from cairn.server.tool_schemas import TOOL_SCHEMAS
 
-        store_schema = next(s for s in TOOL_SCHEMAS if s["name"] == "omega_store")
+        store_schema = next(s for s in TOOL_SCHEMAS if s["name"] == "cairn_store")
         props = store_schema["inputSchema"]["properties"]
         assert "priority" in props
         assert props["priority"]["type"] == "integer"
 
-    def test_omega_query_has_temporal_range(self):
-        from omega.server.tool_schemas import TOOL_SCHEMAS
+    def test_cairn_query_has_temporal_range(self):
+        from cairn.server.tool_schemas import TOOL_SCHEMAS
 
-        query_schema = next(s for s in TOOL_SCHEMAS if s["name"] == "omega_query")
+        query_schema = next(s for s in TOOL_SCHEMAS if s["name"] == "cairn_query")
         props = query_schema["inputSchema"]["properties"]
         assert "temporal_range" in props
         assert props["temporal_range"]["type"] == "array"
@@ -787,7 +787,7 @@ class TestWordOverlapStemming:
 
     def test_stemming_matches_deploy_variants(self, store):
         """'deployment' query should match content with 'deployed' via stem 'deploy'."""
-        from omega.sqlite_store import SQLiteStore
+        from cairn.sqlite_store import SQLiteStore
 
         ratio = SQLiteStore._word_overlap(
             ["container", "deployment", "platform"],
@@ -798,7 +798,7 @@ class TestWordOverlapStemming:
 
     def test_stemming_no_false_positive(self, store):
         """Stemming should not create false matches for unrelated words."""
-        from omega.sqlite_store import SQLiteStore
+        from cairn.sqlite_store import SQLiteStore
 
         ratio = SQLiteStore._word_overlap(
             ["knitting", "patterns", "sweaters"],
@@ -808,7 +808,7 @@ class TestWordOverlapStemming:
 
     def test_exact_match_preferred_over_stem(self, store):
         """Exact substring match should be found before trying stemming."""
-        from omega.sqlite_store import SQLiteStore
+        from cairn.sqlite_store import SQLiteStore
 
         ratio = SQLiteStore._word_overlap(
             ["monitoring", "alerts"],
@@ -818,7 +818,7 @@ class TestWordOverlapStemming:
 
     def test_stem_minimum_length(self, store):
         """Stemmed result must be at least 3 chars to avoid spurious matches."""
-        from omega.sqlite_store import SQLiteStore
+        from cairn.sqlite_store import SQLiteStore
 
         # "used" -> strip "ed" -> "us" (only 2 chars, below min 3) -> no stem match
         ratio = SQLiteStore._word_overlap(["used"], "the user prefers python")
@@ -833,19 +833,19 @@ class TestBM25TextSearch:
         """Memory with rare matching term should rank above common-term match."""
         # "sqlite" appears in many memories, "vectorization" is rare
         store.store(
-            content="OMEGA uses sqlite for storage of all memory data",
+            content="Cairn uses sqlite for storage of all memory data",
             metadata={"event_type": "decision"},
         )
         store.store(
-            content="OMEGA uses sqlite for storage of all memory data copy two",
+            content="Cairn uses sqlite for storage of all memory data copy two",
             metadata={"event_type": "decision"},
         )
         nid_rare = store.store(
-            content="OMEGA implements vectorization using sqlite-vec extension for similarity",
+            content="Cairn implements vectorization using sqlite-vec extension for similarity",
             metadata={"event_type": "decision"},
         )
 
-        results = store.query("OMEGA vectorization sqlite-vec similarity", limit=5)
+        results = store.query("Cairn vectorization sqlite-vec similarity", limit=5)
         if results:
             # The memory with the rare term "vectorization" should rank high
             result_ids = [r.id for r in results]

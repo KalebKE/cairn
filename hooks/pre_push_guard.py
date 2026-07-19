@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OMEGA PreToolUse hook — Git guard for push divergence + branch claims.
+"""Cairn PreToolUse hook — Git guard for push divergence + branch claims.
 
 Triggered on Bash commands. Enforces:
   1. git push: blocks if origin has advanced (divergence guard)
@@ -21,7 +21,7 @@ from pathlib import Path
 
 def _log_hook_error(hook_name, error):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         tb = traceback.format_exc()
@@ -37,7 +37,7 @@ def _log_hook_error(hook_name, error):
 
 def _log_timing(hook_name, elapsed_ms):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         data = f"[{timestamp}] {hook_name}: OK ({elapsed_ms:.0f}ms)\n"
@@ -115,7 +115,7 @@ def _check_push_divergence(command):
 
         # Log divergence event BEFORE exit (fix: was dead code after sys.exit)
         try:
-            from omega.coordination import get_manager
+            from cairn.coordination import get_manager
             mgr = get_manager()
             mgr.log_git_event(
                 project=project,
@@ -216,7 +216,7 @@ def _parse_checkout_target(command):
 def _block_if_branch_claimed(session_id, project, branch):
     """Block if the branch is claimed by another agent."""
     try:
-        from omega.coordination import get_manager
+        from cairn.coordination import get_manager
         mgr = get_manager()
         info = mgr.check_branch(project, branch)
 
@@ -232,13 +232,13 @@ def _block_if_branch_claimed(session_id, project, branch):
             f"\n[BRANCH-GUARD] BLOCKED: branch '{branch}' is claimed by session {owner} ({owner_task}).\n"
             f"  Options:\n"
             f"    1. Wait for the other agent to finish\n"
-            f"    2. Ask other agent to call omega_branch_release\n"
+            f"    2. Ask other agent to call cairn_branch_release\n"
             f"    3. Use a different feature branch"
         )
         sys.exit(2)
 
     except ImportError:
-        pass  # OMEGA not installed — fail-open
+        pass  # Cairn not installed — fail-open
     except SystemExit:
         raise  # Re-raise sys.exit(2)
     except Exception as e:
@@ -280,7 +280,7 @@ def _block_if_directory_occupied(session_id, project, target_branch):
         return  # Same branch or detached HEAD, no contention
 
     try:
-        from omega.coordination import get_manager
+        from cairn.coordination import get_manager
         mgr = get_manager()
 
         info = mgr.check_branch(project, current_branch)
@@ -304,7 +304,7 @@ def _block_if_directory_occupied(session_id, project, target_branch):
         sys.exit(2)
 
     except ImportError:
-        pass  # OMEGA not installed — fail-open
+        pass  # Cairn not installed — fail-open
     except SystemExit:
         raise  # Re-raise sys.exit(2)
     except Exception as e:
@@ -320,7 +320,7 @@ def _auto_claim_on_checkout(session_id, project, branch):
     if not session_id or not branch or branch in ("main", "master", "HEAD"):
         return
     try:
-        from omega.coordination import get_manager
+        from cairn.coordination import get_manager
         mgr = get_manager()
         mgr.claim_branch(
             project=project, branch=branch,
@@ -344,7 +344,7 @@ def _auto_claim_branch(command):
         branch = _get_current_branch(project)
         if not branch or branch == "HEAD":
             return
-        from omega.coordination import get_manager
+        from cairn.coordination import get_manager
         mgr = get_manager()
         mgr.claim_branch(project=project, branch=branch, session_id=session_id, task="pushing to remote")
     except ImportError:
@@ -356,7 +356,7 @@ def _auto_claim_branch(command):
 def _log_push_event(project, branch, session_id):
     """Log a push event to coordination."""
     try:
-        from omega.coordination import get_manager
+        from cairn.coordination import get_manager
         mgr = get_manager()
 
         result = subprocess.run(

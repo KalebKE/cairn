@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OMEGA Stop hook fallback — capture high-value assistant responses.
+"""Cairn Stop hook fallback — capture high-value assistant responses.
 
 Fires on every Stop event when the hook daemon is unavailable.
 Detects fix, decision, lesson, and recommendation patterns in
@@ -113,7 +113,7 @@ def main(data=None):
             if _captured_count >= MAX_CAPTURES:
                 break
             try:
-                from omega.bridge import auto_capture
+                from cairn.bridge import auto_capture
 
                 auto_capture(
                     content=f"Insight: {block}",
@@ -144,7 +144,7 @@ def main(data=None):
         content = _find_match(cleaned, patterns)
         if content:
             try:
-                from omega.bridge import auto_capture
+                from cairn.bridge import auto_capture
 
                 auto_capture(
                     content=f"Assistant {label}: {content[:500]}",

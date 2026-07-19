@@ -1,4 +1,4 @@
-# OMEGA Installers
+# Cairn Installers
 
 One-click installers for non-technical Claude Desktop users.
 
@@ -11,8 +11,8 @@ One-click installers for non-technical Claude Desktop users.
 
 ## What it does
 
-1. Installs bundled Python 3.12 (python-build-standalone) + a pinned `omega-memory[server]` release to `~/Library/OMEGA`
-2. Configures Claude Desktop to use OMEGA as an MCP server
+1. Installs bundled Python 3.12 (python-build-standalone) + a pinned `cairn[server]` release to `~/Library/Cairn`
+2. Configures Claude Desktop to use Cairn as an MCP server
 3. No admin privileges required (per-user install)
 
 ## Prerequisites
@@ -37,43 +37,43 @@ cd installer
 ./build-macos-pkg.sh 1.5.4
 ```
 
-Output: `build/macos/dist/OMEGA-Memory.pkg`
+Output: `build/macos/dist/Cairn-Memory.pkg`
 
 ### Automated build
 
-Push a release tag or trigger the `Build macOS Installer` workflow manually in GitHub Actions. The workflow runs on `macos-latest`, builds `OMEGA-Memory.pkg`, verifies the packaged `omega.__version__`, uploads an artifact, and attaches it to `v*` GitHub releases.
+Push a release tag or trigger the `Build macOS Installer` workflow manually in GitHub Actions. The workflow runs on `macos-latest`, builds `Cairn-Memory.pkg`, verifies the packaged `cairn.__version__`, uploads an artifact, and attaches it to `v*` GitHub releases.
 
 The installer is intentionally version-pinned. A `v1.5.4` installer should
-install `omega-memory[server]==1.5.4`, not whatever PyPI latest is later.
+install `cairn[server]==1.5.4`, not whatever PyPI latest is later.
 
 ## Testing checklist
 
-- [ ] Run `OMEGA-Memory.pkg` on a clean macOS install (no Python installed)
+- [ ] Run `Cairn-Memory.pkg` on a clean macOS install (no Python installed)
 - [ ] Verify install completes without errors
-- [ ] Check `~/Library/OMEGA/python/bin/python3` exists
-- [ ] Check `~/Library/Application Support/Claude/claude_desktop_config.json` has `omega-memory` entry
+- [ ] Check `~/Library/Cairn/python/bin/python3` exists
+- [ ] Check `~/Library/Application Support/Claude/claude_desktop_config.json` has `cairn` entry
 - [ ] Check `.json.bak` backup exists
-- [ ] Restart Claude Desktop, verify OMEGA tools appear
-- [ ] Say "hello" to Claude, verify `omega_welcome` works
-- [ ] Run `~/Library/OMEGA/uninstall-omega.sh`, verify `omega-memory` entry removed
-- [ ] Verify `~/.omega` data directory is preserved after uninstall
+- [ ] Restart Claude Desktop, verify Cairn tools appear
+- [ ] Say "hello" to Claude, verify `cairn_welcome` works
+- [ ] Run `~/Library/Cairn/uninstall-cairn.sh`, verify `cairn` entry removed
+- [ ] Verify `~/.cairn` data directory is preserved after uninstall
 
 ## Architecture
 
 ```
-~/Library/OMEGA/                    <- install directory
+~/Library/Cairn/                    <- install directory
   python/                           <- python-build-standalone 3.12
     bin/python3
-    lib/python3.12/site-packages/   <- omega-memory package
+    lib/python3.12/site-packages/   <- cairn package
   configure_claude.py               <- post-install/uninstall config script
-  uninstall-omega.sh                <- uninstall script
+  uninstall-cairn.sh                <- uninstall script
 
-~/.omega/                           <- data directory (preserved on uninstall)
-  omega.db                          <- memory database
+~/.cairn/                           <- data directory (preserved on uninstall)
+  cairn.db                          <- memory database
   models/                           <- ONNX embedding model (downloaded on first use)
 
 ~/Library/Application Support/Claude/
-  claude_desktop_config.json        <- Claude Desktop config (OMEGA entry injected)
+  claude_desktop_config.json        <- Claude Desktop config (Cairn entry injected)
   claude_desktop_config.json.bak    <- backup of original config
 ```
 
@@ -85,8 +85,8 @@ One-click installer (.exe) for non-technical Claude Desktop users on Windows.
 
 ## What it does
 
-1. Installs a bundled Python 3.12 + pinned `omega-memory[server]` to `%LOCALAPPDATA%\OMEGA`
-2. Configures Claude Desktop to use OMEGA as an MCP server
+1. Installs a bundled Python 3.12 + pinned `cairn[server]` to `%LOCALAPPDATA%\Cairn`
+2. Configures Claude Desktop to use Cairn as an MCP server
 3. No admin privileges required
 
 ## Prerequisites
@@ -116,62 +116,62 @@ Remove-Item build\python.zip
 Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile build\get-pip.py
 
 # 3. Build installer
-& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" omega-setup.iss
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" cairn-setup.iss
 ```
 
-Output: `dist\omega-setup.exe`
+Output: `dist\cairn-setup.exe`
 
 ### Automated build
 
-Push a release tag or trigger the `Build Windows Installer` workflow manually in GitHub Actions. The workflow installs Inno Setup, downloads embedded Python + `get-pip.py`, builds `omega-setup.exe`, uploads an artifact, and attaches it to `v*` GitHub releases.
+Push a release tag or trigger the `Build Windows Installer` workflow manually in GitHub Actions. The workflow installs Inno Setup, downloads embedded Python + `get-pip.py`, builds `cairn-setup.exe`, uploads an artifact, and attaches it to `v*` GitHub releases.
 
 The Inno script pins the package version in its `pip install` step. Update
-`installer/omega-setup.iss` before each new installer release.
+`installer/cairn-setup.iss` before each new installer release.
 
 ## Testing checklist
 
-- [ ] Run `omega-setup.exe` on a clean Windows VM (no Python installed)
+- [ ] Run `cairn-setup.exe` on a clean Windows VM (no Python installed)
 - [ ] Verify install completes without errors
-- [ ] Check `%LOCALAPPDATA%\OMEGA\python\python.exe` exists
-- [ ] Check `%APPDATA%\Claude\claude_desktop_config.json` has `omega-memory` entry
+- [ ] Check `%LOCALAPPDATA%\Cairn\python\python.exe` exists
+- [ ] Check `%APPDATA%\Claude\claude_desktop_config.json` has `cairn` entry
 - [ ] Check `%APPDATA%\Claude\claude_desktop_config.json.bak` backup exists
-- [ ] Restart Claude Desktop, verify OMEGA tools appear
-- [ ] Say "hello" to Claude, verify `omega_welcome` works
-- [ ] Run uninstaller, verify `omega-memory` entry removed from Claude Desktop config
-- [ ] Verify `%USERPROFILE%\.omega` data directory is preserved after uninstall
+- [ ] Restart Claude Desktop, verify Cairn tools appear
+- [ ] Say "hello" to Claude, verify `cairn_welcome` works
+- [ ] Run uninstaller, verify `cairn` entry removed from Claude Desktop config
+- [ ] Verify `%USERPROFILE%\.cairn` data directory is preserved after uninstall
 
 ---
 
 # Release checklist
 
-1. Publish and verify `omega-memory` on PyPI.
+1. Publish and verify `cairn` on PyPI.
 2. Update installer pins and metadata:
    - `installer/build-macos-pkg.sh` default version
-   - `installer/omega-setup.iss` `MyAppVersion`
-   - `installer/omega-setup.iss` pinned `pip install omega-memory[server]==...`
+   - `installer/cairn-setup.iss` `MyAppVersion`
+   - `installer/cairn-setup.iss` pinned `pip install cairn[server]==...`
 3. Build macOS and Windows installers from a `v*` tag or manual workflow.
 4. Smoke test both installers on clean machines or VMs.
 5. Attach artifacts to the matching GitHub release:
-   - `OMEGA-Memory.pkg`
-   - `omega-setup.exe`
+   - `Cairn-Memory.pkg`
+   - `cairn-setup.exe`
 6. Update website `INSTALLER_VERSION` only after both artifact URLs return 200.
 
 ## Architecture
 
 ```
-%LOCALAPPDATA%\OMEGA\           <- install directory
+%LOCALAPPDATA%\Cairn\           <- install directory
   python\                       <- Python 3.12 embeddable + site-packages
     python.exe
-    Lib\site-packages\omega\    <- omega-memory package
+    Lib\site-packages\cairn\    <- cairn package
   configure_claude.py           <- post-install/uninstall config script
   get-pip.py                    <- pip bootstrapper (used during install)
 
-%USERPROFILE%\.omega\           <- data directory (preserved on uninstall)
-  omega.db                      <- memory database
+%USERPROFILE%\.cairn\           <- data directory (preserved on uninstall)
+  cairn.db                      <- memory database
   models\                       <- ONNX embedding model (downloaded on first use)
 
 %APPDATA%\Claude\
-  claude_desktop_config.json    <- Claude Desktop config (OMEGA entry injected)
+  claude_desktop_config.json    <- Claude Desktop config (Cairn entry injected)
   claude_desktop_config.json.bak <- backup of original config
 ```
 

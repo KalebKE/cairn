@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OMEGA PostToolUse hook — Semantic memory surfacing and error auto-capture.
+"""Cairn PostToolUse hook — Semantic memory surfacing and error auto-capture.
 
 Triggered on Edit/Write/NotebookEdit/Bash. Provides:
 - Semantic search for memories related to files being edited
@@ -20,8 +20,8 @@ _MAX_LOG_BYTES = 5 * 1024 * 1024  # 5 MB cap
 
 
 def _check_milestone(name: str) -> bool:
-    """DEPRECATED: Use omega.milestones._check_milestone instead."""
-    from omega.milestones import _check_milestone as _cm
+    """DEPRECATED: Use cairn.milestones._check_milestone instead."""
+    from cairn.milestones import _check_milestone as _cm
     return _cm(name)
 
 
@@ -60,9 +60,9 @@ def _rotate_log_if_needed(log_path: Path):
 
 
 def _log_hook_error(hook_name: str, error: Exception):
-    """Log hook errors to ~/.omega/hooks.log for debugging."""
+    """Log hook errors to ~/.cairn/hooks.log for debugging."""
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         _rotate_log_if_needed(log_path)
         timestamp = datetime.now().isoformat(timespec="seconds")
@@ -79,7 +79,7 @@ def _log_hook_error(hook_name: str, error: Exception):
 
 def _log_timing(hook_name: str, elapsed_ms: float):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         _rotate_log_if_needed(log_path)
         timestamp = datetime.now().isoformat(timespec="seconds")
@@ -98,7 +98,7 @@ def _track_surfaced_ids(session_id: str, file_path: str, memory_ids: list):
     if not session_id or not memory_ids:
         return
     try:
-        json_path = Path.home() / ".omega" / f"session-{session_id}.surfaced.json"
+        json_path = Path.home() / ".cairn" / f"session-{session_id}.surfaced.json"
         existing = {}
         if json_path.exists():
             existing = json.loads(json_path.read_text())
@@ -145,7 +145,7 @@ def _lookup_session_tasks(results: list) -> dict:
     if not session_ids:
         return {}
     try:
-        from omega.coordination import get_manager
+        from cairn.coordination import get_manager
         mgr = get_manager()
         placeholders = ",".join("?" for _ in session_ids)
         cursor = mgr._conn.execute(
@@ -173,18 +173,18 @@ def _check_nudge(edit_count: int, tool_calls: list) -> "Optional[str]":
     """Return a nudge string if agent is missing a critical tool call, or None."""
     normalized = set()
     for t in tool_calls:
-        if t.startswith("mcp__omega-memory__"):
-            normalized.add(t.replace("mcp__omega-memory__", ""))
+        if t.startswith("mcp__cairn__"):
+            normalized.add(t.replace("mcp__cairn__", ""))
         else:
             normalized.add(t)
 
-    # Nudge 1: 10+ edits without omega_file_check
-    if edit_count >= 10 and "omega_file_check" not in normalized:
-        return "[OMEGA] Tip: You've made {n} edits without checking for file conflicts. Consider `omega_file_check(file_path=...)` before your next edit.".format(n=edit_count)
+    # Nudge 1: 10+ edits without cairn_file_check
+    if edit_count >= 10 and "cairn_file_check" not in normalized:
+        return "[Cairn] Tip: You've made {n} edits without checking for file conflicts. Consider `cairn_file_check(file_path=...)` before your next edit.".format(n=edit_count)
 
-    # Nudge 2: 30+ tool calls without omega_reflect
-    if len(tool_calls) >= 30 and "omega_reflect" not in normalized:
-        return "[OMEGA] Tip: Consider running `omega_reflect()` to check for contradictions or stale memories in your current work area."
+    # Nudge 2: 30+ tool calls without cairn_reflect
+    if len(tool_calls) >= 30 and "cairn_reflect" not in normalized:
+        return "[Cairn] Tip: Consider running `cairn_reflect()` to check for contradictions or stale memories in your current work area."
 
     return None
 
@@ -192,7 +192,7 @@ def _check_nudge(edit_count: int, tool_calls: list) -> "Optional[str]":
 def _surface_for_edit(file_path: str, session_id: str, project: str, count_surfacing: bool = True):
     """Surface memories related to a file being edited, with attribution."""
     try:
-        from omega.bridge import query_structured
+        from cairn.bridge import query_structured
         filename = os.path.basename(file_path)
         dirname = os.path.basename(os.path.dirname(file_path))
         context_tags = _ext_to_tags(file_path)
@@ -238,14 +238,14 @@ def _surface_for_edit(file_path: str, session_id: str, project: str, count_surfa
         # First-recall milestone
         try:
             if _check_milestone("first-recall"):
-                print("[OMEGA] First memory recalled! Past context is informing this edit.")
+                print("[Cairn] First memory recalled! Past context is informing this edit.")
         except Exception:
             pass
 
         # Traverse: surface linked memories from the top result
         try:
             if results and results[0].get("id"):
-                from omega.bridge import _get_store
+                from cairn.bridge import _get_store
                 store = _get_store()
                 shown_ids = {r.get("id") for r in results}
                 chain = store.get_related_chain(results[0]["id"], max_hops=1, min_weight=0.4)
@@ -265,7 +265,7 @@ def _surface_for_edit(file_path: str, session_id: str, project: str, count_surfa
 
         # Phrase search: exact-match error patterns for this file
         try:
-            from omega.bridge import _get_store
+            from cairn.bridge import _get_store
             store = _get_store()
             filename = os.path.basename(file_path)
             exact_hits = store.phrase_search(filename, limit=2, event_type="error_pattern")
@@ -287,7 +287,7 @@ def _surface_for_edit(file_path: str, session_id: str, project: str, count_surfa
         # Track surfacing count for session activity summary (edits only, not reads)
         if count_surfacing and session_id:
             try:
-                marker = Path.home() / ".omega" / f"session-{session_id}.surfaced"
+                marker = Path.home() / ".cairn" / f"session-{session_id}.surfaced"
                 with open(marker, "a") as f:
                     f.write("x")
             except Exception:
@@ -301,7 +301,7 @@ def _surface_for_edit(file_path: str, session_id: str, project: str, count_surfa
 def _surface_lessons(file_path: str, session_id: str, project: str):
     """Surface verified cross-session lessons relevant to a file."""
     try:
-        from omega.bridge import get_cross_session_lessons
+        from cairn.bridge import get_cross_session_lessons
         filename = os.path.basename(file_path)
         lessons = get_cross_session_lessons(
             task=f"editing {filename}",
@@ -413,7 +413,7 @@ def _capture_error(tool_output: str, session_id: str, project: str):
 
     # --- "You've seen this before" — proactive error recall ---
     try:
-        from omega.bridge import query_structured
+        from cairn.bridge import query_structured
         past_errors = query_structured(
             query_text=error_summary[:200],
             limit=2,
@@ -441,7 +441,7 @@ def _capture_error(tool_output: str, session_id: str, project: str):
         _log_hook_error("error_recall", e)
 
     try:
-        from omega.bridge import auto_capture
+        from cairn.bridge import auto_capture
         result = auto_capture(
             content=f"Error: {error_summary}",
             event_type="error_pattern",
@@ -456,9 +456,9 @@ def _capture_error(tool_output: str, session_id: str, project: str):
         if result and ("Stored" in result or "Evolved" in result):
             first_line = error_summary.split('\n')[0][:80]
             if "Evolved" in result:
-                print(f"[OMEGA] Evolved error pattern — {first_line}")
+                print(f"[Cairn] Evolved error pattern — {first_line}")
             else:
-                print(f"[OMEGA] Captured error — {first_line}")
+                print(f"[Cairn] Captured error — {first_line}")
     except ImportError:
         pass
     except Exception as e:
@@ -506,7 +506,7 @@ def _track_git_commit(tool_input: str, tool_output: str, session_id: str, projec
         branch = None
 
     try:
-        from omega.coordination import get_manager
+        from cairn.coordination import get_manager
         mgr = get_manager()
         mgr.log_git_event(
             project=project,
@@ -523,28 +523,28 @@ def _track_git_commit(tool_input: str, tool_output: str, session_id: str, projec
 
 
 def _check_protocol_reminder(session_id: str):
-    """Remind agent to call omega_protocol() if not yet called this session.
+    """Remind agent to call cairn_protocol() if not yet called this session.
 
     Uses a marker file per session. The marker is created by the MCP handler
-    when omega_protocol() is called. If absent after a few tool uses, we nudge.
+    when cairn_protocol() is called. If absent after a few tool uses, we nudge.
     """
     if not session_id:
         return
     try:
-        omega_dir = Path.home() / ".omega"
-        protocol_marker = omega_dir / f"session-{session_id}.protocol"
+        cairn_dir = Path.home() / ".cairn"
+        protocol_marker = cairn_dir / f"session-{session_id}.protocol"
         if protocol_marker.exists():
             return  # Already called this session
 
         # Count tool uses via surfacing counter
-        surfaced_marker = omega_dir / f"session-{session_id}.surfaced"
+        surfaced_marker = cairn_dir / f"session-{session_id}.surfaced"
         tool_uses = 0
         if surfaced_marker.exists():
             tool_uses = surfaced_marker.stat().st_size
 
         # Only remind after 3+ tool uses (give agent time to call it naturally)
         if tool_uses >= 3:
-            print("\n[PROTOCOL] Reminder: call `omega_protocol()` to load your coordination playbook. It was not called this session.")
+            print("\n[PROTOCOL] Reminder: call `cairn_protocol()` to load your coordination playbook. It was not called this session.")
             # Create marker so we only remind once
             protocol_marker.parent.mkdir(parents=True, exist_ok=True)
             protocol_marker.write_text("reminded")
@@ -556,7 +556,7 @@ def _get_session_tool_names_fast(session_id: str) -> list:
     """Fast read of tool names from coord_audit for this session."""
     try:
         import sqlite3
-        db = sqlite3.connect(os.path.expanduser("~/.omega/omega.db"), timeout=10)
+        db = sqlite3.connect(os.path.expanduser("~/.cairn/cairn.db"), timeout=10)
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("PRAGMA busy_timeout=30000")
         rows = db.execute(
@@ -604,7 +604,7 @@ def main():
 
     # Mid-session utilization nudge (once per threshold crossing)
     try:
-        nudge_marker = Path.home() / ".omega" / f"session-{session_id}.nudged"
+        nudge_marker = Path.home() / ".cairn" / f"session-{session_id}.nudged"
         if session_id and not nudge_marker.exists():
             tool_calls_list = _get_session_tool_names_fast(session_id)
             edit_count = sum(1 for t in tool_calls_list if t in ("Edit", "Write", "NotebookEdit"))

@@ -1,4 +1,4 @@
-"""Tests for OMEGA MCP server HTTP daemon transport."""
+"""Tests for Cairn MCP server HTTP daemon transport."""
 
 import asyncio
 import json
@@ -18,15 +18,15 @@ import pytest
 def test_transport_env_var_default():
     """Default transport is stdio."""
     with patch.dict(os.environ, {}, clear=False):
-        os.environ.pop("OMEGA_TRANSPORT", None)
+        os.environ.pop("CAIRN_TRANSPORT", None)
         # Re-read the module-level constant
-        assert os.environ.get("OMEGA_TRANSPORT", "stdio") == "stdio"
+        assert os.environ.get("CAIRN_TRANSPORT", "stdio") == "stdio"
 
 
 def test_transport_env_var_http():
-    """Setting OMEGA_TRANSPORT=http selects HTTP transport."""
-    with patch.dict(os.environ, {"OMEGA_TRANSPORT": "http"}):
-        assert os.environ["OMEGA_TRANSPORT"] == "http"
+    """Setting CAIRN_TRANSPORT=http selects HTTP transport."""
+    with patch.dict(os.environ, {"CAIRN_TRANSPORT": "http"}):
+        assert os.environ["CAIRN_TRANSPORT"] == "http"
 
 
 # ---------------------------------------------------------------------------
@@ -35,14 +35,14 @@ def test_transport_env_var_http():
 
 def test_check_port_available_free():
     """Free port should be detected as available."""
-    from omega.server.mcp_server import _check_port_available
+    from cairn.server.mcp_server import _check_port_available
     # Use a random high port that's almost certainly free
     assert _check_port_available("127.0.0.1", 0) is True
 
 
 def test_check_port_available_bound():
     """Bound port should be detected as unavailable."""
-    from omega.server.mcp_server import _check_port_available
+    from cairn.server.mcp_server import _check_port_available
     # Bind + listen on a port so SO_REUSEADDR in _check_port_available cannot rebind.
     # On Linux, two SO_REUSEADDR sockets can bind the same port unless one is in LISTEN.
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -108,10 +108,10 @@ def test_migrate_config(tmp_path):
         "projects": {
             "/Users/test/project1": {
                 "mcpServers": {
-                    "omega-memory": {
+                    "cairn": {
                         "type": "stdio",
                         "command": "/usr/bin/python3",
-                        "args": ["-m", "omega.server.mcp_server"],
+                        "args": ["-m", "cairn.server.mcp_server"],
                     }
                 }
             },
@@ -134,19 +134,19 @@ def test_migrate_config(tmp_path):
     changed = 0
     for proj_path, proj_config in cfg.get("projects", {}).items():
         servers = proj_config.get("mcpServers", {})
-        if "omega-memory" in servers:
-            entry = servers["omega-memory"]
+        if "cairn" in servers:
+            entry = servers["cairn"]
             if entry.get("type") == "stdio":
-                servers["omega-memory"] = {"type": "http", "url": url}
+                servers["cairn"] = {"type": "http", "url": url}
                 changed += 1
 
     claude_json.write_text(json.dumps(cfg, indent=2))
 
     assert changed == 1
     result = json.loads(claude_json.read_text())
-    omega_entry = result["projects"]["/Users/test/project1"]["mcpServers"]["omega-memory"]
-    assert omega_entry["type"] == "http"
-    assert omega_entry["url"] == url
+    cairn_entry = result["projects"]["/Users/test/project1"]["mcpServers"]["cairn"]
+    assert cairn_entry["type"] == "http"
+    assert cairn_entry["url"] == url
     # Other server untouched
     other_entry = result["projects"]["/Users/test/project2"]["mcpServers"]["other-server"]
     assert other_entry["type"] == "stdio"

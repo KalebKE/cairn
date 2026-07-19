@@ -1,8 +1,8 @@
-"""OMEGA MCP Server integration tests — full handler coverage."""
+"""Cairn MCP Server integration tests — full handler coverage."""
 import importlib.util
 import pytest
-from omega.server.tool_schemas import TOOL_SCHEMAS
-from omega.server.handlers import HANDLERS
+from cairn.server.tool_schemas import TOOL_SCHEMAS
+from cairn.server.handlers import HANDLERS
 
 
 # ============================================================================
@@ -20,7 +20,7 @@ def test_tool_schemas_valid():
         assert "name" in schema
         assert "description" in schema
         assert "inputSchema" in schema
-        assert schema["name"].startswith("omega_") or schema["name"] == "context_packet"
+        assert schema["name"].startswith("cairn_") or schema["name"] == "context_packet"
 
 def test_handler_count():
     """Should have a handler for every tool schema (plus backward-compat aliases)."""
@@ -38,9 +38,9 @@ def test_handler_count():
 # ============================================================================
 
 @pytest.fixture(autouse=True)
-def _reset_bridge(tmp_omega_dir):
+def _reset_bridge(tmp_cairn_dir):
     """Reset the bridge singleton so each test gets a fresh store."""
-    from omega.bridge import reset_memory
+    from cairn.bridge import reset_memory
     reset_memory()
     yield
     reset_memory()
@@ -52,7 +52,7 @@ def _reset_bridge(tmp_omega_dir):
 
 async def _store_test_memory(content="Test memory for handler tests", event_type="lesson_learned"):
     """Store a memory via the handler, return the node_id from the response."""
-    result = await HANDLERS["omega_store"]({"content": content, "event_type": event_type})
+    result = await HANDLERS["cairn_store"]({"content": content, "event_type": event_type})
     assert not result.get("isError"), result
     # Extract node_id from compact response: "Stored mem-xxxxx (type, ttl)"
     import re
@@ -62,32 +62,32 @@ async def _store_test_memory(content="Test memory for handler tests", event_type
 
 
 # ============================================================================
-# Handler: omega_health (merged from omega_status)
+# Handler: cairn_health (merged from cairn_status)
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_omega_health_handler():
+async def test_cairn_health_handler():
     """Test the health handler returns valid response."""
-    result = await HANDLERS["omega_health"]({})
+    result = await HANDLERS["cairn_health"]({})
     assert "content" in result
     assert not result.get("isError")
 
 
 # ============================================================================
-# Handler: omega_store + omega_query (existing)
+# Handler: cairn_store + cairn_query (existing)
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_omega_store_and_query():
+async def test_cairn_store_and_query():
     """Test storing and querying a memory."""
-    result = await HANDLERS["omega_store"]({
+    result = await HANDLERS["cairn_store"]({
         "content": "Test memory for integration test",
         "event_type": "lesson_learned",
     })
     assert "content" in result
     assert not result.get("isError")
 
-    result = await HANDLERS["omega_query"]({
+    result = await HANDLERS["cairn_query"]({
         "query": "integration test",
         "limit": 5,
     })
@@ -96,52 +96,52 @@ async def test_omega_store_and_query():
 
 
 # ============================================================================
-# Handler: omega_remember
+# Handler: cairn_remember
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_omega_remember():
+async def test_cairn_remember():
     """Remembering stores a user_preference memory."""
-    result = await HANDLERS["omega_remember"]({"text": "I prefer dark mode"})
+    result = await HANDLERS["cairn_remember"]({"text": "I prefer dark mode"})
     assert not result.get("isError")
     text = result["content"][0]["text"]
     assert "Stored" in text or "Deduped" in text or "Evolved" in text
 
 @pytest.mark.asyncio
-async def test_omega_remember_empty():
+async def test_cairn_remember_empty():
     """Empty text should return an error."""
-    result = await HANDLERS["omega_remember"]({"text": ""})
+    result = await HANDLERS["cairn_remember"]({"text": ""})
     assert result.get("isError")
 
 
 # ============================================================================
-# Handler: omega_welcome
+# Handler: cairn_welcome
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_omega_welcome():
+async def test_cairn_welcome():
     """Welcome should return a markdown briefing."""
-    result = await HANDLERS["omega_welcome"]({})
+    result = await HANDLERS["cairn_welcome"]({})
     assert not result.get("isError")
     text = result["content"][0]["text"]
     assert "Welcome Briefing" in text
     assert "memories)" in text
 
 @pytest.mark.asyncio
-async def test_omega_welcome_with_project():
+async def test_cairn_welcome_with_project():
     """Welcome accepts an optional project parameter."""
-    result = await HANDLERS["omega_welcome"]({"project": "/tmp/testproject"})
+    result = await HANDLERS["cairn_welcome"]({"project": "/tmp/testproject"})
     assert not result.get("isError")
 
 
 # ============================================================================
-# Handler: omega_profile
+# Handler: cairn_profile
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_omega_profile():
+async def test_cairn_profile():
     """Profile handler returns without error."""
-    result = await HANDLERS["omega_profile"]({})
+    result = await HANDLERS["cairn_profile"]({})
     assert not result.get("isError")
     text = result["content"][0]["text"]
     # May be empty ("No profile") or contain data — either is valid
@@ -149,13 +149,13 @@ async def test_omega_profile():
 
 
 # ============================================================================
-# Handler: omega_save_profile
+# Handler: cairn_save_profile
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_omega_save_profile():
+async def test_cairn_save_profile():
     """Saving profile should succeed and persist."""
-    result = await HANDLERS["omega_save_profile"]({
+    result = await HANDLERS["cairn_save_profile"]({
         "profile": {"name": "Test User", "timezone": "UTC"},
     })
     assert not result.get("isError")
@@ -163,57 +163,57 @@ async def test_omega_save_profile():
     assert "2 field" in text
 
     # Verify it persisted
-    result = await HANDLERS["omega_profile"]({})
+    result = await HANDLERS["cairn_profile"]({})
     assert not result.get("isError")
     text = result["content"][0]["text"]
     assert "Test User" in text
 
 @pytest.mark.asyncio
-async def test_omega_save_profile_empty():
+async def test_cairn_save_profile_empty():
     """Empty profile dict = read mode (no update), should succeed."""
-    result = await HANDLERS["omega_save_profile"]({"profile": {}})
+    result = await HANDLERS["cairn_save_profile"]({"profile": {}})
     assert not result.get("isError")  # Reads profile instead of erroring
 
 
 # ============================================================================
-# Handler: omega_delete_memory
+# Handler: cairn_delete_memory
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_omega_delete_memory():
+async def test_cairn_delete_memory():
     """Store then delete a memory."""
     node_id = await _store_test_memory("Memory to delete")
     assert node_id
 
-    result = await HANDLERS["omega_delete_memory"]({"memory_id": node_id})
+    result = await HANDLERS["cairn_delete_memory"]({"memory_id": node_id})
     assert not result.get("isError")
     text = result["content"][0]["text"]
     assert "Deleted" in text
 
 @pytest.mark.asyncio
-async def test_omega_delete_memory_not_found():
+async def test_cairn_delete_memory_not_found():
     """Deleting a nonexistent memory should return an error."""
-    result = await HANDLERS["omega_delete_memory"]({"memory_id": "mem-nonexistent"})
+    result = await HANDLERS["cairn_delete_memory"]({"memory_id": "mem-nonexistent"})
     assert result.get("isError")
 
 @pytest.mark.asyncio
-async def test_omega_delete_memory_empty_id():
+async def test_cairn_delete_memory_empty_id():
     """Empty memory_id should return an error."""
-    result = await HANDLERS["omega_delete_memory"]({"memory_id": ""})
+    result = await HANDLERS["cairn_delete_memory"]({"memory_id": ""})
     assert result.get("isError")
 
 
 # ============================================================================
-# Handler: omega_edit_memory
+# Handler: cairn_edit_memory
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_omega_edit_memory():
+async def test_cairn_edit_memory():
     """Store then edit a memory."""
     node_id = await _store_test_memory("Original content")
     assert node_id
 
-    result = await HANDLERS["omega_edit_memory"]({
+    result = await HANDLERS["cairn_edit_memory"]({
         "memory_id": node_id,
         "new_content": "Updated content",
     })
@@ -222,84 +222,84 @@ async def test_omega_edit_memory():
     assert "Updated" in text
 
 @pytest.mark.asyncio
-async def test_omega_edit_memory_not_found():
+async def test_cairn_edit_memory_not_found():
     """Editing a nonexistent memory should return an error."""
-    result = await HANDLERS["omega_edit_memory"]({
+    result = await HANDLERS["cairn_edit_memory"]({
         "memory_id": "mem-nonexistent",
         "new_content": "new stuff",
     })
     assert result.get("isError")
 
 @pytest.mark.asyncio
-async def test_omega_edit_memory_empty_fields():
+async def test_cairn_edit_memory_empty_fields():
     """Missing required fields should return errors."""
-    result = await HANDLERS["omega_edit_memory"]({"memory_id": "", "new_content": "x"})
+    result = await HANDLERS["cairn_edit_memory"]({"memory_id": "", "new_content": "x"})
     assert result.get("isError")
 
-    result = await HANDLERS["omega_edit_memory"]({"memory_id": "x", "new_content": ""})
+    result = await HANDLERS["cairn_edit_memory"]({"memory_id": "x", "new_content": ""})
     assert result.get("isError")
 
 
 # ============================================================================
-# Handler: omega_list_preferences
+# Handler: cairn_list_preferences
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_omega_list_preferences_empty():
+async def test_cairn_list_preferences_empty():
     """No preferences stored yet returns a message."""
-    result = await HANDLERS["omega_list_preferences"]({})
+    result = await HANDLERS["cairn_list_preferences"]({})
     assert not result.get("isError")
     text = result["content"][0]["text"]
     assert "No preferences" in text or "Preferences" in text
 
 @pytest.mark.asyncio
-async def test_omega_list_preferences_after_remember():
+async def test_cairn_list_preferences_after_remember():
     """After remembering a preference, list should show it."""
-    await HANDLERS["omega_remember"]({"text": "I use tabs not spaces"})
-    result = await HANDLERS["omega_list_preferences"]({})
+    await HANDLERS["cairn_remember"]({"text": "I use tabs not spaces"})
+    result = await HANDLERS["cairn_list_preferences"]({})
     assert not result.get("isError")
     text = result["content"][0]["text"]
     assert "tabs" in text or "Preferences" in text
 
 
 # ============================================================================
-# Handler: omega_health
+# Handler: cairn_health
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_omega_health():
+async def test_cairn_health():
     """Health check should return formatted markdown."""
-    result = await HANDLERS["omega_health"]({})
+    result = await HANDLERS["cairn_health"]({})
     assert not result.get("isError")
     text = result["content"][0]["text"]
     assert "Status:" in text
     assert "Nodes:" in text
 
 @pytest.mark.asyncio
-async def test_omega_health_custom_thresholds():
+async def test_cairn_health_custom_thresholds():
     """Health check accepts custom threshold parameters."""
-    result = await HANDLERS["omega_health"]({
+    result = await HANDLERS["cairn_health"]({
         "warn_mb": 50, "critical_mb": 200, "max_nodes": 5000,
     })
     assert not result.get("isError")
 
 
 # ============================================================================
-# omega_lessons removed — auto-surfaced via hooks (0 calls ever)
+# cairn_lessons removed — auto-surfaced via hooks (0 calls ever)
 # ============================================================================
 
 
 # ============================================================================
-# Handler: omega_feedback
+# Handler: cairn_feedback
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_omega_feedback():
+async def test_cairn_feedback():
     """Record feedback on a stored memory."""
     node_id = await _store_test_memory("Feedback target memory")
     assert node_id
 
-    result = await HANDLERS["omega_feedback"]({
+    result = await HANDLERS["cairn_feedback"]({
         "memory_id": node_id,
         "rating": "helpful",
         "reason": "Very useful",
@@ -310,9 +310,9 @@ async def test_omega_feedback():
     assert "helpful" in text
 
 @pytest.mark.asyncio
-async def test_omega_feedback_invalid_rating():
+async def test_cairn_feedback_invalid_rating():
     """Invalid rating should return an error."""
-    result = await HANDLERS["omega_feedback"]({
+    result = await HANDLERS["cairn_feedback"]({
         "memory_id": "mem-fake",
         "rating": "amazing",
     })
@@ -320,63 +320,63 @@ async def test_omega_feedback_invalid_rating():
     assert "must be one of" in result["content"][0]["text"]
 
 @pytest.mark.asyncio
-async def test_omega_feedback_missing_fields():
+async def test_cairn_feedback_missing_fields():
     """Missing required fields should return errors."""
-    result = await HANDLERS["omega_feedback"]({"memory_id": "", "rating": "helpful"})
+    result = await HANDLERS["cairn_feedback"]({"memory_id": "", "rating": "helpful"})
     assert result.get("isError")
 
-    result = await HANDLERS["omega_feedback"]({"memory_id": "x", "rating": ""})
+    result = await HANDLERS["cairn_feedback"]({"memory_id": "x", "rating": ""})
     assert result.get("isError")
 
 
 # ============================================================================
-# Handler: omega_clear_session
+# Handler: cairn_clear_session
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_omega_clear_session():
+async def test_cairn_clear_session():
     """Clear session should remove all memories for that session."""
-    await HANDLERS["omega_store"]({
+    await HANDLERS["cairn_store"]({
         "content": "Session-scoped memory",
         "event_type": "memory",
         "session_id": "test-sess-123",
     })
-    result = await HANDLERS["omega_clear_session"]({"session_id": "test-sess-123"})
+    result = await HANDLERS["cairn_clear_session"]({"session_id": "test-sess-123"})
     assert not result.get("isError")
     text = result["content"][0]["text"]
     assert "Cleared" in text
 
 @pytest.mark.asyncio
-async def test_omega_clear_session_empty():
+async def test_cairn_clear_session_empty():
     """Empty session_id should return an error."""
-    result = await HANDLERS["omega_clear_session"]({"session_id": ""})
+    result = await HANDLERS["cairn_clear_session"]({"session_id": ""})
     assert result.get("isError")
 
 
 # ============================================================================
-# Handler: omega_query input validation
+# Handler: cairn_query input validation
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_omega_query_empty():
+async def test_cairn_query_empty():
     """Empty query should return an error."""
-    result = await HANDLERS["omega_query"]({"query": ""})
+    result = await HANDLERS["cairn_query"]({"query": ""})
     assert result.get("isError")
 
 
 # ============================================================================
-# Handler: omega_store input validation
+# Handler: cairn_store input validation
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_omega_store_empty():
+async def test_cairn_store_empty():
     """Empty content should return an error."""
-    result = await HANDLERS["omega_store"]({"content": ""})
+    result = await HANDLERS["cairn_store"]({"content": ""})
     assert result.get("isError")
 
 
 # ============================================================================
-# Handler: omega_similar
+# Handler: cairn_similar
 # ============================================================================
 
 @pytest.mark.asyncio
@@ -384,59 +384,59 @@ async def test_omega_store_empty():
     not importlib.util.find_spec("sqlite_vec"),
     reason="sqlite-vec not installed"
 )
-async def test_omega_similar():
+async def test_cairn_similar():
     """Find memories similar to a stored memory."""
     node_id = await _store_test_memory("Memory about Python testing")
     assert node_id
-    result = await HANDLERS["omega_similar"]({"memory_id": node_id, "limit": 3})
+    result = await HANDLERS["cairn_similar"]({"memory_id": node_id, "limit": 3})
     assert not result.get("isError")
     assert "Similar" in result["content"][0]["text"]
 
 @pytest.mark.asyncio
-async def test_omega_similar_not_found():
+async def test_cairn_similar_not_found():
     """Nonexistent memory_id returns a not-found message (not an error)."""
-    result = await HANDLERS["omega_similar"]({"memory_id": "mem-nonexistent"})
+    result = await HANDLERS["cairn_similar"]({"memory_id": "mem-nonexistent"})
     assert not result.get("isError")
     assert "not found" in result["content"][0]["text"]
 
 
 # ============================================================================
-# Handler: omega_timeline
+# Handler: cairn_timeline
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_omega_timeline():
+async def test_cairn_timeline():
     """Timeline should show recently stored memories."""
     await _store_test_memory("Timeline test memory")
-    result = await HANDLERS["omega_timeline"]({"days": 7})
+    result = await HANDLERS["cairn_timeline"]({"days": 7})
     assert not result.get("isError")
     assert "Timeline" in result["content"][0]["text"]
 
 @pytest.mark.asyncio
-async def test_omega_timeline_empty():
+async def test_cairn_timeline_empty():
     """Timeline with 0 days should return an empty result."""
-    result = await HANDLERS["omega_timeline"]({"days": 0})
+    result = await HANDLERS["cairn_timeline"]({"days": 0})
     assert not result.get("isError")
 
 
 # ============================================================================
-# Handler: omega_consolidate
+# Handler: cairn_consolidate
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_omega_consolidate_empty():
+async def test_cairn_consolidate_empty():
     """Consolidation on empty store returns clean report."""
-    result = await HANDLERS["omega_consolidate"]({"wait": True})
+    result = await HANDLERS["cairn_consolidate"]({"wait": True})
     assert not result.get("isError")
     text = result["content"][0]["text"]
     assert "Consolidation" in text
     assert "Nothing to consolidate" in text or "Removed" in text
 
 @pytest.mark.asyncio
-async def test_omega_consolidate_with_data():
+async def test_cairn_consolidate_with_data():
     """Consolidation with data returns a breakdown."""
     await _store_test_memory("Consolidation test memory")
-    result = await HANDLERS["omega_consolidate"]({"prune_days": 30, "max_summaries": 50, "wait": True})
+    result = await HANDLERS["cairn_consolidate"]({"prune_days": 30, "max_summaries": 50, "wait": True})
     assert not result.get("isError")
     text = result["content"][0]["text"]
     assert "Consolidation" in text
@@ -445,18 +445,18 @@ async def test_omega_consolidate_with_data():
 
 
 # ============================================================================
-# Handler: omega_backup — expanduser
+# Handler: cairn_backup — expanduser
 # ============================================================================
 
-def test_omega_backup_tilde_expansion():
+def test_cairn_backup_tilde_expansion():
     """Backup path resolution should expand ~ to home directory."""
     from pathlib import Path
 
     # Simulate what the handler does: expanduser + resolve
-    tilde_path = "~/.omega/test_backup.json"
+    tilde_path = "~/.cairn/test_backup.json"
     resolved = Path(tilde_path).expanduser().resolve()
     home = Path.home().resolve()
-    safe_dir = (home / ".omega").resolve()
+    safe_dir = (home / ".cairn").resolve()
 
     # ~ should expand to real home, not stay literal
     assert str(resolved).startswith(str(safe_dir))
@@ -469,23 +469,23 @@ def test_omega_backup_tilde_expansion():
 
 @pytest.mark.asyncio
 async def test_similar_clamps_limit():
-    """omega_similar should clamp limit to safe bounds."""
+    """cairn_similar should clamp limit to safe bounds."""
     node_id = await _store_test_memory("Clamp test memory")
     assert node_id
     # Negative limit should be clamped to min (1)
-    result = await HANDLERS["omega_similar"]({"memory_id": node_id, "limit": -5})
+    result = await HANDLERS["cairn_similar"]({"memory_id": node_id, "limit": -5})
     assert not result.get("isError")
 
 @pytest.mark.asyncio
 async def test_timeline_clamps_days():
-    """omega_timeline should clamp days to safe bounds."""
-    result = await HANDLERS["omega_timeline"]({"days": 99999})
+    """cairn_timeline should clamp days to safe bounds."""
+    result = await HANDLERS["cairn_timeline"]({"days": 99999})
     assert not result.get("isError")
 
 @pytest.mark.asyncio
 async def test_compact_clamps_min_cluster_size():
-    """omega_compact should clamp min_cluster_size to safe bounds."""
-    result = await HANDLERS["omega_compact"]({"min_cluster_size": -1, "dry_run": True})
+    """cairn_compact should clamp min_cluster_size to safe bounds."""
+    result = await HANDLERS["cairn_compact"]({"min_cluster_size": -1, "dry_run": True})
     assert not result.get("isError")
 
 
@@ -495,7 +495,7 @@ async def test_compact_clamps_min_cluster_size():
 
 def test_tool_schemas_docstring_count():
     """tool_schemas.py docstring should match actual schema count."""
-    import omega.server.tool_schemas as ts
+    import cairn.server.tool_schemas as ts
     import re as _re
     doc = ts.__doc__ or ""
     match = _re.search(r"(\d+)\s+tools", doc)
@@ -503,4 +503,4 @@ def test_tool_schemas_docstring_count():
         assert int(match.group(1)) == len(TOOL_SCHEMAS), (
             f"Docstring says {match.group(1)} tools, actually has {len(TOOL_SCHEMAS)}"
         )
-    assert len(TOOL_SCHEMAS) >= 16  # 15 omega_* composites plus context_packet
+    assert len(TOOL_SCHEMAS) >= 16  # 15 cairn_* composites plus context_packet

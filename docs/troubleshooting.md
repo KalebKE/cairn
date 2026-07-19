@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Common issues and solutions when using OMEGA.
+Common issues and solutions when using Cairn.
 
 ---
 
@@ -8,7 +8,7 @@ Common issues and solutions when using OMEGA.
 
 **Symptom**: First query hangs or errors with "Failed to download model" or connection timeout.
 
-**Cause**: OMEGA downloads the bge-small-en-v1.5 ONNX model (~90 MB) on first use to `~/.cache/omega/models/`.
+**Cause**: Cairn downloads the bge-small-en-v1.5 ONNX model (~90 MB) on first use to `~/.cache/cairn/models/`.
 
 **Solutions**:
 
@@ -17,11 +17,11 @@ Common issues and solutions when using OMEGA.
    export HTTPS_PROXY=http://proxy.example.com:8080
    ```
 
-2. **Disk space**: Ensure at least 200 MB free in `~/.cache/omega/`.
+2. **Disk space**: Ensure at least 200 MB free in `~/.cache/cairn/`.
 
-3. **Manual download**: Download the model files manually from [Hugging Face](https://huggingface.co/BAAI/bge-small-en-v1.5) and place them in `~/.cache/omega/models/bge-small-en-v1.5-onnx/`.
+3. **Manual download**: Download the model files manually from [Hugging Face](https://huggingface.co/BAAI/bge-small-en-v1.5) and place them in `~/.cache/cairn/models/bge-small-en-v1.5-onnx/`.
 
-4. **Verify with doctor**: Run `omega doctor` to check model status.
+4. **Verify with doctor**: Run `cairn doctor` to check model status.
 
 ---
 
@@ -37,10 +37,10 @@ Common issues and solutions when using OMEGA.
 pip install onnxruntime
 ```
 
-Or install OMEGA with all dependencies:
+Or install Cairn with all dependencies:
 
 ```bash
-pip install "omega-memory[all]"
+pip install "cairn[all]"
 ```
 
 Note: CoreML acceleration is intentionally disabled due to a memory leak in Apple's ANE runtime. CPU-only inference is used.
@@ -53,7 +53,7 @@ Note: CoreML acceleration is intentionally disabled due to a memory leak in Appl
 
 **Cause**: The `sqlite-vec` extension (used for vector similarity search) isn't installed or can't be loaded.
 
-**Impact**: OMEGA falls back to hash-based approximate nearest neighbors. Search still works but with lower accuracy for semantic queries.
+**Impact**: Cairn falls back to hash-based approximate nearest neighbors. Search still works but with lower accuracy for semantic queries.
 
 **Solution**:
 
@@ -61,13 +61,13 @@ Note: CoreML acceleration is intentionally disabled due to a memory leak in Appl
 pip install sqlite-vec
 ```
 
-If `pip install` fails (e.g., no wheel for your platform), OMEGA will continue to function with the fallback. Run `omega doctor` to verify the status.
+If `pip install` fails (e.g., no wheel for your platform), Cairn will continue to function with the fallback. Run `cairn doctor` to verify the status.
 
 ---
 
 ## High RSS Memory (300-400 MB)
 
-**Symptom**: `omega_health` reports "critical" RSS memory at 300-400 MB, or system monitor shows high memory usage.
+**Symptom**: `cairn_health` reports "critical" RSS memory at 300-400 MB, or system monitor shows high memory usage.
 
 **Cause**: This is **expected behavior**, not a memory leak. The ONNX embedding model loads ~300 MB into RAM on first semantic query.
 
@@ -79,7 +79,7 @@ If `pip install` fails (e.g., no wheel for your platform), OMEGA will continue t
 
 The model auto-unloads after 10 minutes without queries. The health check critical threshold is set to 800 MB to avoid false alarms during normal peak usage.
 
-**When to worry**: If RSS stays above 500 MB with no active queries for more than 15 minutes, or if it grows unboundedly over time, that may indicate an actual issue. File a bug report with the output of `omega_health`.
+**When to worry**: If RSS stays above 500 MB with no active queries for more than 15 minutes, or if it grows unboundedly over time, that may indicate an actual issue. File a bug report with the output of `cairn_health`.
 
 ---
 
@@ -87,19 +87,19 @@ The model auto-unloads after 10 minutes without queries. The health check critic
 
 **Symptom**: `sqlite3.OperationalError: database is locked`
 
-**Cause**: Multiple processes are trying to write to `~/.omega/omega.db` simultaneously. SQLite handles concurrent reads but serializes writes.
+**Cause**: Multiple processes are trying to write to `~/.cairn/cairn.db` simultaneously. SQLite handles concurrent reads but serializes writes.
 
 **Solutions**:
 
 1. **Check for stuck processes**:
    ```bash
-   ps aux | grep omega
+   ps aux | grep cairn
    ```
-   Kill any orphaned OMEGA server processes.
+   Kill any orphaned Cairn server processes.
 
-2. **WAL mode**: OMEGA uses WAL mode by default, which allows concurrent reads during writes. If your database isn't in WAL mode:
+2. **WAL mode**: Cairn uses WAL mode by default, which allows concurrent reads during writes. If your database isn't in WAL mode:
    ```bash
-   omega doctor
+   cairn doctor
    ```
    This will report the journal mode and fix it if needed.
 
@@ -107,7 +107,7 @@ The model auto-unloads after 10 minutes without queries. The health check critic
 
 ## Hook Server Not Running
 
-**Symptom**: Claude Code hooks don't trigger OMEGA (no memory capture, no coordination).
+**Symptom**: Claude Code hooks don't trigger Cairn (no memory capture, no coordination).
 
 **Cause**: The hook daemon (`hook_server.py`) isn't running or can't be reached via its Unix Domain Socket.
 
@@ -115,19 +115,19 @@ The model auto-unloads after 10 minutes without queries. The health check critic
 
 1. **Check status**:
    ```bash
-   omega doctor
+   cairn doctor
    ```
    Look for the "Hook server" line.
 
 2. **Restart manually**:
    ```bash
-   omega hooks restart
+   cairn hooks restart
    ```
 
-3. **Check socket**: The UDS lives at `~/.omega/hook.sock`. If it's stale (process died without cleanup), remove it:
+3. **Check socket**: The UDS lives at `~/.cairn/hook.sock`. If it's stale (process died without cleanup), remove it:
    ```bash
-   rm ~/.omega/hook.sock
-   omega hooks start
+   rm ~/.cairn/hook.sock
+   cairn hooks start
    ```
 
 Note: Hooks fail open — if the daemon is unreachable, Claude Code continues working normally. You just lose auto-capture and coordination features until the daemon is restarted.
@@ -139,7 +139,7 @@ Note: Hooks fail open — if the daemon is unreachable, Claude Code continues wo
 For initial setup problems, run the diagnostic tool:
 
 ```bash
-omega doctor
+cairn doctor
 ```
 
 This checks:

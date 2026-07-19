@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OMEGA Coordination Stop hook — Deregister session and release all claims."""
+"""Cairn Coordination Stop hook — Deregister session and release all claims."""
 import os
 import sys
 import time
@@ -10,7 +10,7 @@ from pathlib import Path
 
 def _log_hook_error(hook_name, error):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         tb = traceback.format_exc()
@@ -54,7 +54,7 @@ def _broadcast_session_end(session_id, project, mgr):
 def _build_end_summary(session_id, project):
     """Build a compact summary of session activity for the broadcast."""
     try:
-        from omega.bridge import query_structured
+        from cairn.bridge import query_structured
     except ImportError:
         return None
 
@@ -93,7 +93,7 @@ def _build_end_summary(session_id, project):
 def _auto_handoff(session_id, project, mgr):
     """Auto-generate a structured handoff from session state. Best-effort."""
     try:
-        from omega.bridge import query_structured
+        from cairn.bridge import query_structured
 
         # Gather decisions from this session
         decisions_raw = query_structured(
@@ -118,7 +118,7 @@ def _auto_handoff(session_id, project, mgr):
             if len(decisions) >= 5:
                 break
 
-        # Gather completed OMEGA tasks
+        # Gather completed Cairn tasks
         completed = []
         try:
             tasks = mgr.list_tasks(project=project, status="completed")
@@ -149,7 +149,7 @@ def _nudge_handoff(session_id, project, mgr):
             task_list = ", ".join(f"#{t['id']} {t['title']}" for t in my_tasks[:3])
             print(
                 f"[HANDOFF] Active work returned to queue: {task_list}\n"
-                "  Next time, use omega_handoff(action='create', ...) before ending "
+                "  Next time, use cairn_handoff(action='create', ...) before ending "
                 "to give your successor structured context."
             )
     except Exception as e:
@@ -211,7 +211,7 @@ def main():
         return
 
     try:
-        from omega.coordination import get_manager
+        from cairn.coordination import get_manager
         mgr = get_manager()
         project = os.environ.get("PROJECT_DIR", "")
         if project:
@@ -244,9 +244,9 @@ def main():
 
                 drift = _detect_drift(original_task, claimed_files, my_commits)
                 if drift["drifted"]:
-                    print(f'[OMEGA] Goal drift detected (confidence: {drift["confidence"]}): {drift["reason"]}', file=sys.stderr)
+                    print(f'[Cairn] Goal drift detected (confidence: {drift["confidence"]}): {drift["reason"]}', file=sys.stderr)
                     try:
-                        from omega.bridge import auto_capture
+                        from cairn.bridge import auto_capture
                         auto_capture(
                             content=f"Goal drift: Agent registered task '{original_task}' but work diverged. {drift['reason']}",
                             event_type="lesson_learned", session_id=session_id, project=project,
@@ -272,7 +272,7 @@ def main():
                     links = _build_entity_links(claim_list, proj_name)
                     for link in links:
                         try:
-                            from omega.entity.engine import EntityEngine
+                            from cairn.entity.engine import EntityEngine
                             ee = EntityEngine()
                             ee.add_relationship(link["from"], link["to"], link["relationship"])
                         except Exception:
@@ -285,12 +285,12 @@ def main():
         pass
     except Exception as e:
         _log_hook_error("coord_session_stop", e)
-        print(f"OMEGA coord_session_stop failed: {e}", file=sys.stderr)
+        print(f"Cairn coord_session_stop failed: {e}", file=sys.stderr)
 
 
 def _log_timing(hook_name, elapsed_ms):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         data = f"[{timestamp}] {hook_name}: OK ({elapsed_ms:.0f}ms)\n"

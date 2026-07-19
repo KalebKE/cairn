@@ -1,11 +1,11 @@
 """Tests for aggregate context packet telemetry."""
 
 
-def test_track_context_packet_aggregates_without_content(tmp_omega_dir, monkeypatch):
-    from omega import telemetry
+def test_track_context_packet_aggregates_without_content(tmp_cairn_dir, monkeypatch):
+    from cairn import telemetry
 
-    monkeypatch.setattr(telemetry, "OMEGA_DIR", tmp_omega_dir)
-    monkeypatch.setattr(telemetry, "TELEMETRY_FILE", tmp_omega_dir / "telemetry.json")
+    monkeypatch.setattr(telemetry, "CAIRN_DIR", tmp_cairn_dir)
+    monkeypatch.setattr(telemetry, "TELEMETRY_FILE", tmp_cairn_dir / "telemetry.json")
 
     telemetry.track_context_packet({
         "mode": "before_edit",
@@ -35,6 +35,6 @@ def test_track_context_packet_aggregates_without_content(tmp_omega_dir, monkeypa
     assert packets["by_mode"] == {"before_edit": 1, "planning": 1}
     assert packets["by_surface"] == {"hook": 1, "mcp": 1}
 
-    raw = (tmp_omega_dir / "telemetry.json").read_text()
+    raw = (tmp_cairn_dir / "telemetry.json").read_text()
     assert "local-first" not in raw
     assert "mem-" not in raw

@@ -8,14 +8,14 @@ import os
 import pytest
 from unittest.mock import patch
 
-from omega.sqlite_store import SQLiteStore
-from omega.sqlite_store._query import ADAPTIVE_RETRY_THRESHOLD
+from cairn.sqlite_store import SQLiteStore
+from cairn.sqlite_store._query import ADAPTIVE_RETRY_THRESHOLD
 
 
 @pytest.fixture
-def store(tmp_omega_dir):
+def store(tmp_cairn_dir):
     """Create a fresh SQLiteStore for testing."""
-    db_path = tmp_omega_dir / "test.db"
+    db_path = tmp_cairn_dir / "test.db"
     return SQLiteStore(db_path=db_path)
 
 
@@ -109,12 +109,12 @@ class TestAdaptiveRetryEnvVar:
     """Verify env var override for adaptive retry threshold."""
 
     def test_adaptive_retry_disabled_by_env(self, store):
-        """Setting OMEGA_ADAPTIVE_RETRY_THRESHOLD=0.0 should disable retry."""
+        """Setting CAIRN_ADAPTIVE_RETRY_THRESHOLD=0.0 should disable retry."""
         store.store("Some content", metadata={"event_type": "observation"})
         store.stats["adaptive_retries"] = 0
-        with patch.dict(os.environ, {"OMEGA_ADAPTIVE_RETRY_THRESHOLD": "0.0"}):
+        with patch.dict(os.environ, {"CAIRN_ADAPTIVE_RETRY_THRESHOLD": "0.0"}):
             # Reload the constant
-            import omega.sqlite_store._query as qmod
+            import cairn.sqlite_store._query as qmod
             orig = qmod.ADAPTIVE_RETRY_THRESHOLD
             try:
                 qmod.ADAPTIVE_RETRY_THRESHOLD = 0.0
@@ -127,10 +127,10 @@ class TestAdaptiveRetryEnvVar:
 class TestConfidenceInBridge:
     """Verify confidence surfaces through bridge.query() and bridge.query_structured()."""
 
-    def test_confidence_surfaced_in_bridge_output(self, tmp_omega_dir):
+    def test_confidence_surfaced_in_bridge_output(self, tmp_cairn_dir):
         """Bridge query output should include confidence annotation for low-confidence results."""
-        from omega.sqlite_store import SQLiteStore
-        db_path = tmp_omega_dir / "bridge_test.db"
+        from cairn.sqlite_store import SQLiteStore
+        db_path = tmp_cairn_dir / "bridge_test.db"
         s = SQLiteStore(db_path=db_path)
         s.store("Random unrelated gardening tips for beginners",
                 metadata={"event_type": "observation"})
@@ -140,10 +140,10 @@ class TestConfidenceInBridge:
         if results:
             assert "_query_confidence" in (results[0].metadata or {})
 
-    def test_confidence_in_structured_query(self, tmp_omega_dir):
+    def test_confidence_in_structured_query(self, tmp_cairn_dir):
         """Structured query should include _query_confidence field."""
-        from omega.sqlite_store import SQLiteStore
-        db_path = tmp_omega_dir / "structured_test.db"
+        from cairn.sqlite_store import SQLiteStore
+        db_path = tmp_cairn_dir / "structured_test.db"
         s = SQLiteStore(db_path=db_path)
         s.store("Python type hints improve code maintainability",
                 metadata={"event_type": "decision", "tags": ["python"]})

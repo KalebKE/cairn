@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to OMEGA will be documented in this file.
+All notable changes to Cairn will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Core/Pro boundary hardening**: Core no longer trusts local
-  `omega_platform.license.is_pro()` checks to unlock memory caps, full
+  `cairn_platform.license.is_pro()` checks to unlock memory caps, full
   retrieval, Pro tool loading, or upgrade-message suppression. Core now uses
   plugin capabilities (`pro_tools`, `full_retrieval`, `unlimited_memory`) for
   extension-provided behavior.
@@ -20,16 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Core/Pro compatibility for Pro 1.5.x**: added compatibility imports for
-  `omega.bridge._core`, `omega.bridge._ingest`, and `omega.bridge._query` so
+  `cairn.bridge._core`, `cairn.bridge._ingest`, and `cairn.bridge._query` so
   Pro modules expecting the split bridge layout can run against public Core.
-- **MCP server PID registry**: restored `omega.server.pid_registry` for local
+- **MCP server PID registry**: restored `cairn.server.pid_registry` for local
   lock diagnostics, orphaned stdio server cleanup, and session registration
   startup paths.
 
 ## [1.4.14] - 2026-05-19
 
 ### Fixed
-- **`omega_maintain` "Server disconnected" / RPC timeout in Claude Desktop**:
+- **`cairn_maintain` "Server disconnected" / RPC timeout in Claude Desktop**:
   long-running maintenance actions (`consolidate`, `compact`, `backup`,
   `restore`, `discover_connections`, `synthesize_insights`,
   `backfill_embeddings`) ran synchronous SQLite + ONNX work directly on the
@@ -38,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and drop the connection. These actions now submit to the shared SQLite
   executor via an in-process JobRegistry and return a `job_id` in under
   500 ms; the event loop stays responsive. Poll with
-  `omega_maintain action=job_status job_id=<id>` or pass `wait=true` to keep
+  `cairn_maintain action=job_status job_id=<id>` or pass `wait=true` to keep
   the legacy blocking behavior.
 
 ## [1.3.1] - 2026-03-17
@@ -47,43 +47,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Condensed mode**: ~80% context token savings, enabled by default (opt out with `--no-condensed`)
 - **Behavioral learning**: Pattern analysis engine that learns tool preferences, git style, session patterns, co-edit graphs, and workflow sequences
 - **Advisory engine**: Context-aware suggestions for file edits, errors, deployments, and session starts
-- **CrewAI integration**: Use OMEGA as CrewAI's memory backend
-- **Obsidian export**: `omega export-obsidian` command for Obsidian vault export
-- **Stats card**: `omega stats --card` for shareable stats visualization
+- **CrewAI integration**: Use Cairn as CrewAI's memory backend
+- **Obsidian export**: `cairn export-obsidian` command for Obsidian vault export
+- **Stats card**: `cairn stats --card` for shareable stats visualization
 - **Framework support**: Added Codex CLI, Antigravity IDE, and venv Python resolution
 - **`llms-install.md`**: Agent-autonomous installation guide
 - **CLI reference**: Added `docs/cli-reference.md`
-- **Code review (`omega_review`)**: Multi-agent specialist review panel with 5 agents
+- **Code review (`cairn_review`)**: Multi-agent specialist review panel with 5 agents
   (correctness, security, performance, consistency, blast radius). Hybrid static+LLM
   analysis: 12 deterministic pattern checks (zero false positives) plus LLM for novel
-  issues. Memory-powered: uses OMEGA conventions, past incidents, and team preferences
+  issues. Memory-powered: uses Cairn conventions, past incidents, and team preferences
   for context. Confidence gating with strict/normal/verbose modes. Fast `summarize_only`
   mode for risk assessment without LLM. Pre-commit hook at `hooks/pre_review.py`.
   Standalone engine available separately (see revue).
 
 ### Fixed
-- **`_get_store()` crash** (#48): `handlers.py` imported non-existent `omega.store` module, breaking `omega_query(mode="browse")`, `omega_stats`, `omega_reflect`, and memory link/flag/supersede actions
-- **Recursive `omega_call`**: Prevented recursive calls to meta-tools
+- **`_get_store()` crash** (#48): `handlers.py` imported non-existent `cairn.store` module, breaking `cairn_query(mode="browse")`, `cairn_stats`, `cairn_reflect`, and memory link/flag/supersede actions
+- **Recursive `cairn_call`**: Prevented recursive calls to meta-tools
 - **5 test failures** (#44): Resolved failing tests
 - **Windows install docs**: Collapsed into collapsible `<details>` block
 
 ### Changed
-- `omega doctor --client` now supports `claude-desktop`, `cursor`, `windsurf`, `cline`, `codex`, `antigravity`, `venv` (was only `claude-code`)
-- `export`/`import` CLI subcommands removed (use `omega export-obsidian` for exports)
+- `cairn doctor --client` now supports `claude-desktop`, `cursor`, `windsurf`, `cline`, `codex`, `antigravity`, `venv` (was only `claude-code`)
+- `export`/`import` CLI subcommands removed (use `cairn export-obsidian` for exports)
 
 ## [1.2.0] - 2026-03-04
 
 ### Added
-- **Hooks in wheel**: Claude Code hooks now ship inside the pip package; `omega hooks setup`
+- **Hooks in wheel**: Claude Code hooks now ship inside the pip package; `cairn hooks setup`
   auto-configures `~/.claude/settings.json` with correct paths
 - **Multi-user auth**: Google Sign-In, role-based access control, self-service onboarding wizard,
   per-user data scoping across all admin API routes
 - **Auth guards**: 46 API routes hardened with session verification
 - **LLM provider abstraction**: Unified `llm.py` (Python) and `lib/llm.ts` (TypeScript) supporting
-  Anthropic, OpenAI, and OpenAI-compatible providers via `OMEGA_LLM_PROVIDER`
+  Anthropic, OpenAI, and OpenAI-compatible providers via `CAIRN_LLM_PROVIDER`
 - **LLM usage tracking**: Per-call cost tracking with session rollups and admin dashboard
-- **Multi-model consultation**: `omega_consult_gpt` and `omega_consult_claude` tools for
-  cross-model second opinions (replaces `omega_lessons`)
+- **Multi-model consultation**: `cairn_consult_gpt` and `cairn_consult_claude` tools for
+  cross-model second opinions (replaces `cairn_lessons`)
 - **Growth engine**: Thompson Sampling bandit for content optimization, attribution engine
   correlating X metrics with GitHub/PyPI, content genome pipeline
 - **Scheduled jobs infrastructure**: State machine with retry logic, approval gates,
@@ -103,7 +103,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Website**: Next.js 16.1.6, homepage restructure, /pro page redesign, 6 new blog posts,
   HeroGraph visualization
 - **Automation**: Target scanner, scan-and-reply cron, daily summary email,
-  @omega_memory multi-account infrastructure
+  @cairn_memory multi-account infrastructure
 
 ### Changed
 - sqlite_store.py split into mixin-based package (7 modules) for maintainability
@@ -122,7 +122,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - SayDo experimental module (archived)
-- `omega_lessons` tool (replaced by `omega_consult_gpt`/`omega_consult_claude`)
+- `cairn_lessons` tool (replaced by `cairn_consult_gpt`/`cairn_consult_claude`)
 
 ## [1.1.0] - 2026-02-25
 
@@ -132,9 +132,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bi-temporal data model with `valid_from`/`valid_until` for point-in-time queries
 - Memory strength scoring with decay, deduplication, and `strength_min` query filter
 - Memory type classification — auto-classifies on store, filterable via `memory_type`
-  parameter in omega_query
+  parameter in cairn_query
 - Contradiction detection surfaced in store output
-- Intelligence cards — compact [OMEGA] cards for memory, decision, and learning events
+- Intelligence cards — compact [Cairn] cards for memory, decision, and learning events
   at NORMAL+ transparency
 - Entity graph relationships wired into retrieval scoring
 - Campaign automation v3.0 (Layers 1-3) with automation modules and proposal feed
@@ -177,7 +177,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2026-02-13
 
 ### Added
-- Open-core plugin architecture (OmegaPlugin base class, discover_plugins())
+- Open-core plugin architecture (CairnPlugin base class, discover_plugins())
 - Graceful degradation for all optional modules (coordination, router, entity, knowledge, profile, cloud)
 - Apache-2.0 license
 - GitHub Actions CI/CD (test matrix: Python 3.11, 3.12, 3.13)
@@ -187,9 +187,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - License: MIT → Apache-2.0
-- Author: OMEGA Memory Maintainers
+- Author: Tracqi Technology
 - Hook server: conditional coordination handler registration
-- CLI: graceful "requires omega-pro" messages for commercial modules
+- CLI: graceful "requires cairn-pro" messages for commercial modules
 - MCP server: commercial tool schemas loaded only when modules available
 - Version bump: 0.6.1 → 1.0.0
 
@@ -197,7 +197,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - **Phoenix module deleted** — 1,531 lines source + 1,152 lines tests. Fully disconnected dead code: no hooks triggered it, no workflows called its 6 MCP tools, respawn requests wrote to JSON files nothing read. Session context handoff already handled by coordinator's snapshot/recover system.
-- 6 MCP tools removed: `omega_phoenix_check`, `omega_phoenix_request`, `omega_phoenix_complete`, `omega_phoenix_requests`, `omega_phoenix_handoff`, `omega_phoenix_metrics`
+- 6 MCP tools removed: `cairn_phoenix_check`, `cairn_phoenix_request`, `cairn_phoenix_complete`, `cairn_phoenix_requests`, `cairn_phoenix_handoff`, `cairn_phoenix_metrics`
 - `[phoenix]` optional dependency group from pyproject.toml
 
 ### Changed
@@ -221,7 +221,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Router rewired**: xAI/Grok-4 as primary for exploration intent (research/AI trends), Google/Gemini as fallbacks, Groq re-added for simple_edit (speed mode)
-- **Router secrets**: API keys loaded from `~/.omega/secrets.json` — 5/5 providers active (Anthropic, OpenAI, Google, xAI, Groq)
+- **Router secrets**: API keys loaded from `~/.cairn/secrets.json` — 5/5 providers active (Anthropic, OpenAI, Google, xAI, Groq)
 - CI matrix: dropped Python 3.10 (unsupported), added 3.13
 - Removed phantom `litellm` dependency from router extras (was never imported)
 - Fixed commitizen `changelog_start_rev` to existing tag `v0.3.0`
@@ -272,7 +272,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.4.1] - 2026-02-10
 
 ### Fixed
-- `omega doctor` now loads sqlite-vec extension before checking vec index
+- `cairn doctor` now loads sqlite-vec extension before checking vec index
 - Circuit breaker cooldown recovery: embeddings resume after transient failures
 - Orphaned vec index entries cleaned up on startup
 
@@ -286,10 +286,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 4 priority modes: cost, speed, quality, balanced
   - Context affinity tracking with switch penalties
   - Large context override (>100K tokens → Gemini)
-  - `omega_route_prompt`, `omega_classify_intent`, `omega_router_status`, `omega_set_priority_mode`, `omega_switch_model`, `omega_get_model_config`, `omega_get_current_model`, `omega_router_context`, `omega_warm_router`, `omega_router_benchmark`
-- `filter_tags` parameter for `omega_query` with AND-logic hard filtering
+  - `cairn_route_prompt`, `cairn_classify_intent`, `cairn_router_status`, `cairn_set_priority_mode`, `cairn_switch_model`, `cairn_get_model_config`, `cairn_get_current_model`, `cairn_router_context`, `cairn_warm_router`, `cairn_router_benchmark`
+- `filter_tags` parameter for `cairn_query` with AND-logic hard filtering
 - CLI `compact` and `stats` subcommands
-- `scripts/migrate_magma.py` for Gnosis MAGMA → OMEGA migration
+- `scripts/migrate_magma.py` for Gnosis MAGMA → Cairn migration
 - README rewrite covering all tools, architecture diagram, install flow
 
 ### Changed
@@ -319,7 +319,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Tool optimization**: 44 → 22 MCP tools (23% → 91% utilization)
   - Phase 1: Disconnected redundant coordination schemas (44 → 25)
-  - Phase 2: Merged `omega_status` into `omega_health`, `omega_export`/`omega_import` into `omega_backup`, `omega_cross_project_lessons` into `omega_lessons` (25 → 22)
+  - Phase 2: Merged `cairn_status` into `cairn_health`, `cairn_export`/`cairn_import` into `cairn_backup`, `cairn_cross_project_lessons` into `cairn_lessons` (25 → 22)
   - Phase 3: Activated 8 dormant tools via hook wiring (session_start: type_stats, list_preferences, auto-backup; session_stop: session_stats, timeline; surface: traverse, phrase_search)
 - MCP idle timeout: 600s → 3600s (1 hour)
 
@@ -329,7 +329,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Real multi-agent file enforcement**: PreToolUse `pre_file_guard` hook blocks Edit/Write/NotebookEdit via `sys.exit(2)` when the target file is claimed by another agent session
 - **Claim TTL auto-expiry**: `CLAIM_TTL_SECONDS = 600` — file claims expire after 10 minutes of inactivity, independently of the 30-minute stale session timeout
 - **Force-claim override**: `claim_file(force=True)` lets agents explicitly steal claims when coordination breaks down, with full audit trail via `log_audit(tool_name="file_claim_force")`
-- `force` boolean parameter added to `omega_file_claim` MCP tool schema
+- `force` boolean parameter added to `cairn_file_claim` MCP tool schema
 - `_clean_expired_claims()` method runs during periodic stale session cleanup
 - TTL-aware `check_file()` auto-deletes expired claims on read
 - Daemon parity: `handle_pre_file_guard` handler in `hook_server.py` dispatch table
@@ -341,7 +341,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Deadlock in `claim_file`**: `log_audit()` was called inside `with self._lock:` — since `threading.Lock` is non-reentrant, this caused silent hangs. Audit call moved outside the lock block
 
 ### Design Decisions
-- **Fail-open**: OMEGA unavailability never blocks edits — coordination is opt-in safety
+- **Fail-open**: Cairn unavailability never blocks edits — coordination is opt-in safety
 - **Standalone hook, not daemon-routed**: PreToolUse is on the critical path; standalone is safer if daemon crashes
 - **No enforcement in single-agent mode**: Empty `SESSION_ID` skips all file guard checks
 
@@ -350,16 +350,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - SECURITY.md with vulnerability reporting policy
 - CHANGELOG.md in Keep-A-Changelog format (backfilled v0.2.0–v0.2.7)
-- CLI memory commands: `omega query`, `omega store`, `omega remember`, `omega timeline`
-- LLM-agnostic setup: `omega setup --client claude-code` (decoupled from Claude Code)
-- `omega_task_cancel` MCP tool with handler and schema (was dead code — coordination method existed but had no MCP path)
+- CLI memory commands: `cairn query`, `cairn store`, `cairn remember`, `cairn timeline`
+- LLM-agnostic setup: `cairn setup --client claude-code` (decoupled from Claude Code)
+- `cairn_task_cancel` MCP tool with handler and schema (was dead code — coordination method existed but had no MCP path)
 
 ### Changed
 - Removed 6 zero-utilization MCP tools (`deduplicate`, `extract_preferences`, `constraints`, `batch_store`, `reload`, `dedup_stats`)
 - Removed 3 overhead hooks (`post_edit_test`, `pre_edit_surface`, `track_file_read`), reducing per-edit Python processes from 5 to 3
-- Export/import paths restricted to `~/.omega/` (was entire home directory)
+- Export/import paths restricted to `~/.cairn/` (was entire home directory)
 - Error messages in MCP handlers no longer leak internal details
-- `~/.omega/` directory created with mode `0o700` (owner-only access)
+- `~/.cairn/` directory created with mode `0o700` (owner-only access)
 - Encryption key file created atomically with `O_EXCL` to prevent TOCTOU race
 - Thread-safe SQLiteStore singleton via double-check locking
 - Hardcoded `/opt/homebrew/bin/python3` replaced with dynamic resolution in hooks
@@ -379,7 +379,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Numeric MCP handler parameters now clamped to safe bounds
-- `.gitignore` hardened with `.env`, `*.db`, `*.log`, `*.key`, `hook.sock`, `.omega/`
+- `.gitignore` hardened with `.env`, `*.db`, `*.log`, `*.key`, `hook.sock`, `.cairn/`
 - `cancel_task` now enforces owner check — previously any session could cancel another's in-progress work
 - `claim_file`/`claim_branch` catch `sqlite3.IntegrityError` for cross-process race safety
 - `check_file` reads now guarded by `_lock` for consistency with write locking discipline
@@ -415,8 +415,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - UDS hook server for fast hook dispatch (~5ms vs ~750ms cold start)
-- Graph traversal (`omega_traverse`) with BFS over edges table, max 5 hops
-- Memory compaction (`omega_compact`) with Jaccard clustering and consolidated summaries
+- Graph traversal (`cairn_traverse`) with BFS over edges table, max 5 hops
+- Memory compaction (`cairn_compact`) with Jaccard clustering and consolidated summaries
 - Contextual re-ranking with `context_file` and `context_tags` boost
 - Auto-claim file hook for implicit coordination
 - Orphan process cleanup and proactive stale session GC
@@ -433,7 +433,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - bge-small-en-v1.5 as primary embedding model (384-dim, better quality than all-MiniLM-L6-v2)
 - Periodic TTL garbage collection (at most once per hour via `time.monotonic()`)
 - Git-aware coordination: detect uncoordinated agents via git state
-- Observability: `omega doctor`, FTS5 repair, backup, timing, plan capture
+- Observability: `cairn doctor`, FTS5 repair, backup, timing, plan capture
 
 ### Changed
 - Python minimum version raised to 3.11+ (3.10 EOL)
@@ -458,9 +458,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.1] - 2026-02-09
 
 ### Added
-- `omega_similar`: find memories similar to a given one
-- `omega_timeline`: show memories grouped by day
-- `omega_consolidate`: memory hygiene at scale (dedup, prune, optimize)
+- `cairn_similar`: find memories similar to a given one
+- `cairn_timeline`: show memories grouped by day
+- `cairn_consolidate`: memory hygiene at scale (dedup, prune, optimize)
 - Auto-tags: extract languages, tools, file paths, project names at store time
 - Auto-relate: create `related` edges on store (similarity >= 0.45)
 
@@ -474,7 +474,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - FTS5 full-text search for phrase queries
 - Multi-agent coordination system (12 tools, 38 tests)
 - Encryption at rest with `cryptography` library
-- `omega_remember`, `omega_store`, `omega_query`, `omega_welcome`, `omega_profile`
+- `cairn_remember`, `cairn_store`, `cairn_query`, `cairn_welcome`, `cairn_profile`
 - Export/import for backup and restore
 - Batch store for multiple memories in one call
 - 37 handler tests covering all 21 handlers
@@ -483,20 +483,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Complete storage rewrite from JSONL to SQLite
 - Parameterized SQL throughout (no string interpolation)
 
-[1.0.0]: https://github.com/omega-memory/omega/compare/v0.6.1...v1.0.0
-[0.6.1]: https://github.com/omega-memory/omega/compare/v0.5.0...v0.6.1
-[0.5.0]: https://github.com/omega-memory/omega/compare/v0.4.3...v0.5.0
-[0.4.3]: https://github.com/omega-memory/omega/compare/v0.4.1...v0.4.3
-[0.4.2]: https://github.com/omega-memory/omega/compare/v0.4.1...v0.4.3
-[0.4.1]: https://github.com/omega-memory/omega/compare/v0.3.0...v0.4.1
-[0.4.0]: https://github.com/omega-memory/omega/compare/v0.3.0...v0.4.1
-[0.3.2]: https://github.com/omega-memory/omega/compare/v0.3.0...v0.4.1
-[0.3.1]: https://github.com/omega-memory/omega/compare/v0.3.0...v0.4.1
-[0.3.0]: https://github.com/omega-memory/omega/compare/v0.2.8...v0.3.0
-[0.2.8]: https://github.com/omega-memory/omega/compare/v0.2.7...v0.2.8
-[0.2.7]: https://github.com/omega-memory/omega/compare/v0.2.2...v0.2.7
-[0.2.4]: https://github.com/omega-memory/omega/compare/v0.2.2...v0.2.7
-[0.2.3]: https://github.com/omega-memory/omega/compare/v0.2.2...v0.2.7
-[0.2.2]: https://github.com/omega-memory/omega/compare/v0.2.1...v0.2.2
-[0.2.1]: https://github.com/omega-memory/omega/compare/v0.2.0...v0.2.1
-[0.2.0]: https://github.com/omega-memory/omega/releases/tag/v0.2.0
+[1.0.0]: https://github.com/TracqiTechnology/cairn/compare/v0.6.1...v1.0.0
+[0.6.1]: https://github.com/TracqiTechnology/cairn/compare/v0.5.0...v0.6.1
+[0.5.0]: https://github.com/TracqiTechnology/cairn/compare/v0.4.3...v0.5.0
+[0.4.3]: https://github.com/TracqiTechnology/cairn/compare/v0.4.1...v0.4.3
+[0.4.2]: https://github.com/TracqiTechnology/cairn/compare/v0.4.1...v0.4.3
+[0.4.1]: https://github.com/TracqiTechnology/cairn/compare/v0.3.0...v0.4.1
+[0.4.0]: https://github.com/TracqiTechnology/cairn/compare/v0.3.0...v0.4.1
+[0.3.2]: https://github.com/TracqiTechnology/cairn/compare/v0.3.0...v0.4.1
+[0.3.1]: https://github.com/TracqiTechnology/cairn/compare/v0.3.0...v0.4.1
+[0.3.0]: https://github.com/TracqiTechnology/cairn/compare/v0.2.8...v0.3.0
+[0.2.8]: https://github.com/TracqiTechnology/cairn/compare/v0.2.7...v0.2.8
+[0.2.7]: https://github.com/TracqiTechnology/cairn/compare/v0.2.2...v0.2.7
+[0.2.4]: https://github.com/TracqiTechnology/cairn/compare/v0.2.2...v0.2.7
+[0.2.3]: https://github.com/TracqiTechnology/cairn/compare/v0.2.2...v0.2.7
+[0.2.2]: https://github.com/TracqiTechnology/cairn/compare/v0.2.1...v0.2.2
+[0.2.1]: https://github.com/TracqiTechnology/cairn/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/TracqiTechnology/cairn/releases/tag/v0.2.0

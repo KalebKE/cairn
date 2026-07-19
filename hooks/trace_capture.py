@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OMEGA PostToolUse hook — Record tool call trace to coord_audit.
+"""Cairn PostToolUse hook — Record tool call trace to coord_audit.
 
 Fallback for when the hook daemon is unavailable. Silent (no user output).
 """
@@ -12,7 +12,7 @@ from pathlib import Path
 
 def _log_hook_error(hook_name, error):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         tb = traceback.format_exc()
@@ -33,7 +33,7 @@ def main():
         return
 
     try:
-        from omega.coordination import get_manager
+        from cairn.coordination import get_manager
         mgr = get_manager()
         tool_output = os.environ.get("TOOL_OUTPUT", "")
         tool_input = os.environ.get("TOOL_INPUT", "")
@@ -52,7 +52,7 @@ def main():
 
 def _log_timing(hook_name, elapsed_ms):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         data = f"[{timestamp}] {hook_name}: OK ({elapsed_ms:.0f}ms)\n"

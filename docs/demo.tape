@@ -1,4 +1,4 @@
-# OMEGA Demo — Terminal Recording
+# Cairn Demo — Terminal Recording
 # Install VHS: brew install charmbracelet/tap/vhs
 # Run: vhs docs/demo.tape
 
@@ -20,7 +20,7 @@ Sleep 500ms
 Enter
 Sleep 2s
 
-Type "# OMEGA auto-captures this as a user preference"
+Type "# Cairn auto-captures this as a user preference"
 Sleep 500ms
 Enter
 Sleep 1s
@@ -35,7 +35,7 @@ Sleep 500ms
 Enter
 Sleep 2s
 
-Type "# OMEGA surfaces the memory instantly:"
+Type "# Cairn surfaces the memory instantly:"
 Sleep 500ms
 Enter
 Type '# "Use early returns, never nest more than 2 levels"'
@@ -43,7 +43,7 @@ Sleep 500ms
 Enter
 Sleep 1s
 
-Type "omega stats --card"
+Type "cairn stats --card"
 Sleep 500ms
 Enter
 Sleep 3s

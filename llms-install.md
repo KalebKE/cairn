@@ -1,61 +1,61 @@
-# omega-memory
+# cairn
 
 > Persistent memory for AI coding agents. Local-first, 25 MCP tools, zero cloud dependencies.
 
 ## OBJECTIVE
 
-Install OMEGA as an MCP server so the AI coding agent has persistent memory across sessions.
+Install Cairn as an MCP server so the AI coding agent has persistent memory across sessions.
 
 ## TODO
 
-- [ ] Install the omega-memory Python package
-- [ ] Run omega setup to configure MCP server and hooks
-- [ ] Verify installation with omega doctor
+- [ ] Install the cairn Python package
+- [ ] Run cairn setup to configure MCP server and hooks
+- [ ] Verify installation with cairn doctor
 
 ## Step 1: Install
 
 Requires Python 3.11+.
 
 ```bash
-pip install omega-memory[server]
+pip install cairn[server]
 ```
 
-If `pip install` fails with a Python version error, try `pip3.11 install omega-memory[server]` or `python3.11 -m pip install omega-memory[server]`.
+If `pip install` fails with a Python version error, try `pip3.11 install cairn[server]` or `python3.11 -m pip install cairn[server]`.
 
 ## Step 2: Setup
 
 ```bash
-omega setup
+cairn setup
 ```
 
 This will:
-1. Create `~/.omega/` directory
+1. Create `~/.cairn/` directory
 2. Download the ONNX embedding model (~90 MB)
-3. Register omega-memory as an MCP server with the detected client (Claude Code, Cursor, Windsurf, Cline)
+3. Register cairn as an MCP server with the detected client (Claude Code, Cursor, Windsurf, Cline)
 4. Install session hooks for auto-capture
 
 For a specific client, pass `--client`:
 
 ```bash
-omega setup --client claude-code
-omega setup --client cursor
-omega setup --client windsurf
-omega setup --client cline
-omega setup --client codex
+cairn setup --client claude-code
+cairn setup --client cursor
+cairn setup --client windsurf
+cairn setup --client cline
+cairn setup --client codex
 ```
 
 ## Step 3: Verify
 
 ```bash
-omega doctor
+cairn doctor
 ```
 
 Expected output:
 ```
-OMEGA Doctor
+Cairn Doctor
   Python: 3.11.x
-  Package: omega-memory 1.3.0
-  Database: ~/.omega/omega.db (OK)
+  Package: cairn 1.3.0
+  Database: ~/.cairn/cairn.db (OK)
   Embedding model: bge-small-en-v1.5-onnx (OK)
   MCP server: registered (OK)
   Hooks: installed (OK)
@@ -64,7 +64,7 @@ All checks passed.
 
 ## DONE WHEN
 
-- `omega doctor` reports all checks passed
-- The MCP server is registered and the agent can call omega_store and omega_query tools
+- `cairn doctor` reports all checks passed
+- The MCP server is registered and the agent can call cairn_store and cairn_query tools
 
 ## EXECUTE NOW

@@ -14,7 +14,7 @@ class TestContradictionDetection:
 
     def test_contradiction_supersedes_old(self, store):
         """Store two conflicting decisions — old one should be superseded."""
-        from omega.bridge import _detect_and_supersede
+        from cairn.bridge import _detect_and_supersede
 
         # Store first decision
         nid1 = store.store(
@@ -41,7 +41,7 @@ class TestContradictionDetection:
 
     def test_contradiction_same_content_not_superseded(self, store):
         """Exact duplicate content should not trigger superseding."""
-        from omega.bridge import _detect_and_supersede
+        from cairn.bridge import _detect_and_supersede
 
         content = "We use PostgreSQL for the main database in all environments."
         nid1 = store.store(content=content, metadata={"event_type": "decision"})
@@ -55,7 +55,7 @@ class TestContradictionDetection:
 
     def test_contradiction_different_type_not_superseded(self, store):
         """Similar content but different event_type should not be superseded."""
-        from omega.bridge import _detect_and_supersede
+        from cairn.bridge import _detect_and_supersede
 
         nid1 = store.store(
             content="PostgreSQL is the best database choice for our workload.",
@@ -76,7 +76,7 @@ class TestContradictionDetection:
 
     def test_contradiction_threshold(self, store):
         """Content with low similarity (< 0.80) should not trigger superseding."""
-        from omega.bridge import _detect_and_supersede
+        from cairn.bridge import _detect_and_supersede
 
         nid1 = store.store(
             content="The deployment pipeline runs on Jenkins with Docker containers.",
@@ -98,7 +98,7 @@ class TestContradictionDetection:
 
     def test_cross_type_user_preference_supersedes_decision(self, store):
         """A user_preference should supersede a conflicting decision."""
-        from omega.bridge import _detect_and_supersede
+        from cairn.bridge import _detect_and_supersede
 
         nid1 = store.store(
             content="We decided to use PostgreSQL as the primary database for this project.",
@@ -122,7 +122,7 @@ class TestContradictionDetection:
 
     def test_cross_type_decision_does_not_supersede_preference(self, store):
         """A decision should NOT supersede a user_preference (one-directional)."""
-        from omega.bridge import _detect_and_supersede
+        from cairn.bridge import _detect_and_supersede
 
         nid1 = store.store(
             content="User prefers to always use SQLite as the primary database.",
@@ -145,7 +145,7 @@ class TestContradictionDetection:
 
     def test_cross_type_low_similarity_no_supersede(self, store):
         """Low-similarity user_preference should not supersede unrelated decision."""
-        from omega.bridge import _detect_and_supersede
+        from cairn.bridge import _detect_and_supersede
 
         nid1 = store.store(
             content="Deploy the production database migration on Friday night.",
@@ -169,7 +169,7 @@ class TestContradictionDetection:
 
     def test_non_supersedable_type_ignored(self, store):
         """Event types outside the supersede set should return 0."""
-        from omega.bridge import _detect_and_supersede
+        from cairn.bridge import _detect_and_supersede
 
         nid1 = store.store(
             content="Error: connection refused on port 5432.",
@@ -186,15 +186,15 @@ class TestAtomicFactSplitting:
 
     def test_fact_splitting_extracts_facts(self):
         """Decision with factual sentences should produce fact nodes."""
-        from omega.bridge import _split_atomic_facts
+        from cairn.bridge import _split_atomic_facts
 
         content = (
             "We use PostgreSQL as the primary database. "
             "The API server is deployed on AWS. "
             "Logging was configured with Datadog."
         )
-        # Feature is gated behind OMEGA_ATOMIC_FACTS=1
-        with patch.dict(os.environ, {"OMEGA_ATOMIC_FACTS": "1"}):
+        # Feature is gated behind CAIRN_ATOMIC_FACTS=1
+        with patch.dict(os.environ, {"CAIRN_ATOMIC_FACTS": "1"}):
             facts = _split_atomic_facts(content, "decision")
         assert len(facts) >= 1
         # At least one sentence should match "is/are/use" patterns
@@ -204,7 +204,7 @@ class TestAtomicFactSplitting:
 
     def test_fact_splitting_max_5(self):
         """Should cap at 5 fact nodes per parent."""
-        from omega.bridge import _split_atomic_facts
+        from cairn.bridge import _split_atomic_facts
 
         content = (
             "We built the frontend with React. "
@@ -216,29 +216,29 @@ class TestAtomicFactSplitting:
             "We use Cloudflare as CDN. "
             "We handle authentication with OAuth2."
         )
-        with patch.dict(os.environ, {"OMEGA_ATOMIC_FACTS": "1"}):
+        with patch.dict(os.environ, {"CAIRN_ATOMIC_FACTS": "1"}):
             facts = _split_atomic_facts(content, "decision")
         assert len(facts) <= 5
 
     def test_fact_splitting_short_content_skipped(self):
         """Content < 50 chars should produce no facts."""
-        from omega.bridge import _split_atomic_facts
+        from cairn.bridge import _split_atomic_facts
 
         facts = _split_atomic_facts("Use Redis.", "decision")
         assert facts == []
 
     def test_fact_splitting_wrong_type_skipped(self):
         """Non-matching event types should produce no facts."""
-        from omega.bridge import _split_atomic_facts
+        from cairn.bridge import _split_atomic_facts
 
         content = "The server is running on port 8080. We use nginx as a reverse proxy."
         facts = _split_atomic_facts(content, "error_pattern")
         assert facts == []
 
-    def test_fact_graph_edge_in_auto_capture(self, store, tmp_omega_dir):
+    def test_fact_graph_edge_in_auto_capture(self, store, tmp_cairn_dir):
         """Fact nodes created by auto_capture should have edges to parent."""
-        from omega.bridge import auto_capture, _get_store
-        import omega.bridge as bridge
+        from cairn.bridge import auto_capture, _get_store
+        import cairn.bridge as bridge
 
         # Point bridge to our test store
         old_store = bridge._store_instance
@@ -276,8 +276,8 @@ class TestCorpusHygiene:
 
     def test_corpus_hygiene_dedup(self, store):
         """Near-duplicate memories should be superseded by hygiene."""
-        from omega.bridge import _get_store
-        from omega.embedding import generate_embedding
+        from cairn.bridge import _get_store
+        from cairn.embedding import generate_embedding
 
         # Store two very similar memories
         nid1 = store.store(
@@ -354,7 +354,7 @@ class TestSupersededFiltering:
 
     def test_superseded_filtered_from_find_similar(self, store):
         """Superseded memories should not appear in find_similar results."""
-        from omega.embedding import generate_embedding
+        from cairn.embedding import generate_embedding
 
         nid1 = store.store(
             content="We use Docker containers for all deployments.",

@@ -1,13 +1,13 @@
 ---
-title: OMEGA
+title: Cairn
 description: Persistent memory for AI coding agents
 ---
 
-# OMEGA — Persistent memory for AI coding agents
+# Cairn — Persistent memory for AI coding agents
 
 **Stop losing context. Stop repeating mistakes. Stop colliding with teammates.**
 
-OMEGA gives AI coding agents a durable memory layer that survives across sessions, projects, and teams. Every decision, lesson, and preference is captured, indexed, and surfaced exactly when it matters.
+Cairn gives AI coding agents a durable memory layer that survives across sessions, projects, and teams. Every decision, lesson, and preference is captured, indexed, and surfaced exactly when it matters.
 
 ## The problem
 
@@ -19,16 +19,16 @@ Without persistent memory, AI coding agents:
 
 ## The solution
 
-OMEGA is a local-first, SQLite-backed memory system that integrates with [Claude Code](https://docs.anthropic.com/en/docs/claude-code) via the Model Context Protocol (MCP). It runs entirely on your machine — no cloud required, no data leaves your device unless you opt in.
+Cairn is a local-first, SQLite-backed memory system that integrates with [Claude Code](https://docs.anthropic.com/en/docs/claude-code) via the Model Context Protocol (MCP). It runs entirely on your machine — no cloud required, no data leaves your device unless you opt in.
 
 ## Quick install
 
 ```bash
-pip install omega-memory
-omega setup
+pip install cairn
+cairn setup
 ```
 
-That's it. OMEGA registers itself as an MCP server, installs hooks into Claude Code, and starts capturing memories automatically.
+That's it. Cairn registers itself as an MCP server, installs hooks into Claude Code, and starts capturing memories automatically.
 
 ## Key features
 
@@ -41,7 +41,7 @@ That's it. OMEGA registers itself as an MCP server, installs hooks into Claude C
 
 ## How it compares
 
-| Feature | OMEGA | Mem0 | Zep | Copilot Memory |
+| Feature | Cairn | Mem0 | Zep | Copilot Memory |
 |---------|-------|------|-----|----------------|
 | **Local-first** | Yes — SQLite on your machine | Cloud-hosted | Cloud or self-hosted | Cloud-only |
 | **Multi-agent coordination** | 28 tools (claims, tasks, messaging) | No | No | No |
@@ -52,12 +52,12 @@ That's it. OMEGA registers itself as an MCP server, installs hooks into Claude C
 | **Open source** | Yes (MIT) | Partial | Partial | No |
 
 !!! tip "Local-first means private by default"
-    OMEGA stores everything in `~/.omega/omega.db` on your machine. Cloud sync to Supabase is available but entirely opt-in.
+    Cairn stores everything in `~/.cairn/cairn.db` on your machine. Cloud sync to Supabase is available but entirely opt-in.
 
 ## Architecture at a glance
 
 ```
-Claude Code <──MCP (stdio)──> OMEGA Server
+Claude Code <──MCP (stdio)──> Cairn Server
                                   │
                     ┌──────────────┼──────────────┐
                     │              │              │
@@ -66,7 +66,7 @@ Claude Code <──MCP (stdio)──> OMEGA Server
                coordination)   search)       CPU-only, ~337MB)
 ```
 
-OMEGA runs as a stdio MCP server spawned by Claude Code on demand. Seven hook processes handle automatic memory capture, surfacing, and coordination — all fail-open so they never block your workflow.
+Cairn runs as a stdio MCP server spawned by Claude Code on demand. Seven hook processes handle automatic memory capture, surfacing, and coordination — all fail-open so they never block your workflow.
 
 ## Next steps
 
@@ -74,7 +74,7 @@ OMEGA runs as a stdio MCP server spawned by Claude Code on demand. Seven hook pr
 
 -   :material-rocket-launch: **[Getting Started](getting-started/installation.md)**
 
-    Install OMEGA, run setup, and verify everything works in under 2 minutes.
+    Install Cairn, run setup, and verify everything works in under 2 minutes.
 
 -   :material-lightning-bolt: **[Quickstart](getting-started/quickstart.md)**
 

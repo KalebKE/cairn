@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sync all source files from private OMEGA repo to the public omega-public repo.
+"""Sync all source files from private Cairn repo to the public cairn-public repo.
 
 Since the single-package merge, ALL source and test files are synced.
 Pro features are gated by optional extras, not by file exclusion.
@@ -22,7 +22,7 @@ import yaml
 # ── Paths ──────────────────────────────────────────────────────────────────
 SCRIPT_DIR = Path(__file__).resolve().parent
 PRIVATE_ROOT = SCRIPT_DIR.parent
-PUBLIC_ROOT = PRIVATE_ROOT.parent / "omega-public"
+PUBLIC_ROOT = PRIVATE_ROOT.parent / "cairn-public"
 MANIFEST_PATH = PRIVATE_ROOT / "sync-manifest.yaml"
 
 
@@ -65,14 +65,14 @@ def resolve_sync_files(manifest: dict) -> list[tuple[Path, Path]]:
     pairs = []
     for f in manifest.get("sync_src", []):
         name = f.split("#")[0].strip()
-        src = PRIVATE_ROOT / "src/omega" / name
-        dst = PUBLIC_ROOT / "src/omega" / name
+        src = PRIVATE_ROOT / "src/cairn" / name
+        dst = PUBLIC_ROOT / "src/cairn" / name
         if src.is_dir():
             # Recursively add all files from the directory
             for child in sorted(src.rglob("*")):
                 if child.is_file() and "__pycache__" not in str(child) and not _should_skip(child):
-                    rel = child.relative_to(PRIVATE_ROOT / "src/omega")
-                    pairs.append((child, PUBLIC_ROOT / "src/omega" / rel))
+                    rel = child.relative_to(PRIVATE_ROOT / "src/cairn")
+                    pairs.append((child, PUBLIC_ROOT / "src/cairn" / rel))
         elif src.exists():
             pairs.append((src, dst))
     for f in manifest.get("sync_tests", []):
@@ -145,7 +145,7 @@ def sync_file(src: Path, dst: Path, dry_run: bool) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Sync files from private OMEGA to public omega-public",
+        description="Sync files from private Cairn to public cairn-public",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""Examples:
   python3 scripts/sync-to-public.py              # Dry run — see what would change
@@ -156,7 +156,7 @@ def main():
     parser.add_argument("--apply", action="store_true",
                         help="Actually copy files (default: dry-run)")
     parser.add_argument("--test", action="store_true",
-                        help="Run tests in omega-public after sync")
+                        help="Run tests in cairn-public after sync")
     parser.add_argument("--report", action="store_true",
                         help="Full sync report")
     parser.add_argument("--verbose", "-v", action="store_true",
@@ -174,7 +174,7 @@ def main():
     manifest = load_manifest()
 
     print("=" * 64)
-    print("  OMEGA Single-Package Sync")
+    print("  Cairn Single-Package Sync")
     print("=" * 64)
     print(f"  Private repo:  {PRIVATE_ROOT}")
     print(f"  Public repo:   {PUBLIC_ROOT}")
@@ -245,7 +245,7 @@ def main():
 
     # ── 4. Tests (optional) ──────────────────────────────────────────────
     if args.test and not dry_run:
-        print("[4/4] Running omega-public tests...")
+        print("[4/4] Running cairn-public tests...")
         result = subprocess.run(
             [sys.executable, "-m", "pytest", "-x", "--tb=short", "tests/"],
             cwd=PUBLIC_ROOT,

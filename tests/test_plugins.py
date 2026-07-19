@@ -1,15 +1,15 @@
-"""Tests for omega.plugins discovery and OmegaPlugin base class."""
+"""Tests for cairn.plugins discovery and CairnPlugin base class."""
 
 import sys
 import types
 from unittest.mock import MagicMock, patch
 
-from omega.plugins import OmegaPlugin, discover_plugins, get_capabilities, has_capability
+from cairn.plugins import CairnPlugin, discover_plugins, get_capabilities, has_capability
 
 
-class TestOmegaPluginBase:
+class TestCairnPluginBase:
     def test_default_attributes(self):
-        plugin = OmegaPlugin()
+        plugin = CairnPlugin()
         assert plugin.TOOL_SCHEMAS == []
         assert plugin.HANDLERS == {}
         assert plugin.HOOK_HANDLERS == {}
@@ -20,14 +20,14 @@ class TestOmegaPluginBase:
         assert plugin.CAPABILITIES == set()
 
     def test_subclass_inherits(self):
-        class MyPlugin(OmegaPlugin):
+        class MyPlugin(CairnPlugin):
             TOOL_SCHEMAS = [{"name": "test_tool"}]
             HANDLERS = {"test_tool": lambda: None}
 
         p = MyPlugin()
         assert len(p.TOOL_SCHEMAS) == 1
         assert "test_tool" in p.HANDLERS
-        assert isinstance(p, OmegaPlugin)
+        assert isinstance(p, CairnPlugin)
 
 
 class TestDiscoverPlugins:
@@ -39,7 +39,7 @@ class TestDiscoverPlugins:
 
     @patch("importlib.metadata.entry_points")
     def test_valid_plugin_class(self, mock_ep):
-        class GoodPlugin(OmegaPlugin):
+        class GoodPlugin(CairnPlugin):
             TOOL_SCHEMAS = [{"name": "good"}]
 
         ep = MagicMock()
@@ -55,7 +55,7 @@ class TestDiscoverPlugins:
 class TestPluginCapabilities:
     @patch("importlib.metadata.entry_points")
     def test_get_capabilities_from_plugin_attribute(self, mock_ep):
-        class CapPlugin(OmegaPlugin):
+        class CapPlugin(CairnPlugin):
             CAPABILITIES = {"unlimited_memory", "full_retrieval"}
 
         ep = MagicMock()
@@ -69,7 +69,7 @@ class TestPluginCapabilities:
 
     @patch("importlib.metadata.entry_points")
     def test_get_capabilities_from_plugin_method(self, mock_ep):
-        class CapPlugin(OmegaPlugin):
+        class CapPlugin(CairnPlugin):
             def CAPABILITIES(self):
                 return ["pro_tools"]
 
@@ -82,40 +82,40 @@ class TestPluginCapabilities:
 
     @patch("importlib.metadata.entry_points")
     def test_fake_license_module_does_not_unlock_memory_cap(self, mock_ep, monkeypatch):
-        """Core ignores omega_platform.license.is_pro() for cap unlocks."""
-        from omega.sqlite_store import _base
+        """Core ignores cairn_platform.license.is_pro() for cap unlocks."""
+        from cairn.sqlite_store import _base
 
-        omega_platform = types.ModuleType("omega_platform")
-        license_mod = types.ModuleType("omega_platform.license")
+        cairn_platform = types.ModuleType("cairn_platform")
+        license_mod = types.ModuleType("cairn_platform.license")
         license_mod.is_pro = lambda: True
-        monkeypatch.setitem(sys.modules, "omega_platform", omega_platform)
-        monkeypatch.setitem(sys.modules, "omega_platform.license", license_mod)
-        monkeypatch.setenv("OMEGA_MAX_NODES", "99999")
+        monkeypatch.setitem(sys.modules, "cairn_platform", cairn_platform)
+        monkeypatch.setitem(sys.modules, "cairn_platform.license", license_mod)
+        monkeypatch.setenv("CAIRN_MAX_NODES", "99999")
         mock_ep.return_value = []
 
         assert _base._get_effective_max_nodes() == _base._CORE_HARD_LIMIT
 
     @patch("importlib.metadata.entry_points")
     def test_capability_plugin_unlocks_memory_cap_env(self, mock_ep, monkeypatch):
-        from omega.sqlite_store import _base
+        from cairn.sqlite_store import _base
 
-        class CapPlugin(OmegaPlugin):
+        class CapPlugin(CairnPlugin):
             CAPABILITIES = {"unlimited_memory"}
 
         ep = MagicMock()
         ep.name = "cap_plugin"
         ep.load.return_value = CapPlugin
         mock_ep.return_value = [ep]
-        monkeypatch.setenv("OMEGA_MAX_NODES", "12345")
+        monkeypatch.setenv("CAIRN_MAX_NODES", "12345")
 
         assert _base._get_effective_max_nodes() == 12345
 
     @patch("importlib.metadata.entry_points")
     def test_invalid_plugin_skipped(self, mock_ep):
-        """Non-OmegaPlugin classes are skipped with a warning."""
+        """Non-CairnPlugin classes are skipped with a warning."""
         ep = MagicMock()
         ep.name = "bad_plugin"
-        ep.load.return_value = str  # not an OmegaPlugin
+        ep.load.return_value = str  # not an CairnPlugin
 
         mock_ep.return_value = [ep]
         result = discover_plugins()
@@ -134,8 +134,8 @@ class TestPluginCapabilities:
 
     @patch("importlib.metadata.entry_points")
     def test_instance_accepted(self, mock_ep):
-        """Pre-instantiated OmegaPlugin instances are accepted."""
-        instance = OmegaPlugin()
+        """Pre-instantiated CairnPlugin instances are accepted."""
+        instance = CairnPlugin()
 
         ep = MagicMock()
         ep.name = "instance_plugin"
@@ -155,7 +155,7 @@ class TestPluginCapabilities:
     @patch("importlib.metadata.entry_points")
     def test_mixed_plugins(self, mock_ep):
         """Valid plugins are returned even when some fail."""
-        class GoodPlugin(OmegaPlugin):
+        class GoodPlugin(CairnPlugin):
             pass
 
         good_ep = MagicMock()

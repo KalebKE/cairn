@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-LongMemEval Official Evaluation Harness for OMEGA.
+LongMemEval Official Evaluation Harness for Cairn.
 
-Runs OMEGA against the real LongMemEval_S dataset (500 questions, ~40 sessions
+Runs Cairn against the real LongMemEval_S dataset (500 questions, ~40 sessions
 each) from UCLA/Tencent (Wang et al., 2024). Produces hypothesis JSONL compatible
 with the official grading script.
 
@@ -37,7 +37,7 @@ import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# Ensure omega is importable
+# Ensure cairn is importable
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 # ── Feature toggles (set from CLI args in main()) ─────────────────────────
@@ -133,7 +133,7 @@ DATASET_URL = (
     "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned"
     "/resolve/main/longmemeval_s_cleaned.json"
 )
-CACHE_DIR = Path.home() / ".omega" / "benchmarks"
+CACHE_DIR = Path.home() / ".cairn" / "benchmarks"
 CACHE_FILE = CACHE_DIR / "longmemeval_s_cleaned.json"
 
 # ── Category-aware RAG prompts ──────────────────────────────────────────────
@@ -459,7 +459,7 @@ def parse_longmemeval_date(date_str: str) -> str:
 
 
 def format_session_text(turns: list) -> str:
-    """Format a session's turns as natural language for OMEGA ingestion."""
+    """Format a session's turns as natural language for Cairn ingestion."""
     lines = []
     for turn in turns:
         lines.append(f"{turn['role']}: {turn['content']}")
@@ -522,10 +522,10 @@ def ingest_question(question_data: dict, tmpdir: str, api_key: str | None = None
     If extract_facts is True, appends LLM-extracted key facts to each session
     for better retrieval (fact-augmented keys, a la Hindsight TEMPR).
     """
-    from omega.sqlite_store import SQLiteStore
+    from cairn.sqlite_store import SQLiteStore
 
     db_path = os.path.join(tmpdir, "bench.db")
-    os.environ["OMEGA_HOME"] = tmpdir
+    os.environ["CAIRN_HOME"] = tmpdir
     store = SQLiteStore(db_path=db_path)
 
     sessions = question_data["haystack_sessions"]
@@ -962,7 +962,7 @@ def retrieve_context(
     question_type: str | None = None,
     api_key: str | None = None,
 ) -> list:
-    """Retrieve top-K sessions for a question using OMEGA's hybrid search.
+    """Retrieve top-K sessions for a question using Cairn's hybrid search.
 
     Infers a temporal range from relative time references in the question
     text (for ALL question types, not just temporal-reasoning) and passes
@@ -1305,7 +1305,7 @@ def compute_metrics(graded: list, dataset: list) -> dict:
                 abs_correct += 1
 
     print("\n" + "=" * 65)
-    print("  LongMemEval Official Benchmark Results (OMEGA)")
+    print("  LongMemEval Official Benchmark Results (Cairn)")
     print("=" * 65)
 
     type_accs = []
@@ -1593,7 +1593,7 @@ def run_generation(args, dataset: list) -> int:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="OMEGA LongMemEval Official Evaluation Harness",
+        description="Cairn LongMemEval Official Evaluation Harness",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""\
 examples:

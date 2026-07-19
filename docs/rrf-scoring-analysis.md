@@ -4,7 +4,7 @@
 
 ## Overview
 
-OMEGA's query pipeline uses a multi-phase scoring architecture:
+Cairn's query pipeline uses a multi-phase scoring architecture:
 
 1. **Fast-path / hot-cache** short-circuits (trigram, in-memory)
 2. **Vector similarity** (sqlite-vec, cosine distance)
@@ -170,15 +170,15 @@ boost = 1.0 + ((tag_overlap * 0.10) + (project_match * 0.15) + (min(content_matc
 
 | Parameter | Value | Env Var |
 |-----------|-------|---------|
-| `STRONG_SIGNAL_THRESHOLD` | 0.85 | `OMEGA_STRONG_SIGNAL_THRESHOLD` |
-| `STRONG_SIGNAL_GAP` | 0.15 | `OMEGA_STRONG_SIGNAL_GAP` |
+| `STRONG_SIGNAL_THRESHOLD` | 0.85 | `CAIRN_STRONG_SIGNAL_THRESHOLD` |
+| `STRONG_SIGNAL_GAP` | 0.15 | `CAIRN_STRONG_SIGNAL_GAP` |
 
 ### 19. Adaptive Retry (`_query.py:33-34`)
 
 | Parameter | Value | Env Var |
 |-----------|-------|---------|
-| `ADAPTIVE_RETRY_THRESHOLD` | 0.3 | `OMEGA_ADAPTIVE_RETRY_THRESHOLD` |
-| `ADAPTIVE_RETRY_RELAXATION` | 0.6 | `OMEGA_ADAPTIVE_RETRY_RELAXATION` |
+| `ADAPTIVE_RETRY_THRESHOLD` | 0.3 | `CAIRN_ADAPTIVE_RETRY_THRESHOLD` |
+| `ADAPTIVE_RETRY_RELAXATION` | 0.6 | `CAIRN_ADAPTIVE_RETRY_RELAXATION` |
 
 ### 20. Hot Cache Seeding (`_query.py:243-244`)
 
@@ -202,7 +202,7 @@ Query expansion variants are weighted at **0.8x** (`_EXPANSION_WEIGHT_DISCOUNT`)
 
 ### 23. Semantic Dedup Threshold (`_query.py:1187`)
 
-Default: 0.92 cosine similarity. Env var: `OMEGA_SEMANTIC_DEDUP_THRESHOLD`.
+Default: 0.92 cosine similarity. Env var: `CAIRN_SEMANTIC_DEDUP_THRESHOLD`.
 
 ---
 

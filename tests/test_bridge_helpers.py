@@ -13,13 +13,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from omega.bridge import (
+from cairn.bridge import (
     _auto_relate,
     _detect_and_supersede,
     _extract_facts,
     _split_atomic_facts,
 )
-from omega.sqlite_store import MemoryResult
+from cairn.sqlite_store import MemoryResult
 
 
 # ---------------------------------------------------------------------------
@@ -111,8 +111,8 @@ class TestExtractFacts:
         assert any("python" in f for f in facts)
 
     def test_dotted_path_extraction(self):
-        facts = _extract_facts("Edit omega.sqlite_store to fix the bug")
-        assert "omega.sqlite_store" in facts
+        facts = _extract_facts("Edit cairn.sqlite_store to fix the bug")
+        assert "cairn.sqlite_store" in facts
 
     def test_dotted_path_skips_version_numbers(self):
         facts = _extract_facts("Upgrade to version 1.0.0 now")
@@ -154,11 +154,11 @@ class TestExtractFacts:
         assert facts == sorted(facts)
 
     def test_mixed_extraction(self):
-        content = "We chose `SQLiteStore` over MAX_NODES. Edit omega.bridge for multi-session support."
+        content = "We chose `SQLiteStore` over MAX_NODES. Edit cairn.bridge for multi-session support."
         facts = _extract_facts(content)
         assert "sqlitestore" in facts
         assert "max_nodes" in facts
-        assert "omega.bridge" in facts
+        assert "cairn.bridge" in facts
         assert "multi-session" in facts
 
 
@@ -439,10 +439,10 @@ class TestDetectAndSupersede:
 
 class TestSplitAtomicFacts:
     def setup_method(self):
-        os.environ["OMEGA_ATOMIC_FACTS"] = "1"
+        os.environ["CAIRN_ATOMIC_FACTS"] = "1"
 
     def teardown_method(self):
-        os.environ.pop("OMEGA_ATOMIC_FACTS", None)
+        os.environ.pop("CAIRN_ATOMIC_FACTS", None)
 
     def test_non_applicable_event_type(self):
         assert _split_atomic_facts("We use Python. Our server is fast.", "observation") == []

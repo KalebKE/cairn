@@ -1,8 +1,8 @@
 """Tests for the project_status event type and auto-generation."""
 from unittest.mock import patch
 
-from omega.types import AutoCaptureEventType, EVENT_TYPE_TTL
-from omega.bridge import DEDUP_THRESHOLDS, EVOLUTION_TYPES
+from cairn.types import AutoCaptureEventType, EVENT_TYPE_TTL
+from cairn.bridge import DEDUP_THRESHOLDS, EVOLUTION_TYPES
 
 
 class TestProjectStatusType:
@@ -23,12 +23,12 @@ class TestProjectStatusGeneration:
     """Verify _build_project_status() produces correct output."""
 
     def test_build_project_status_with_activity(self):
-        from omega.hooks.session_stop import _build_project_status
+        from cairn.hooks.session_stop import _build_project_status
 
         mock_decisions = [{"content": "Use SQLite for storage"}]
         mock_tasks = [{"content": "Implemented auth module"}]
 
-        with patch("omega.bridge.query_structured") as mock_qs:
+        with patch("cairn.bridge.query_structured") as mock_qs:
             def side_effect(query_text, **kwargs):
                 if kwargs.get("event_type") == "decision":
                     return mock_decisions
@@ -37,30 +37,30 @@ class TestProjectStatusGeneration:
                 return []
             mock_qs.side_effect = side_effect
 
-            result = _build_project_status("s1", "/proj/omega")
+            result = _build_project_status("s1", "/proj/cairn")
 
         assert result is not None
-        assert "Project: omega" in result
+        assert "Project: cairn" in result
         assert "Use SQLite" in result
         assert "auth module" in result
 
     def test_build_project_status_no_activity(self):
-        from omega.hooks.session_stop import _build_project_status
+        from cairn.hooks.session_stop import _build_project_status
 
-        with patch("omega.bridge.query_structured", return_value=[]):
-            result = _build_project_status("s1", "/proj/omega")
+        with patch("cairn.bridge.query_structured", return_value=[]):
+            result = _build_project_status("s1", "/proj/cairn")
 
         assert result is None
 
     def test_build_project_status_no_project(self):
-        from omega.hooks.session_stop import _build_project_status
+        from cairn.hooks.session_stop import _build_project_status
 
         result = _build_project_status("s1", "")
         assert result is None
 
-    def test_project_status_stored_at_session_stop(self, tmp_omega_dir):
+    def test_project_status_stored_at_session_stop(self, tmp_cairn_dir):
         """End session with activity, verify project_status is stored in memories."""
-        from omega.bridge import _get_store, reset_memory, auto_capture
+        from cairn.bridge import _get_store, reset_memory, auto_capture
         reset_memory()
         store = _get_store()
 
@@ -74,8 +74,8 @@ class TestProjectStatusGeneration:
                 return mock_tasks
             return []
 
-        from omega.hooks.session_stop import _build_project_status
-        with patch("omega.bridge.query_structured", side_effect=qs_side_effect):
+        from cairn.hooks.session_stop import _build_project_status
+        with patch("cairn.bridge.query_structured", side_effect=qs_side_effect):
             status_text = _build_project_status("s1", "/proj/myapp")
 
         assert status_text is not None
@@ -101,19 +101,19 @@ class TestProjectStatusGeneration:
 class TestProjectStatusSurfacing:
     """Verify welcome() surfaces project_status."""
 
-    def test_welcome_shows_project_status(self, tmp_omega_dir):
-        from omega.bridge import welcome, auto_capture, reset_memory
+    def test_welcome_shows_project_status(self, tmp_cairn_dir):
+        from cairn.bridge import welcome, auto_capture, reset_memory
         reset_memory()
 
         auto_capture(
-            content="Project: omega | Key decisions: Use SQLite; Add caching",
+            content="Project: cairn | Key decisions: Use SQLite; Add caching",
             event_type="project_status",
             session_id="s1",
-            project="/proj/omega",
-            metadata={"source": "session_stop_auto", "project": "/proj/omega"},
+            project="/proj/cairn",
+            metadata={"source": "session_stop_auto", "project": "/proj/cairn"},
         )
 
-        result = welcome(project="/proj/omega")
+        result = welcome(project="/proj/cairn")
         obs = result.get("observation_prefix", "")
         ctx = result.get("project_context", "")
         combined = obs + ctx

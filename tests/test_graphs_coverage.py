@@ -1,4 +1,4 @@
-"""Tests for OMEGA graphs/embeddings module — covers public API and internal helpers."""
+"""Tests for Cairn graphs/embeddings module — covers public API and internal helpers."""
 
 import math
 import sys
@@ -7,8 +7,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-import omega.embedding as graphs
-from omega.embedding import (
+import cairn.embedding as graphs
+from cairn.embedding import (
     get_embedding_model_info,
     reset_embedding_state,
     _maybe_unload_model,
@@ -82,7 +82,7 @@ class TestResetEmbeddingState:
 
     def test_resets_circuit_breaker(self, monkeypatch):
         monkeypatch.setattr(graphs, "_FIRST_FAILURE_TIME", 12345.0)
-        from omega.embedding import _get_embedding_model
+        from cairn.embedding import _get_embedding_model
         _get_embedding_model._attempt_count = 3
         reset_embedding_state()
         assert graphs._FIRST_FAILURE_TIME == 0.0
@@ -243,8 +243,8 @@ class TestGenerateEmbedding:
 
     def test_hash_fallback_when_no_backend(self, monkeypatch):
         """With skip flag set, should fall back to hash embedding."""
-        monkeypatch.setenv("OMEGA_SKIP_EMBEDDINGS", "1")
-        monkeypatch.setenv("OMEGA_EMBEDDING_DAEMON", "0")
+        monkeypatch.setenv("CAIRN_SKIP_EMBEDDINGS", "1")
+        monkeypatch.setenv("CAIRN_EMBEDDING_DAEMON", "0")
         monkeypatch.setattr(graphs, "_ONNX_CHECKED", True)
         monkeypatch.setattr(graphs, "_ONNX_AVAILABLE", False)
 
@@ -255,8 +255,8 @@ class TestGenerateEmbedding:
         assert emb == expected
 
     def test_returns_list_of_floats(self, monkeypatch):
-        monkeypatch.setenv("OMEGA_SKIP_EMBEDDINGS", "1")
-        monkeypatch.setenv("OMEGA_EMBEDDING_DAEMON", "0")
+        monkeypatch.setenv("CAIRN_SKIP_EMBEDDINGS", "1")
+        monkeypatch.setenv("CAIRN_EMBEDDING_DAEMON", "0")
         monkeypatch.setattr(graphs, "_ONNX_CHECKED", True)
         monkeypatch.setattr(graphs, "_ONNX_AVAILABLE", False)
 
@@ -266,8 +266,8 @@ class TestGenerateEmbedding:
 
     def test_cache_hit(self, monkeypatch):
         """Cache should return identical results for repeated calls."""
-        monkeypatch.setenv("OMEGA_SKIP_EMBEDDINGS", "1")
-        monkeypatch.setenv("OMEGA_EMBEDDING_DAEMON", "0")
+        monkeypatch.setenv("CAIRN_SKIP_EMBEDDINGS", "1")
+        monkeypatch.setenv("CAIRN_EMBEDDING_DAEMON", "0")
         monkeypatch.setattr(graphs, "_ONNX_CHECKED", True)
         monkeypatch.setattr(graphs, "_ONNX_AVAILABLE", False)
 
@@ -276,8 +276,8 @@ class TestGenerateEmbedding:
         assert emb1 == emb2
 
     def test_empty_string_input(self, monkeypatch):
-        monkeypatch.setenv("OMEGA_SKIP_EMBEDDINGS", "1")
-        monkeypatch.setenv("OMEGA_EMBEDDING_DAEMON", "0")
+        monkeypatch.setenv("CAIRN_SKIP_EMBEDDINGS", "1")
+        monkeypatch.setenv("CAIRN_EMBEDDING_DAEMON", "0")
         monkeypatch.setattr(graphs, "_ONNX_CHECKED", True)
         monkeypatch.setattr(graphs, "_ONNX_AVAILABLE", False)
 
@@ -298,8 +298,8 @@ class TestGenerateEmbeddingsBatch:
 
     def test_hash_fallback_batch(self, monkeypatch):
         """With no backend, batch should produce hash embeddings for each text."""
-        monkeypatch.setenv("OMEGA_SKIP_EMBEDDINGS", "1")
-        monkeypatch.setenv("OMEGA_EMBEDDING_DAEMON", "0")
+        monkeypatch.setenv("CAIRN_SKIP_EMBEDDINGS", "1")
+        monkeypatch.setenv("CAIRN_EMBEDDING_DAEMON", "0")
         monkeypatch.setattr(graphs, "_ONNX_CHECKED", True)
         monkeypatch.setattr(graphs, "_ONNX_AVAILABLE", False)
 
@@ -314,8 +314,8 @@ class TestGenerateEmbeddingsBatch:
 
     def test_batch_matches_individual_hash(self, monkeypatch):
         """Batch hash fallback should match individual hash fallback outputs."""
-        monkeypatch.setenv("OMEGA_SKIP_EMBEDDINGS", "1")
-        monkeypatch.setenv("OMEGA_EMBEDDING_DAEMON", "0")
+        monkeypatch.setenv("CAIRN_SKIP_EMBEDDINGS", "1")
+        monkeypatch.setenv("CAIRN_EMBEDDING_DAEMON", "0")
         monkeypatch.setattr(graphs, "_ONNX_CHECKED", True)
         monkeypatch.setattr(graphs, "_ONNX_AVAILABLE", False)
 
@@ -325,8 +325,8 @@ class TestGenerateEmbeddingsBatch:
         assert batch_results == individual_results
 
     def test_single_item_batch(self, monkeypatch):
-        monkeypatch.setenv("OMEGA_SKIP_EMBEDDINGS", "1")
-        monkeypatch.setenv("OMEGA_EMBEDDING_DAEMON", "0")
+        monkeypatch.setenv("CAIRN_SKIP_EMBEDDINGS", "1")
+        monkeypatch.setenv("CAIRN_EMBEDDING_DAEMON", "0")
         monkeypatch.setattr(graphs, "_ONNX_CHECKED", True)
         monkeypatch.setattr(graphs, "_ONNX_AVAILABLE", False)
 
@@ -360,7 +360,7 @@ class TestGetOnnxModelDir:
         # Make primary non-existent
         monkeypatch.setattr(graphs, "_ONNX_MODEL_DIR", None)
         monkeypatch.setattr(graphs, "_ONNX_DEFAULT_DIR", str(tmp_path / "nonexistent"))
-        monkeypatch.setenv("OMEGA_ONNX_MODEL_DIR", str(env_dir))
+        monkeypatch.setenv("CAIRN_ONNX_MODEL_DIR", str(env_dir))
         result = _get_onnx_model_dir()
         assert result == str(env_dir)
 
@@ -372,7 +372,7 @@ class TestGetOnnxModelDir:
         monkeypatch.setattr(graphs, "_ONNX_MODEL_DIR", None)
         monkeypatch.setattr(graphs, "_ONNX_DEFAULT_DIR", str(tmp_path / "nonexistent"))
         monkeypatch.setattr(graphs, "_ONNX_FALLBACK_DIR", str(fallback_dir))
-        monkeypatch.delenv("OMEGA_ONNX_MODEL_DIR", raising=False)
+        monkeypatch.delenv("CAIRN_ONNX_MODEL_DIR", raising=False)
         result = _get_onnx_model_dir()
         assert result == str(fallback_dir)
         # Should update model name to fallback
@@ -384,7 +384,7 @@ class TestGetOnnxModelDir:
         monkeypatch.setattr(graphs, "_ONNX_MODEL_DIR", None)
         monkeypatch.setattr(graphs, "_ONNX_DEFAULT_DIR", str(tmp_path / "nope1"))
         monkeypatch.setattr(graphs, "_ONNX_FALLBACK_DIR", str(tmp_path / "nope2"))
-        monkeypatch.delenv("OMEGA_ONNX_MODEL_DIR", raising=False)
+        monkeypatch.delenv("CAIRN_ONNX_MODEL_DIR", raising=False)
         result = _get_onnx_model_dir()
         assert result is None
 
@@ -404,7 +404,7 @@ class TestPreloadEmbeddingModel:
 
     def test_returns_false_when_no_backend(self, monkeypatch):
         """If neither ONNX nor sentence-transformers available, return False."""
-        monkeypatch.setenv("OMEGA_EMBEDDING_DAEMON", "0")
+        monkeypatch.setenv("CAIRN_EMBEDDING_DAEMON", "0")
         monkeypatch.setattr(graphs, "_ONNX_CHECKED", True)
         monkeypatch.setattr(graphs, "_ONNX_AVAILABLE", False)
 
@@ -412,9 +412,9 @@ class TestPreloadEmbeddingModel:
         assert result is False
 
     def test_returns_false_when_skip_set(self, monkeypatch):
-        """With OMEGA_SKIP_EMBEDDINGS=1, model load returns None, so preload returns False."""
-        monkeypatch.setenv("OMEGA_SKIP_EMBEDDINGS", "1")
-        monkeypatch.setenv("OMEGA_EMBEDDING_DAEMON", "0")
+        """With CAIRN_SKIP_EMBEDDINGS=1, model load returns None, so preload returns False."""
+        monkeypatch.setenv("CAIRN_SKIP_EMBEDDINGS", "1")
+        monkeypatch.setenv("CAIRN_EMBEDDING_DAEMON", "0")
         # Pretend ONNX is available so it enters _get_embedding_model
         monkeypatch.setattr(graphs, "_ONNX_CHECKED", True)
         monkeypatch.setattr(graphs, "_ONNX_AVAILABLE", True)
@@ -456,7 +456,7 @@ class TestGetEmbeddingInfo:
     """Test get_embedding_info() returns correct structure and values."""
 
     def test_returns_expected_keys(self):
-        from omega.embedding import get_embedding_info
+        from cairn.embedding import get_embedding_info
         info = get_embedding_info()
         expected_keys = {
             "backend", "model", "model_loaded", "onnx_available",
@@ -465,17 +465,17 @@ class TestGetEmbeddingInfo:
         assert set(info.keys()) == expected_keys
 
     def test_dimension_is_384(self):
-        from omega.embedding import get_embedding_info
+        from cairn.embedding import get_embedding_info
         info = get_embedding_info()
         assert info["dimension"] == 384
 
     def test_lazy_loading_true(self):
-        from omega.embedding import get_embedding_info
+        from cairn.embedding import get_embedding_info
         info = get_embedding_info()
         assert info["lazy_loading"] is True
 
     def test_reflects_cache_size(self, monkeypatch):
-        from omega.embedding import get_embedding_info
+        from cairn.embedding import get_embedding_info
         monkeypatch.setattr(graphs, "_EMBEDDING_CACHE", {"a": [0.1], "b": [0.2]})
         info = get_embedding_info()
         assert info["cache_size"] == 2

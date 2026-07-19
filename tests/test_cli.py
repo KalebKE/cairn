@@ -1,4 +1,4 @@
-"""OMEGA CLI module tests — unit tests for cli.py functions."""
+"""Cairn CLI module tests — unit tests for cli.py functions."""
 
 import argparse
 import json
@@ -9,15 +9,15 @@ from unittest.mock import patch
 
 import pytest
 
-from omega.cli import (
+from cairn.cli import (
     _CLI_TYPE_MAP,
     _format_age,
     _inject_claude_md,
     _inject_settings_hooks,
     _resolve_python_path,
     _use_json,
-    OMEGA_BEGIN,
-    OMEGA_END,
+    CAIRN_BEGIN,
+    CAIRN_END,
     cmd_doctor,
     cmd_query,
     cmd_remember,
@@ -45,10 +45,10 @@ class TestResolvePythonPath:
         # The result should be some valid python path string
         assert "python" in result.lower() or Path(result).exists()
 
-    def test_uses_venv_executable_when_omega_importable(self, monkeypatch):
-        """Venv executable should be used if omega is importable there."""
+    def test_uses_venv_executable_when_cairn_importable(self, monkeypatch):
+        """Venv executable should be used if cairn is importable there."""
         monkeypatch.setattr(sys, "executable", "/tmp/my_venv/bin/python3")
-        with patch("omega.cli._python_has_omega", return_value=True), \
+        with patch("cairn.cli._python_has_cairn", return_value=True), \
              patch("pathlib.Path.exists", return_value=True):
             result = _resolve_python_path()
             assert result == "/tmp/my_venv/bin/python3"
@@ -56,16 +56,16 @@ class TestResolvePythonPath:
     def test_falls_back_to_which_python3(self, monkeypatch):
         """When sys.executable is empty, should try shutil.which('python3')."""
         monkeypatch.setattr(sys, "executable", "")
-        with patch("omega.cli._python_has_omega", return_value=True), \
-             patch("omega.cli.shutil.which", return_value="/usr/bin/python3"):
+        with patch("cairn.cli._python_has_cairn", return_value=True), \
+             patch("cairn.cli.shutil.which", return_value="/usr/bin/python3"):
             result = _resolve_python_path()
         assert result == "/usr/bin/python3"
 
     def test_fallback_when_nothing_works(self, monkeypatch):
         """When sys.executable is empty and shutil.which returns None, returns fallback."""
         monkeypatch.setattr(sys, "executable", "")
-        with patch("omega.cli.shutil.which", return_value=None):
-            with patch("omega.cli.Path.exists", return_value=False):
+        with patch("cairn.cli.shutil.which", return_value=None):
+            with patch("cairn.cli.Path.exists", return_value=False):
                 result = _resolve_python_path()
         # Should return "python3" as last resort (empty exe or "python3")
         assert result in ("", "python3")
@@ -181,41 +181,41 @@ class TestUseJson:
         assert _use_json(args) is False
 
     def test_true_when_env_var_set(self, monkeypatch):
-        monkeypatch.setenv("OMEGA_JSON", "1")
+        monkeypatch.setenv("CAIRN_JSON", "1")
         args = argparse.Namespace()
         assert _use_json(args) is True
 
     def test_false_when_env_var_not_1(self, monkeypatch):
-        monkeypatch.setenv("OMEGA_JSON", "true")
+        monkeypatch.setenv("CAIRN_JSON", "true")
         args = argparse.Namespace()
         assert _use_json(args) is False
 
     def test_env_var_overrides_missing_flag(self, monkeypatch):
-        monkeypatch.setenv("OMEGA_JSON", "1")
+        monkeypatch.setenv("CAIRN_JSON", "1")
         args = argparse.Namespace()  # no json attr
         assert _use_json(args) is True
 
     def test_flag_works_without_env_var(self, monkeypatch):
-        monkeypatch.delenv("OMEGA_JSON", raising=False)
+        monkeypatch.delenv("CAIRN_JSON", raising=False)
         args = argparse.Namespace(json=True)
         assert _use_json(args) is True
 
 
 # ============================================================================
-# OMEGA_JSON env var integration
+# CAIRN_JSON env var integration
 # ============================================================================
 
 
-class TestOmegaJsonEnvVar:
-    """Tests that OMEGA_JSON=1 env var triggers JSON output on existing commands."""
+class TestCairnJsonEnvVar:
+    """Tests that CAIRN_JSON=1 env var triggers JSON output on existing commands."""
 
     def test_query_respects_env_var(self, capsys, monkeypatch):
-        monkeypatch.setenv("OMEGA_JSON", "1")
+        monkeypatch.setenv("CAIRN_JSON", "1")
         mock_results = [{"content": "env var test", "relevance": 0.9, "event_type": "memory"}]
         args = argparse.Namespace(query_text=["hello"], limit=10, json=False, exact=False)
-        with patch("omega.cli.time") as mock_time:
+        with patch("cairn.cli.time") as mock_time:
             mock_time.monotonic.side_effect = [0.0, 0.02]
-            with patch("omega.bridge.query_structured", return_value=mock_results):
+            with patch("cairn.bridge.query_structured", return_value=mock_results):
                 cmd_query(args)
         out = capsys.readouterr().out
         parsed = json.loads(out)
@@ -239,29 +239,29 @@ class TestInjectClaudeMd:
 
         # Create a minimal fragment file (core)
         self.fragment_text = (
-            "<!-- OMEGA:BEGIN — managed by omega setup, do not edit this block -->\n"
-            "## Memory (OMEGA)\n"
+            "<!-- Cairn:BEGIN — managed by cairn setup, do not edit this block -->\n"
+            "## Memory (Cairn)\n"
             "\n"
-            "- `omega_remember(text)` — user says \"remember\"\n"
-            "<!-- OMEGA:END -->"
+            "- `cairn_remember(text)` — user says \"remember\"\n"
+            "<!-- Cairn:END -->"
         )
         (self.data_dir / "claude-md-fragment.md").write_text(self.fragment_text + "\n")
 
         # Create a Pro fragment file
         self.pro_fragment_text = (
-            "<!-- OMEGA:BEGIN — managed by omega setup, do not edit this block -->\n"
-            "## Memory (OMEGA)\n"
+            "<!-- Cairn:BEGIN — managed by cairn setup, do not edit this block -->\n"
+            "## Memory (Cairn)\n"
             "\n"
-            "- `omega_remember(text)` — user says \"remember\"\n"
+            "- `cairn_remember(text)` — user says \"remember\"\n"
             "- Multi-agent coordination enabled\n"
-            "<!-- OMEGA:END -->"
+            "<!-- Cairn:END -->"
         )
         (self.data_dir / "claude-md-fragment-pro.md").write_text(self.pro_fragment_text + "\n")
 
-        monkeypatch.setattr("omega.cli.CLAUDE_MD_PATH", self.claude_md)
-        monkeypatch.setattr("omega.cli.DATA_DIR", self.data_dir)
+        monkeypatch.setattr("cairn.cli.CLAUDE_MD_PATH", self.claude_md)
+        monkeypatch.setattr("cairn.cli.DATA_DIR", self.data_dir)
         # Default to core (non-commercial)
-        monkeypatch.setattr("omega.cli._has_commercial_modules", lambda: False)
+        monkeypatch.setattr("cairn.cli._has_commercial_modules", lambda: False)
 
     def test_creates_new_file(self, capsys):
         """If CLAUDE.md does not exist, it should be created with the fragment."""
@@ -269,36 +269,36 @@ class TestInjectClaudeMd:
         _inject_claude_md()
         assert self.claude_md.exists()
         content = self.claude_md.read_text()
-        assert OMEGA_BEGIN in content
-        assert OMEGA_END in content
+        assert CAIRN_BEGIN in content
+        assert CAIRN_END in content
         assert "appended" in capsys.readouterr().out
 
     def test_appends_to_existing_file_without_block(self, capsys):
-        """If CLAUDE.md exists but has no OMEGA block, append it."""
+        """If CLAUDE.md exists but has no Cairn block, append it."""
         self.claude_md.parent.mkdir(parents=True, exist_ok=True)
         self.claude_md.write_text("# My Config\n\nSome existing content.\n")
         _inject_claude_md()
         content = self.claude_md.read_text()
         assert "My Config" in content
-        assert OMEGA_BEGIN in content
+        assert CAIRN_BEGIN in content
         assert "appended" in capsys.readouterr().out
 
-    def test_updates_existing_omega_block(self, capsys):
-        """If CLAUDE.md has an existing OMEGA block, replace it."""
+    def test_updates_existing_cairn_block(self, capsys):
+        """If CLAUDE.md has an existing Cairn block, replace it."""
         self.claude_md.parent.mkdir(parents=True, exist_ok=True)
         old_block = (
             "# Config\n\n"
-            "<!-- OMEGA:BEGIN — old version -->\n"
-            "## Memory (OMEGA)\n"
+            "<!-- Cairn:BEGIN — old version -->\n"
+            "## Memory (Cairn)\n"
             "- old instructions\n"
-            "<!-- OMEGA:END -->\n\n"
+            "<!-- Cairn:END -->\n\n"
             "## Other\n"
         )
         self.claude_md.write_text(old_block)
         _inject_claude_md()
         content = self.claude_md.read_text()
         assert "old instructions" not in content
-        assert "omega_remember" in content
+        assert "cairn_remember" in content
         assert "## Other" in content
         assert "updated" in capsys.readouterr().out
 
@@ -311,11 +311,11 @@ class TestInjectClaudeMd:
         assert "already up to date" in capsys.readouterr().out
 
     def test_preserves_plain_memory_section(self, capsys):
-        """Plain '## Memory (OMEGA)' without markers should NOT be replaced — append instead."""
+        """Plain '## Memory (Cairn)' without markers should NOT be replaced — append instead."""
         self.claude_md.parent.mkdir(parents=True, exist_ok=True)
         plain_content = (
             "# Config\n\n"
-            "## Memory (OMEGA)\n"
+            "## Memory (Cairn)\n"
             "- Some user-written instructions\n"
             "- More user stuff\n"
             "\n"
@@ -326,17 +326,17 @@ class TestInjectClaudeMd:
         content = self.claude_md.read_text()
         # User content preserved
         assert "Some user-written instructions" in content
-        # OMEGA block appended (not replacing user content)
-        assert OMEGA_BEGIN in content
+        # Cairn block appended (not replacing user content)
+        assert CAIRN_BEGIN in content
         assert "## Other Section" in content
         assert "appended" in capsys.readouterr().out
 
     def test_backup_on_first_append(self, capsys):
-        """First-time append to existing file should create a .pre-omega backup."""
+        """First-time append to existing file should create a .pre-cairn backup."""
         self.claude_md.parent.mkdir(parents=True, exist_ok=True)
         self.claude_md.write_text("# My Custom Config\n\nImportant stuff.\n")
         _inject_claude_md()
-        backup = self.claude_md.with_suffix(".md.pre-omega")
+        backup = self.claude_md.with_suffix(".md.pre-cairn")
         assert backup.exists()
         assert backup.read_text() == "# My Custom Config\n\nImportant stuff.\n"
         assert "backed up" in capsys.readouterr().out
@@ -346,13 +346,13 @@ class TestInjectClaudeMd:
         self.claude_md.parent.mkdir(parents=True, exist_ok=True)
         self.claude_md.write_text("")
         _inject_claude_md()
-        backup = self.claude_md.with_suffix(".md.pre-omega")
+        backup = self.claude_md.with_suffix(".md.pre-cairn")
         assert not backup.exists()
 
     def test_no_duplicate_backup(self, capsys):
         """If backup already exists, don't overwrite it."""
         self.claude_md.parent.mkdir(parents=True, exist_ok=True)
-        backup = self.claude_md.with_suffix(".md.pre-omega")
+        backup = self.claude_md.with_suffix(".md.pre-cairn")
         backup.parent.mkdir(parents=True, exist_ok=True)
         backup.write_text("original backup content")
         self.claude_md.write_text("# New content\n")
@@ -367,7 +367,7 @@ class TestInjectClaudeMd:
         _inject_claude_md(dry_run=True)
         # File should be unchanged
         assert self.claude_md.read_text() == "# My Config\n"
-        assert OMEGA_BEGIN not in self.claude_md.read_text()
+        assert CAIRN_BEGIN not in self.claude_md.read_text()
         output = capsys.readouterr().out
         assert "dry-run" in output
 
@@ -375,7 +375,7 @@ class TestInjectClaudeMd:
         """Dry run on existing block should not write."""
         self.claude_md.parent.mkdir(parents=True, exist_ok=True)
         old_block = (
-            "<!-- OMEGA:BEGIN — old -->\nold\n<!-- OMEGA:END -->"
+            "<!-- Cairn:BEGIN — old -->\nold\n<!-- Cairn:END -->"
         )
         self.claude_md.write_text(old_block)
         _inject_claude_md(dry_run=True)
@@ -384,7 +384,7 @@ class TestInjectClaudeMd:
 
     def test_pro_fragment_selected(self, monkeypatch, capsys):
         """Commercial modules present should select the Pro fragment."""
-        monkeypatch.setattr("omega.cli._has_commercial_modules", lambda: True)
+        monkeypatch.setattr("cairn.cli._has_commercial_modules", lambda: True)
         _inject_claude_md()
         content = self.claude_md.read_text()
         assert "Multi-agent coordination enabled" in content
@@ -394,7 +394,7 @@ class TestInjectClaudeMd:
         _inject_claude_md()
         content = self.claude_md.read_text()
         assert "Multi-agent coordination enabled" not in content
-        assert "omega_remember" in content
+        assert "cairn_remember" in content
 
 
 # ============================================================================
@@ -411,7 +411,7 @@ class TestInjectSettingsHooks:
         self.settings_json = tmp_path / ".claude" / "settings.json"
         self.data_dir = tmp_path / "data"
         self.data_dir.mkdir()
-        self.hooks_src = tmp_path / "omega" / "hooks"
+        self.hooks_src = tmp_path / "cairn" / "hooks"
         self.hooks_src.mkdir(parents=True)
 
         # Minimal hooks.json manifest (2 events, 2 hooks).
@@ -427,9 +427,9 @@ class TestInjectSettingsHooks:
         (self.data_dir / "hooks.json").write_text(json.dumps(manifest))
         (self.data_dir / "hooks-core.json").write_text(json.dumps(manifest))
 
-        monkeypatch.setattr("omega.cli.SETTINGS_JSON_PATH", self.settings_json)
-        monkeypatch.setattr("omega.cli.DATA_DIR", self.data_dir)
-        monkeypatch.setattr("omega.cli._resolve_python_path", lambda: "/usr/bin/python3")
+        monkeypatch.setattr("cairn.cli.SETTINGS_JSON_PATH", self.settings_json)
+        monkeypatch.setattr("cairn.cli.DATA_DIR", self.data_dir)
+        monkeypatch.setattr("cairn.cli._resolve_python_path", lambda: "/usr/bin/python3")
 
     def test_creates_new_settings_file(self, capsys):
         """If settings.json does not exist, it should be created with hooks."""
@@ -529,9 +529,9 @@ class TestCmdQuery:
         ]
         args = argparse.Namespace(query_text=["test", "query"], limit=5, json=False, exact=False)
 
-        with patch("omega.cli.time") as mock_time:
+        with patch("cairn.cli.time") as mock_time:
             mock_time.monotonic.side_effect = [0.0, 0.05]
-            with patch("omega.bridge.query_structured", return_value=mock_results) as mock_qs:
+            with patch("cairn.bridge.query_structured", return_value=mock_results) as mock_qs:
                 cmd_query(args)
                 mock_qs.assert_called_once_with("test query", limit=5)
 
@@ -545,9 +545,9 @@ class TestCmdQuery:
         ]
         args = argparse.Namespace(query_text=["hello"], limit=10, json=True, exact=False)
 
-        with patch("omega.cli.time") as mock_time:
+        with patch("cairn.cli.time") as mock_time:
             mock_time.monotonic.side_effect = [0.0, 0.02]
-            with patch("omega.bridge.query_structured", return_value=mock_results):
+            with patch("cairn.bridge.query_structured", return_value=mock_results):
                 cmd_query(args)
 
         out = capsys.readouterr().out
@@ -575,7 +575,7 @@ class TestCmdStore:
     def test_stores_memory_with_default_type(self, capsys):
         """Valid content should call bridge.store with correct event_type."""
         args = argparse.Namespace(content=["test", "memory", "content"], type="memory")
-        with patch("omega.bridge.store") as mock_store:
+        with patch("cairn.bridge.store") as mock_store:
             cmd_store(args)
             mock_store.assert_called_once_with(
                 content="test memory content", event_type="memory"
@@ -585,7 +585,7 @@ class TestCmdStore:
     def test_stores_lesson_type(self, capsys):
         """Type 'lesson' should be mapped to 'lesson_learned'."""
         args = argparse.Namespace(content=["important", "lesson"], type="lesson")
-        with patch("omega.bridge.store") as mock_store:
+        with patch("cairn.bridge.store") as mock_store:
             cmd_store(args)
             mock_store.assert_called_once_with(
                 content="important lesson", event_type="lesson_learned"
@@ -595,7 +595,7 @@ class TestCmdStore:
     def test_stores_error_type(self, capsys):
         """Type 'error' should be mapped to 'error_pattern'."""
         args = argparse.Namespace(content=["some", "error"], type="error")
-        with patch("omega.bridge.store") as mock_store:
+        with patch("cairn.bridge.store") as mock_store:
             cmd_store(args)
             mock_store.assert_called_once_with(
                 content="some error", event_type="error_pattern"
@@ -604,7 +604,7 @@ class TestCmdStore:
     def test_json_output_mode(self, capsys):
         """--json flag should output JSON with status and content."""
         args = argparse.Namespace(content=["test", "memory"], type="memory", json=True)
-        with patch("omega.bridge.store") as mock_store:
+        with patch("cairn.bridge.store") as mock_store:
             cmd_store(args)
         out = capsys.readouterr().out
         parsed = json.loads(out)
@@ -613,10 +613,10 @@ class TestCmdStore:
         assert parsed["type"] == "memory"
 
     def test_json_via_env_var(self, capsys, monkeypatch):
-        """OMEGA_JSON=1 should trigger JSON output."""
-        monkeypatch.setenv("OMEGA_JSON", "1")
+        """CAIRN_JSON=1 should trigger JSON output."""
+        monkeypatch.setenv("CAIRN_JSON", "1")
         args = argparse.Namespace(content=["env", "test"], type="decision", json=False)
-        with patch("omega.bridge.store"):
+        with patch("cairn.bridge.store"):
             cmd_store(args)
         out = capsys.readouterr().out
         parsed = json.loads(out)
@@ -643,7 +643,7 @@ class TestCmdRemember:
     def test_remembers_valid_text(self, capsys):
         """Valid text should call bridge.remember."""
         args = argparse.Namespace(text=["I", "prefer", "dark", "mode"])
-        with patch("omega.bridge.remember", return_value={"status": "ok"}) as mock_remember:
+        with patch("cairn.bridge.remember", return_value={"status": "ok"}) as mock_remember:
             cmd_remember(args)
             mock_remember.assert_called_once_with(text="I prefer dark mode")
         assert "Remembered:" in capsys.readouterr().out
@@ -653,7 +653,7 @@ class TestCmdRemember:
         """Output should truncate text at 120 chars."""
         long_text = "x" * 200
         args = argparse.Namespace(text=[long_text])
-        with patch("omega.bridge.remember", return_value={"status": "ok"}):
+        with patch("cairn.bridge.remember", return_value={"status": "ok"}):
             cmd_remember(args)
         out = capsys.readouterr().out
         # The print uses text[:120], so output should not contain the full 200 chars
@@ -662,7 +662,7 @@ class TestCmdRemember:
     def test_json_output_mode(self, capsys):
         """--json flag should output JSON with status and content."""
         args = argparse.Namespace(text=["prefer", "dark", "mode"], json=True)
-        with patch("omega.bridge.remember", return_value={"status": "ok"}):
+        with patch("cairn.bridge.remember", return_value={"status": "ok"}):
             cmd_remember(args)
         out = capsys.readouterr().out
         parsed = json.loads(out)
@@ -670,10 +670,10 @@ class TestCmdRemember:
         assert parsed["content"] == "prefer dark mode"
 
     def test_json_via_env_var(self, capsys, monkeypatch):
-        """OMEGA_JSON=1 should trigger JSON output."""
-        monkeypatch.setenv("OMEGA_JSON", "1")
+        """CAIRN_JSON=1 should trigger JSON output."""
+        monkeypatch.setenv("CAIRN_JSON", "1")
         args = argparse.Namespace(text=["use", "vim"], json=False)
-        with patch("omega.bridge.remember", return_value={"status": "ok"}):
+        with patch("cairn.bridge.remember", return_value={"status": "ok"}):
             cmd_remember(args)
         out = capsys.readouterr().out
         parsed = json.loads(out)
@@ -712,7 +712,7 @@ class TestCmdDoctorBridgeCheck:
     def test_doctor_bridge_import_works(self):
         """cmd_doctor should actually import bridge functions, not just print ok."""
         # Verify the imports are real by importing them ourselves
-        from omega.bridge import status, auto_capture, query
+        from cairn.bridge import status, auto_capture, query
         assert callable(status)
         assert callable(auto_capture)
         assert callable(query)
@@ -727,8 +727,8 @@ class TestModuleLevelImports:
     """Verify datetime imports are at module level, not duplicated inside functions."""
 
     def test_timedelta_available_at_module_level(self):
-        """timedelta should be importable from omega.cli at module level."""
-        import omega.cli as cli
+        """timedelta should be importable from cairn.cli at module level."""
+        import cairn.cli as cli
         assert hasattr(cli, "timedelta")
         from datetime import timedelta as _td
         assert cli.timedelta is _td
@@ -741,17 +741,17 @@ class TestCmdStatus:
         """--json flag should output structured JSON status."""
         import sqlite3
 
-        # Create a minimal omega.db
-        db_path = tmp_path / "omega.db"
+        # Create a minimal cairn.db
+        db_path = tmp_path / "cairn.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("CREATE TABLE memories (id TEXT, content TEXT, metadata TEXT)")
         conn.execute("INSERT INTO memories VALUES ('m1', 'test', '{}')")
         conn.commit()
         conn.close()
 
-        monkeypatch.setattr("omega.cli.OMEGA_DIR", tmp_path)
-        monkeypatch.setattr("omega.cli.BGE_MODEL_DIR", tmp_path / "no-model")
-        monkeypatch.setattr("omega.cli.MINILM_MODEL_DIR", tmp_path / "no-model")
+        monkeypatch.setattr("cairn.cli.CAIRN_DIR", tmp_path)
+        monkeypatch.setattr("cairn.cli.BGE_MODEL_DIR", tmp_path / "no-model")
+        monkeypatch.setattr("cairn.cli.MINILM_MODEL_DIR", tmp_path / "no-model")
 
         args = argparse.Namespace(json=True)
         cmd_status(args)
@@ -762,19 +762,19 @@ class TestCmdStatus:
         assert "size_mb" in parsed
 
     def test_json_via_env_var(self, capsys, tmp_path, monkeypatch):
-        """OMEGA_JSON=1 should trigger JSON output."""
+        """CAIRN_JSON=1 should trigger JSON output."""
         import sqlite3
 
-        db_path = tmp_path / "omega.db"
+        db_path = tmp_path / "cairn.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("CREATE TABLE memories (id TEXT, content TEXT, metadata TEXT)")
         conn.commit()
         conn.close()
 
-        monkeypatch.setenv("OMEGA_JSON", "1")
-        monkeypatch.setattr("omega.cli.OMEGA_DIR", tmp_path)
-        monkeypatch.setattr("omega.cli.BGE_MODEL_DIR", tmp_path / "no-model")
-        monkeypatch.setattr("omega.cli.MINILM_MODEL_DIR", tmp_path / "no-model")
+        monkeypatch.setenv("CAIRN_JSON", "1")
+        monkeypatch.setattr("cairn.cli.CAIRN_DIR", tmp_path)
+        monkeypatch.setattr("cairn.cli.BGE_MODEL_DIR", tmp_path / "no-model")
+        monkeypatch.setattr("cairn.cli.MINILM_MODEL_DIR", tmp_path / "no-model")
 
         args = argparse.Namespace(json=False)
         cmd_status(args)
@@ -784,9 +784,9 @@ class TestCmdStatus:
 
     def test_json_no_database(self, capsys, tmp_path, monkeypatch):
         """JSON output when no database exists should show null backend."""
-        monkeypatch.setattr("omega.cli.OMEGA_DIR", tmp_path)
-        monkeypatch.setattr("omega.cli.BGE_MODEL_DIR", tmp_path / "no-model")
-        monkeypatch.setattr("omega.cli.MINILM_MODEL_DIR", tmp_path / "no-model")
+        monkeypatch.setattr("cairn.cli.CAIRN_DIR", tmp_path)
+        monkeypatch.setattr("cairn.cli.BGE_MODEL_DIR", tmp_path / "no-model")
+        monkeypatch.setattr("cairn.cli.MINILM_MODEL_DIR", tmp_path / "no-model")
 
         args = argparse.Namespace(json=True)
         cmd_status(args)
@@ -808,8 +808,8 @@ class TestCmdDoctorJson:
         """--json flag should output structured JSON with checks array."""
         import sqlite3
 
-        # Create a minimal omega.db with required tables
-        db_path = tmp_path / "omega.db"
+        # Create a minimal cairn.db with required tables
+        db_path = tmp_path / "cairn.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("CREATE TABLE memories (id TEXT, content TEXT, metadata TEXT)")
         conn.execute("CREATE VIRTUAL TABLE memories_fts USING fts5(content)")
@@ -819,10 +819,10 @@ class TestCmdDoctorJson:
         conn.commit()
         conn.close()
 
-        monkeypatch.setattr("omega.cli.OMEGA_DIR", tmp_path)
-        monkeypatch.setattr("omega.cli.BGE_MODEL_DIR", tmp_path / "no-model")
-        monkeypatch.setattr("omega.cli.MINILM_MODEL_DIR", tmp_path / "no-model")
-        monkeypatch.setattr("omega.cli.SETTINGS_JSON_PATH", tmp_path / "no-settings.json")
+        monkeypatch.setattr("cairn.cli.CAIRN_DIR", tmp_path)
+        monkeypatch.setattr("cairn.cli.BGE_MODEL_DIR", tmp_path / "no-model")
+        monkeypatch.setattr("cairn.cli.MINILM_MODEL_DIR", tmp_path / "no-model")
+        monkeypatch.setattr("cairn.cli.SETTINGS_JSON_PATH", tmp_path / "no-settings.json")
 
         args = argparse.Namespace(json=True, client=None)
         with pytest.raises(SystemExit):
@@ -845,7 +845,7 @@ class TestCmdDoctorJson:
         """JSON mode should NOT output any Rich formatting."""
         import sqlite3
 
-        db_path = tmp_path / "omega.db"
+        db_path = tmp_path / "cairn.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("CREATE TABLE memories (id TEXT, content TEXT, metadata TEXT)")
         conn.execute("CREATE VIRTUAL TABLE memories_fts USING fts5(content)")
@@ -853,10 +853,10 @@ class TestCmdDoctorJson:
         conn.commit()
         conn.close()
 
-        monkeypatch.setattr("omega.cli.OMEGA_DIR", tmp_path)
-        monkeypatch.setattr("omega.cli.BGE_MODEL_DIR", tmp_path / "no-model")
-        monkeypatch.setattr("omega.cli.MINILM_MODEL_DIR", tmp_path / "no-model")
-        monkeypatch.setattr("omega.cli.SETTINGS_JSON_PATH", tmp_path / "no-settings.json")
+        monkeypatch.setattr("cairn.cli.CAIRN_DIR", tmp_path)
+        monkeypatch.setattr("cairn.cli.BGE_MODEL_DIR", tmp_path / "no-model")
+        monkeypatch.setattr("cairn.cli.MINILM_MODEL_DIR", tmp_path / "no-model")
+        monkeypatch.setattr("cairn.cli.SETTINGS_JSON_PATH", tmp_path / "no-settings.json")
 
         args = argparse.Namespace(json=True, client=None)
         with pytest.raises(SystemExit):
@@ -864,17 +864,17 @@ class TestCmdDoctorJson:
 
         out = capsys.readouterr().out
         # Should be pure JSON - no Rich panels, no section headers
-        assert "OMEGA Doctor" not in out
+        assert "Cairn Doctor" not in out
         assert "\u2500" not in out
         # Should parse as valid JSON
         parsed = json.loads(out)
         assert parsed is not None
 
     def test_json_via_env_var(self, capsys, tmp_path, monkeypatch):
-        """OMEGA_JSON=1 should trigger JSON output."""
+        """CAIRN_JSON=1 should trigger JSON output."""
         import sqlite3
 
-        db_path = tmp_path / "omega.db"
+        db_path = tmp_path / "cairn.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("CREATE TABLE memories (id TEXT, content TEXT, metadata TEXT)")
         conn.execute("CREATE VIRTUAL TABLE memories_fts USING fts5(content)")
@@ -882,11 +882,11 @@ class TestCmdDoctorJson:
         conn.commit()
         conn.close()
 
-        monkeypatch.setenv("OMEGA_JSON", "1")
-        monkeypatch.setattr("omega.cli.OMEGA_DIR", tmp_path)
-        monkeypatch.setattr("omega.cli.BGE_MODEL_DIR", tmp_path / "no-model")
-        monkeypatch.setattr("omega.cli.MINILM_MODEL_DIR", tmp_path / "no-model")
-        monkeypatch.setattr("omega.cli.SETTINGS_JSON_PATH", tmp_path / "no-settings.json")
+        monkeypatch.setenv("CAIRN_JSON", "1")
+        monkeypatch.setattr("cairn.cli.CAIRN_DIR", tmp_path)
+        monkeypatch.setattr("cairn.cli.BGE_MODEL_DIR", tmp_path / "no-model")
+        monkeypatch.setattr("cairn.cli.MINILM_MODEL_DIR", tmp_path / "no-model")
+        monkeypatch.setattr("cairn.cli.SETTINGS_JSON_PATH", tmp_path / "no-settings.json")
 
         args = argparse.Namespace(json=False, client=None)
         with pytest.raises(SystemExit):

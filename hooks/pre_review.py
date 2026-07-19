@@ -44,7 +44,7 @@ def main():
             if not api_key:
                 try:
                     import json
-                    with open(os.path.expanduser("~/.omega/secrets.json")) as f:
+                    with open(os.path.expanduser("~/.cairn/secrets.json")) as f:
                         api_key = json.load(f).get("ANTHROPIC_API_KEY")
                 except Exception:
                     pass

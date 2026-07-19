@@ -30,12 +30,12 @@ jobs:
       - name: Cache embedding model
         uses: actions/cache@v4
         with:
-          path: ~/.cache/omega/models/bge-small-en-v1.5-onnx
+          path: ~/.cache/cairn/models/bge-small-en-v1.5-onnx
           key: bge-small-en-v1.5-onnx
 
       - name: Download embedding model
         run: |
-          MODEL_DIR=~/.cache/omega/models/bge-small-en-v1.5-onnx
+          MODEL_DIR=~/.cache/cairn/models/bge-small-en-v1.5-onnx
           if [ ! -f "$MODEL_DIR/model.onnx" ]; then
             mkdir -p "$MODEL_DIR"
             HF=https://huggingface.co/BAAI/bge-small-en-v1.5/resolve/main

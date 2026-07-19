@@ -1,4 +1,4 @@
-"""Tests for OMEGA Phase 3 — Intelligence Layer.
+"""Tests for Cairn Phase 3 — Intelligence Layer.
 
 Tests constraint enforcement, cross-project learning, and smart surfacing.
 """
@@ -7,24 +7,24 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-# Ensure omega package is importable
+# Ensure cairn package is importable
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
 class TestConstraintEnforcement:
     """Test per-project constraint loading and matching."""
 
-    def test_no_constraints_dir(self, tmp_omega_dir):
+    def test_no_constraints_dir(self, tmp_cairn_dir):
         """No constraints dir → empty results."""
-        from omega.bridge import check_constraints
-        with patch("omega.bridge.CONSTRAINTS_DIR", tmp_omega_dir / "constraints"):
+        from cairn.bridge import check_constraints
+        with patch("cairn.bridge.CONSTRAINTS_DIR", tmp_cairn_dir / "constraints"):
             result = check_constraints("/some/file.py")
         assert result == []
 
-    def test_global_constraints(self, tmp_omega_dir):
+    def test_global_constraints(self, tmp_cairn_dir):
         """Global constraints match files by pattern."""
-        from omega.bridge import check_constraints
-        cdir = tmp_omega_dir / "constraints"
+        from cairn.bridge import check_constraints
+        cdir = tmp_cairn_dir / "constraints"
         cdir.mkdir()
         (cdir / "global.json").write_text(json.dumps({
             "rules": [
@@ -33,17 +33,17 @@ class TestConstraintEnforcement:
             ]
         }))
 
-        with patch("omega.bridge.CONSTRAINTS_DIR", cdir):
+        with patch("cairn.bridge.CONSTRAINTS_DIR", cdir):
             matches = check_constraints("/project/main.py")
         assert len(matches) == 1
         assert matches[0]["constraint"] == "Use type hints"
         assert matches[0]["severity"] == "warn"
         assert matches[0]["source"] == "global"
 
-    def test_project_constraints(self, tmp_omega_dir):
+    def test_project_constraints(self, tmp_cairn_dir):
         """Project-specific constraints loaded by project name."""
-        from omega.bridge import check_constraints
-        cdir = tmp_omega_dir / "constraints"
+        from cairn.bridge import check_constraints
+        cdir = tmp_cairn_dir / "constraints"
         cdir.mkdir()
         (cdir / "myapp.json").write_text(json.dumps({
             "rules": [
@@ -51,47 +51,47 @@ class TestConstraintEnforcement:
             ]
         }))
 
-        with patch("omega.bridge.CONSTRAINTS_DIR", cdir):
+        with patch("cairn.bridge.CONSTRAINTS_DIR", cdir):
             matches = check_constraints("/Projects/myapp/Component.tsx", project="/Projects/myapp")
         assert len(matches) == 1
         assert matches[0]["constraint"] == "Use React.FC"
         assert matches[0]["source"] == "myapp"
 
-    def test_merged_global_and_project(self, tmp_omega_dir):
+    def test_merged_global_and_project(self, tmp_cairn_dir):
         """Global + project constraints both surface."""
-        from omega.bridge import check_constraints
-        cdir = tmp_omega_dir / "constraints"
+        from cairn.bridge import check_constraints
+        cdir = tmp_cairn_dir / "constraints"
         cdir.mkdir()
         (cdir / "global.json").write_text(json.dumps({
             "rules": [{"pattern": "*.py", "constraint": "Global rule", "severity": "warn"}]
         }))
-        (cdir / "omega.json").write_text(json.dumps({
+        (cdir / "cairn.json").write_text(json.dumps({
             "rules": [{"pattern": "*.py", "constraint": "Project rule", "severity": "error"}]
         }))
 
-        with patch("omega.bridge.CONSTRAINTS_DIR", cdir):
-            matches = check_constraints("/Projects/omega/bridge.py", project="/Projects/omega")
+        with patch("cairn.bridge.CONSTRAINTS_DIR", cdir):
+            matches = check_constraints("/Projects/cairn/bridge.py", project="/Projects/cairn")
         assert len(matches) == 2
         sources = {m["source"] for m in matches}
-        assert sources == {"global", "omega"}
+        assert sources == {"global", "cairn"}
 
-    def test_no_match(self, tmp_omega_dir):
+    def test_no_match(self, tmp_cairn_dir):
         """Rules that don't match the file return empty."""
-        from omega.bridge import check_constraints
-        cdir = tmp_omega_dir / "constraints"
+        from cairn.bridge import check_constraints
+        cdir = tmp_cairn_dir / "constraints"
         cdir.mkdir()
         (cdir / "global.json").write_text(json.dumps({
             "rules": [{"pattern": "*.sql", "constraint": "SQL rule", "severity": "warn"}]
         }))
 
-        with patch("omega.bridge.CONSTRAINTS_DIR", cdir):
+        with patch("cairn.bridge.CONSTRAINTS_DIR", cdir):
             matches = check_constraints("/project/main.py")
         assert matches == []
 
-    def test_list_constraints(self, tmp_omega_dir):
+    def test_list_constraints(self, tmp_cairn_dir):
         """list_constraints returns all rules."""
-        from omega.bridge import list_constraints
-        cdir = tmp_omega_dir / "constraints"
+        from cairn.bridge import list_constraints
+        cdir = tmp_cairn_dir / "constraints"
         cdir.mkdir()
         (cdir / "global.json").write_text(json.dumps({
             "rules": [
@@ -100,17 +100,17 @@ class TestConstraintEnforcement:
             ]
         }))
 
-        with patch("omega.bridge.CONSTRAINTS_DIR", cdir):
+        with patch("cairn.bridge.CONSTRAINTS_DIR", cdir):
             info = list_constraints()
         assert info["count"] == 2
         assert len(info["rules"]) == 2
 
-    def test_save_constraints(self, tmp_omega_dir):
+    def test_save_constraints(self, tmp_cairn_dir):
         """save_constraints writes rules to disk."""
-        from omega.bridge import save_constraints, list_constraints
-        cdir = tmp_omega_dir / "constraints"
+        from cairn.bridge import save_constraints, list_constraints
+        cdir = tmp_cairn_dir / "constraints"
 
-        with patch("omega.bridge.CONSTRAINTS_DIR", cdir):
+        with patch("cairn.bridge.CONSTRAINTS_DIR", cdir):
             result = save_constraints(
                 [{"pattern": "*.py", "constraint": "Test rule", "severity": "warn"}],
                 project="/Projects/testproj",
@@ -120,30 +120,30 @@ class TestConstraintEnforcement:
         assert (cdir / "testproj.json").exists()
 
         # Verify round-trip
-        with patch("omega.bridge.CONSTRAINTS_DIR", cdir):
+        with patch("cairn.bridge.CONSTRAINTS_DIR", cdir):
             info = list_constraints(project="/Projects/testproj")
         assert info["count"] == 1
         assert info["rules"][0]["constraint"] == "Test rule"
 
-    def test_save_global_constraints(self, tmp_omega_dir):
+    def test_save_global_constraints(self, tmp_cairn_dir):
         """save_constraints without project saves to global.json."""
-        from omega.bridge import save_constraints
-        cdir = tmp_omega_dir / "constraints"
+        from cairn.bridge import save_constraints
+        cdir = tmp_cairn_dir / "constraints"
 
-        with patch("omega.bridge.CONSTRAINTS_DIR", cdir):
+        with patch("cairn.bridge.CONSTRAINTS_DIR", cdir):
             result = save_constraints(
                 [{"pattern": "*.md", "constraint": "No TODOs", "severity": "warn"}],
             )
         assert "global.json" in result["saved"]
 
-    def test_malformed_json_ignored(self, tmp_omega_dir):
+    def test_malformed_json_ignored(self, tmp_cairn_dir):
         """Malformed constraint files don't crash, return empty."""
-        from omega.bridge import check_constraints
-        cdir = tmp_omega_dir / "constraints"
+        from cairn.bridge import check_constraints
+        cdir = tmp_cairn_dir / "constraints"
         cdir.mkdir()
         (cdir / "global.json").write_text("not valid json{{{")
 
-        with patch("omega.bridge.CONSTRAINTS_DIR", cdir):
+        with patch("cairn.bridge.CONSTRAINTS_DIR", cdir):
             matches = check_constraints("/project/main.py")
         assert matches == []
 
@@ -153,7 +153,7 @@ class TestCrossProjectLessons:
 
     def test_cross_project_basic(self, store):
         """Lessons from different projects surface with project counts."""
-        from omega.bridge import get_cross_project_lessons
+        from cairn.bridge import get_cross_project_lessons
 
         # Store lessons from different projects
         store.store(
@@ -173,7 +173,7 @@ class TestCrossProjectLessons:
             },
         )
 
-        with patch("omega.bridge._get_store", return_value=store):
+        with patch("cairn.bridge._get_store", return_value=store):
             lessons = get_cross_project_lessons(limit=10)
 
         assert len(lessons) >= 1
@@ -184,7 +184,7 @@ class TestCrossProjectLessons:
 
     def test_exclude_project(self, store):
         """exclude_project filters out lessons from that project."""
-        from omega.bridge import get_cross_project_lessons
+        from cairn.bridge import get_cross_project_lessons
 
         store.store(
             content="Lesson from alpha project",
@@ -203,7 +203,7 @@ class TestCrossProjectLessons:
             },
         )
 
-        with patch("omega.bridge._get_store", return_value=store):
+        with patch("cairn.bridge._get_store", return_value=store):
             lessons = get_cross_project_lessons(exclude_project="/Projects/alpha")
 
         for lesson in lessons:
@@ -211,16 +211,16 @@ class TestCrossProjectLessons:
 
     def test_empty_when_no_lessons(self, store):
         """Returns empty list when no lessons exist."""
-        from omega.bridge import get_cross_project_lessons
+        from cairn.bridge import get_cross_project_lessons
 
-        with patch("omega.bridge._get_store", return_value=store):
+        with patch("cairn.bridge._get_store", return_value=store):
             lessons = get_cross_project_lessons()
 
         assert lessons == []
 
     def test_task_filter(self, store):
         """Task filter narrows lesson search."""
-        from omega.bridge import get_cross_project_lessons
+        from cairn.bridge import get_cross_project_lessons
 
         store.store(
             content="Use connection pooling for database access",
@@ -231,7 +231,7 @@ class TestCrossProjectLessons:
             },
         )
 
-        with patch("omega.bridge._get_store", return_value=store):
+        with patch("cairn.bridge._get_store", return_value=store):
             lessons = get_cross_project_lessons(task="database optimization")
 
         # Should still return results (task is just a search hint)
@@ -243,23 +243,23 @@ class TestMCPHandlers:
 
     def test_handler_count(self):
         """Verify handlers include expected tools."""
-        from omega.server.handlers import HANDLERS
-        assert "omega_backup" in HANDLERS  # merged export+import into backup
-        assert "omega_lessons" not in HANDLERS  # removed — auto-surfaced via hooks
-        assert len(HANDLERS) >= 29  # 29 base + composite handlers (omega_memory, omega_maintain, omega_stats, omega_remind)
+        from cairn.server.handlers import HANDLERS
+        assert "cairn_backup" in HANDLERS  # merged export+import into backup
+        assert "cairn_lessons" not in HANDLERS  # removed — auto-surfaced via hooks
+        assert len(HANDLERS) >= 29  # 29 base + composite handlers (cairn_memory, cairn_maintain, cairn_stats, cairn_remind)
 
     def test_schema_count(self):
         """Verify schemas include expected tools."""
-        from omega.server.tool_schemas import TOOL_SCHEMAS
+        from cairn.server.tool_schemas import TOOL_SCHEMAS
         schema_names = {s["name"] for s in TOOL_SCHEMAS}
-        assert "omega_lessons" not in schema_names  # removed — auto-surfaced via hooks
-        assert "omega_maintain" in schema_names
+        assert "cairn_lessons" not in schema_names  # removed — auto-surfaced via hooks
+        assert "cairn_maintain" in schema_names
         assert len(TOOL_SCHEMAS) >= 13  # at least 13 consolidated action-discriminated composites
 
     def test_handler_schema_parity(self):
         """Every schema has a matching handler."""
-        from omega.server.handlers import HANDLERS
-        from omega.server.tool_schemas import TOOL_SCHEMAS
+        from cairn.server.handlers import HANDLERS
+        from cairn.server.tool_schemas import TOOL_SCHEMAS
         schema_names = {s["name"] for s in TOOL_SCHEMAS}
         for name in schema_names:
             assert name in HANDLERS, f"Schema {name} has no handler"

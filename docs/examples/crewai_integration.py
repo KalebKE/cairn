@@ -1,19 +1,19 @@
-"""Example: Using OMEGA as the memory backend for CrewAI agents.
+"""Example: Using Cairn as the memory backend for CrewAI agents.
 
-OMEGA provides persistent, local-first memory with semantic search,
+Cairn provides persistent, local-first memory with semantic search,
 auto-deduplication, and contradiction detection -- all without API keys.
 
 Requirements:
-    pip install omega-memory[server] crewai
-    omega setup
+    pip install cairn[server] crewai
+    cairn setup
 """
 
 from crewai import Agent, Crew, Task, Process
 from crewai.memory import Memory
-from omega.integrations.crewai import OmegaStorageBackend
+from cairn.integrations.crewai import CairnStorageBackend
 
-# Create the OMEGA-backed memory
-backend = OmegaStorageBackend(project="my-project")
+# Create the Cairn-backed memory
+backend = CairnStorageBackend(project="my-project")
 memory = Memory(storage=backend)
 
 # Create agents that share persistent memory
@@ -44,7 +44,7 @@ writing_task = Task(
     expected_output="A well-written blog post about AI agent memory systems.",
 )
 
-# Create the crew with OMEGA memory
+# Create the crew with Cairn memory
 crew = Crew(
     agents=[researcher, writer],
     tasks=[research_task, writing_task],
@@ -53,6 +53,6 @@ crew = Crew(
     verbose=True,
 )
 
-# Run the crew -- memories persist across runs via OMEGA
+# Run the crew -- memories persist across runs via Cairn
 result = crew.kickoff()
 print(result)

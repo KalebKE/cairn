@@ -1,4 +1,4 @@
-"""Tests for mode="regex" on omega_query.
+"""Tests for mode="regex" on cairn_query.
 
 Python-side re filtering over a recency-ordered SQL scan (no REGEXP UDF):
 compile once, reject bad/catastrophic patterns before any scan, cap scanned
@@ -6,19 +6,19 @@ rows, honor the shared active-status predicate.
 """
 import pytest
 
-from omega.server.handlers import handle_omega_query
+from cairn.server.handlers import handle_cairn_query
 
 
 def _seed(store):
     ids = {}
     ids["rollup"] = store.store(
         content="Rollup marker last-rollup written before the work runs",
-        metadata={"event_type": "decision", "project": "/p/omega"},
+        metadata={"event_type": "decision", "project": "/p/cairn"},
         skip_inference=True,
     )
     ids["watchdog"] = store.store(
         content="Watchdog rebinds hook.sock after external unlink",
-        metadata={"event_type": "lesson_learned", "project": "/p/omega"},
+        metadata={"event_type": "lesson_learned", "project": "/p/cairn"},
         skip_inference=True,
     )
     ids["other"] = store.store(
@@ -95,13 +95,13 @@ class TestRegexQueryMode:
     @pytest.fixture
     def mock_get_store(self, store):
         from unittest.mock import patch
-        with patch("omega.bridge._get_store", return_value=store):
+        with patch("cairn.bridge._get_store", return_value=store):
             yield store
 
     @pytest.mark.asyncio
     async def test_regex_mode_basic(self, mock_get_store):
         ids = _seed(mock_get_store)
-        result = await handle_omega_query({"query": r"hook\.sock", "mode": "regex"})
+        result = await handle_cairn_query({"query": r"hook\.sock", "mode": "regex"})
         assert not result.get("isError")
         text = result["content"][0]["text"]
         assert ids["watchdog"] in text
@@ -109,7 +109,7 @@ class TestRegexQueryMode:
 
     @pytest.mark.asyncio
     async def test_regex_mode_invalid_pattern_clean_error(self, mock_get_store):
-        result = await handle_omega_query({"query": r"([unclosed", "mode": "regex"})
+        result = await handle_cairn_query({"query": r"([unclosed", "mode": "regex"})
         assert result.get("isError")
         text = result["content"][0]["text"]
         assert "Invalid regex" in text

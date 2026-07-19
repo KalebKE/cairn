@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a bug in OMEGA
+about: Report a bug in Cairn
 title: '[Bug] '
 labels: bug
 assignees: ''
@@ -20,7 +20,7 @@ What you expected to happen.
 **Environment**
 - OS: [e.g., macOS 14.5]
 - Python: [e.g., 3.12]
-- OMEGA version: [e.g., 0.5.0]
+- Cairn version: [e.g., 0.5.0]
 - Client: [e.g., Claude Code]
 
 **Additional context**

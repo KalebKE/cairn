@@ -31,10 +31,10 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# OMEGA runtime
+# Cairn runtime
 *.db
 *.db-journal
-.omega/
+.cairn/
 
 # Environment
 .env

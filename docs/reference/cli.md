@@ -1,17 +1,17 @@
 # CLI Commands
 
-All commands are invoked as `omega <command>`. The CLI is implemented in `src/omega/cli.py`.
+All commands are invoked as `cairn <command>`. The CLI is implemented in `src/cairn/cli.py`.
 
 ---
 
 ## Core Commands
 
-### `omega setup`
+### `cairn setup`
 
-Set up OMEGA: create directories, download embedding model, initialize database, register MCP server, install hooks, update CLAUDE.md.
+Set up Cairn: create directories, download embedding model, initialize database, register MCP server, install hooks, update CLAUDE.md.
 
 ```
-omega setup [--download-model] [--client {claude-code}]
+cairn setup [--download-model] [--client {claude-code}]
 ```
 
 | Option | Description |
@@ -19,44 +19,44 @@ omega setup [--download-model] [--client {claude-code}]
 | `--download-model` | Download bge-small-en-v1.5 ONNX model (upgrade from all-MiniLM-L6-v2) |
 | `--client {claude-code}` | Configure a specific client (MCP registration, hooks) |
 
-### `omega doctor`
+### `cairn doctor`
 
 Verify installation health: imports, embedding model, database, MCP registration, hooks.
 
 ```
-omega doctor [--client {claude-code}]
+cairn doctor [--client {claude-code}]
 ```
 
 | Option | Description |
 |--------|-------------|
 | `--client {claude-code}` | Include client-specific checks (MCP registration, hooks) |
 
-### `omega status`
+### `cairn status`
 
 Show memory count, database size, model status, edge count.
 
 ```
-omega status
+cairn status
 ```
 
-### `omega serve`
+### `cairn serve`
 
 Run the MCP server in stdio mode. Used by Claude Code internally -- not normally called directly.
 
 ```
-omega serve
+cairn serve
 ```
 
 ---
 
 ## Memory Commands
 
-### `omega query`
+### `cairn query`
 
 Search memories by semantic similarity or exact phrase match.
 
 ```
-omega query <text> [--exact] [--limit N] [--json]
+cairn query <text> [--exact] [--limit N] [--json]
 ```
 
 | Option | Description |
@@ -69,16 +69,16 @@ omega query <text> [--exact] [--limit N] [--json]
 Example:
 
 ```
-omega query "database migration pattern" --limit 5
-omega query "threading deadlock" --exact
+cairn query "database migration pattern" --limit 5
+cairn query "threading deadlock" --exact
 ```
 
-### `omega store`
+### `cairn store`
 
 Store a memory with a specified type.
 
 ```
-omega store <content> [-t TYPE]
+cairn store <content> [-t TYPE]
 ```
 
 | Option | Description |
@@ -89,30 +89,30 @@ omega store <content> [-t TYPE]
 Example:
 
 ```
-omega store "Always use absolute paths in hooks" -t lesson
-omega store "Switched from PyPDF2 to Docling for PDF extraction" -t decision
+cairn store "Always use absolute paths in hooks" -t lesson
+cairn store "Switched from PyPDF2 to Docling for PDF extraction" -t decision
 ```
 
-### `omega remember`
+### `cairn remember`
 
 Store a permanent user preference.
 
 ```
-omega remember <text>
+cairn remember <text>
 ```
 
 Example:
 
 ```
-omega remember "I prefer tabs over spaces"
+cairn remember "I prefer tabs over spaces"
 ```
 
-### `omega timeline`
+### `cairn timeline`
 
 Show memory timeline grouped by day.
 
 ```
-omega timeline [--days N] [--json]
+cairn timeline [--days N] [--json]
 ```
 
 | Option | Description |
@@ -124,24 +124,24 @@ omega timeline [--days N] [--json]
 
 ## Maintenance Commands
 
-### `omega consolidate`
+### `cairn consolidate`
 
 Deduplicate, prune stale memories, cap session summaries, clean orphaned edges.
 
 ```
-omega consolidate [--prune-days N]
+cairn consolidate [--prune-days N]
 ```
 
 | Option | Description |
 |--------|-------------|
 | `--prune-days N` | Prune entries older than N days with zero access (default: 30) |
 
-### `omega compact`
+### `cairn compact`
 
 Cluster and summarize related memories to reduce noise.
 
 ```
-omega compact [-t TYPE] [--threshold FLOAT] [--dry-run]
+cairn compact [-t TYPE] [--threshold FLOAT] [--dry-run]
 ```
 
 | Option | Description |
@@ -150,44 +150,44 @@ omega compact [-t TYPE] [--threshold FLOAT] [--dry-run]
 | `--threshold` | Similarity threshold for clustering (default: 0.60) |
 | `--dry-run` | Preview clusters without compacting |
 
-### `omega backup`
+### `cairn backup`
 
-Back up omega.db to ~/.omega/backups/ (keeps last 5).
-
-```
-omega backup
-```
-
-### `omega validate`
-
-Validate omega.db integrity (SQLite + FTS5 + vec index).
+Back up cairn.db to ~/.cairn/backups/ (keeps last 5).
 
 ```
-omega validate [--repair]
+cairn backup
+```
+
+### `cairn validate`
+
+Validate cairn.db integrity (SQLite + FTS5 + vec index).
+
+```
+cairn validate [--repair]
 ```
 
 | Option | Description |
 |--------|-------------|
 | `--repair` | Attempt to repair FTS5 index if corrupted |
 
-### `omega stats`
+### `cairn stats`
 
 Show memory type distribution and health summary.
 
 ```
-omega stats [--json]
+cairn stats [--json]
 ```
 
 | Option | Description |
 |--------|-------------|
 | `--json` | Output as JSON |
 
-### `omega activity`
+### `cairn activity`
 
 Show recent session activity overview.
 
 ```
-omega activity [--days N] [--json]
+cairn activity [--days N] [--json]
 ```
 
 | Option | Description |
@@ -195,12 +195,12 @@ omega activity [--days N] [--json]
 | `--days N` | Number of days to show (default: 7) |
 | `--json` | Output as JSON |
 
-### `omega logs`
+### `cairn logs`
 
 Show recent hook errors from hooks.log.
 
 ```
-omega logs [-n LINES]
+cairn logs [-n LINES]
 ```
 
 | Option | Description |
@@ -211,32 +211,32 @@ omega logs [-n LINES]
 
 ## Knowledge Commands
 
-### `omega knowledge scan`
+### `cairn knowledge scan`
 
-Scan ~/.omega/documents/ for new or changed files and auto-ingest. Alias: `omega kb scan`.
+Scan ~/.cairn/documents/ for new or changed files and auto-ingest. Alias: `cairn kb scan`.
 
 ```
-omega knowledge scan [--dir PATH]
+cairn knowledge scan [--dir PATH]
 ```
 
 | Option | Description |
 |--------|-------------|
-| `--dir` | Custom directory to scan (default: ~/.omega/documents/) |
+| `--dir` | Custom directory to scan (default: ~/.cairn/documents/) |
 
-### `omega knowledge list`
+### `cairn knowledge list`
 
 List all ingested documents with chunk counts and metadata.
 
 ```
-omega knowledge list
+cairn knowledge list
 ```
 
-### `omega knowledge search`
+### `cairn knowledge search`
 
 Search across ingested documents using vector similarity.
 
 ```
-omega knowledge search <query> [--limit N]
+cairn knowledge search <query> [--limit N]
 ```
 
 | Option | Description |
@@ -248,12 +248,12 @@ omega knowledge search <query> [--limit N]
 
 ## Cloud Commands
 
-### `omega cloud setup`
+### `cairn cloud setup`
 
 Configure Supabase connection for cloud sync.
 
 ```
-omega cloud setup [--url URL] [--key KEY] [--service-key KEY]
+cairn cloud setup [--url URL] [--key KEY] [--service-key KEY]
 ```
 
 | Option | Description |
@@ -262,64 +262,64 @@ omega cloud setup [--url URL] [--key KEY] [--service-key KEY]
 | `--key` | Supabase anon key |
 | `--service-key` | Supabase service role key (optional) |
 
-### `omega cloud sync`
+### `cairn cloud sync`
 
 Sync local data to Supabase cloud.
 
 ```
-omega cloud sync
+cairn cloud sync
 ```
 
-### `omega cloud pull`
+### `cairn cloud pull`
 
 Pull memories and documents from Supabase cloud.
 
 ```
-omega cloud pull
+cairn cloud pull
 ```
 
-### `omega cloud status`
+### `cairn cloud status`
 
 Show cloud sync status.
 
 ```
-omega cloud status
+cairn cloud status
 ```
 
-### `omega cloud schema`
+### `cairn cloud schema`
 
 Print the Supabase SQL schema for manual setup.
 
 ```
-omega cloud schema
+cairn cloud schema
 ```
 
-### `omega cloud verify`
+### `cairn cloud verify`
 
 Verify the Supabase connection is working.
 
 ```
-omega cloud verify
+cairn cloud verify
 ```
 
 ---
 
 ## Mobile Commands
 
-### `omega mobile setup`
+### `cairn mobile setup`
 
 Print setup instructions for mobile access via mcp-proxy + Tailscale.
 
 ```
-omega mobile setup
+cairn mobile setup
 ```
 
-### `omega mobile serve`
+### `cairn mobile serve`
 
 Start an mcp-proxy HTTP server for mobile access.
 
 ```
-omega mobile serve [--port PORT] [--host HOST]
+cairn mobile serve [--port PORT] [--host HOST]
 ```
 
 | Option | Description |
@@ -331,30 +331,30 @@ omega mobile serve [--port PORT] [--host HOST]
 
 ## Migration Commands
 
-### `omega migrate`
+### `cairn migrate`
 
-Copy MAGMA data to OMEGA (non-destructive legacy migration).
+Copy MAGMA data to Cairn (non-destructive legacy migration).
 
 ```
-omega migrate
+cairn migrate
 ```
 
-### `omega migrate-db`
+### `cairn migrate-db`
 
 Migrate legacy JSON graphs to the SQLite backend.
 
 ```
-omega migrate-db [--force]
+cairn migrate-db [--force]
 ```
 
 | Option | Description |
 |--------|-------------|
 | `--force` | Overwrite existing SQLite database |
 
-### `omega reingest`
+### `cairn reingest`
 
 Reload store.jsonl entries into the graph system.
 
 ```
-omega reingest
+cairn reingest
 ```

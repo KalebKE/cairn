@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert bge-reranker-v2-m3 to ONNX for use as OMEGA's cross-encoder reranker.
+"""Convert bge-reranker-v2-m3 to ONNX for use as Cairn's cross-encoder reranker.
 
 bge-reranker-v2-m3 is a general-purpose reranker (not web-search-specific like MS-MARCO),
 which performs better on conversational memory queries.
@@ -9,8 +9,8 @@ Requires: pip install optimum[exporters] torch transformers
 
 Usage:
     python3 scripts/convert_bge_reranker.py
-    # Then set: export OMEGA_RERANKER_MODEL=bge-reranker-v2-m3
-    # Or restart OMEGA — it auto-detects the model if present.
+    # Then set: export CAIRN_RERANKER_MODEL=bge-reranker-v2-m3
+    # Or restart Cairn — it auto-detects the model if present.
 """
 import os
 import subprocess
@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 MODEL_ID = "BAAI/bge-reranker-v2-m3"
-OUTPUT_DIR = Path(os.path.expanduser("~/.cache/omega/models/bge-reranker-v2-m3-onnx"))
+OUTPUT_DIR = Path(os.path.expanduser("~/.cache/cairn/models/bge-reranker-v2-m3-onnx"))
 
 
 def convert():
@@ -50,7 +50,7 @@ def convert():
 
     if (OUTPUT_DIR / "model.onnx").exists():
         print(f"\nModel converted to {OUTPUT_DIR}")
-        print("Set OMEGA_RERANKER_MODEL=bge-reranker-v2-m3 or restart OMEGA.")
+        print("Set CAIRN_RERANKER_MODEL=bge-reranker-v2-m3 or restart Cairn.")
         return True
 
     print("Export completed but model.onnx not found")
@@ -108,7 +108,7 @@ def manual_convert():
     if onnx_path.exists():
         size_mb = onnx_path.stat().st_size / (1024 * 1024)
         print(f"\nModel converted: {onnx_path} ({size_mb:.1f} MB)")
-        print("Set OMEGA_RERANKER_MODEL=bge-reranker-v2-m3 or restart OMEGA.")
+        print("Set CAIRN_RERANKER_MODEL=bge-reranker-v2-m3 or restart Cairn.")
         return True
 
     print("Export failed — model.onnx not created")

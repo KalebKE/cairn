@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
-    <title>OMEGA Memory</title>
-    <organization>com.omega</organization>
+    <title>Cairn</title>
+    <organization>com.cairn</organization>
     <domains enable_currentUserHome="true"/>
     <options customize="never" require-scripts="false" hostArchitectures="arm64,x86_64"/>
 
@@ -17,20 +17,20 @@
     <license file="LICENSE"/>
     <conclusion file="conclusion.html" mime-type="text/html"/>
 
-    <!-- Single choice: install OMEGA -->
+    <!-- Single choice: install Cairn -->
     <choices-outline>
         <line choice="default">
-            <line choice="com.omega.memory"/>
+            <line choice="com.cairn.memory"/>
         </line>
     </choices-outline>
 
     <choice id="default"/>
-    <choice id="com.omega.memory" visible="false">
-        <pkg-ref id="com.omega.memory"/>
+    <choice id="com.cairn.memory" visible="false">
+        <pkg-ref id="com.cairn.memory"/>
     </choice>
 
-    <pkg-ref id="com.omega.memory"
+    <pkg-ref id="com.cairn.memory"
              version="1.5.4"
              onConclusion="none"
-             auth="none">omega-memory.pkg</pkg-ref>
+             auth="none">cairn.pkg</pkg-ref>
 </installer-gui-script>

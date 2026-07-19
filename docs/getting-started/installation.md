@@ -1,6 +1,6 @@
 ---
 title: Installation
-description: Install OMEGA and set up persistent memory for Claude Code
+description: Install Cairn and set up persistent memory for Claude Code
 ---
 
 # Installation
@@ -10,7 +10,7 @@ description: Install OMEGA and set up persistent memory for Claude Code
 === "Core (memory + coordination)"
 
     ```bash
-    pip install omega-memory
+    pip install cairn
     ```
 
     Includes all 24 memory tools and 28 coordination tools. This is everything most users need.
@@ -18,7 +18,7 @@ description: Install OMEGA and set up persistent memory for Claude Code
 === "With LLM routing"
 
     ```bash
-    pip install omega-memory[router]
+    pip install cairn[router]
     ```
 
     Adds 10 routing tools to send prompts to the optimal model across Anthropic, OpenAI, Google, Groq, and xAI.
@@ -26,7 +26,7 @@ description: Install OMEGA and set up persistent memory for Claude Code
 === "With entity registry"
 
     ```bash
-    pip install omega-memory[entity]
+    pip install cairn[entity]
     ```
 
     Adds 8 entity tools for tracking companies, LLCs, and organizational structures. Includes encryption support.
@@ -34,7 +34,7 @@ description: Install OMEGA and set up persistent memory for Claude Code
 === "With PDF ingestion"
 
     ```bash
-    pip install omega-memory[knowledge-pdf]
+    pip install cairn[knowledge-pdf]
     ```
 
     Adds document ingestion with Docling for high-quality PDF extraction with native markdown output.
@@ -42,13 +42,13 @@ description: Install OMEGA and set up persistent memory for Claude Code
     For a lighter alternative using pdfplumber only:
 
     ```bash
-    pip install omega-memory[knowledge-pdf-lite]
+    pip install cairn[knowledge-pdf-lite]
     ```
 
 === "With encryption"
 
     ```bash
-    pip install omega-memory[encrypt]
+    pip install cairn[encrypt]
     ```
 
     Adds AES-256 encrypted secure profile storage with macOS Keychain integration.
@@ -56,7 +56,7 @@ description: Install OMEGA and set up persistent memory for Claude Code
 === "With cloud sync"
 
     ```bash
-    pip install omega-memory[cloud]
+    pip install cairn[cloud]
     ```
 
     Adds Supabase cloud sync for cross-device memory sharing.
@@ -64,7 +64,7 @@ description: Install OMEGA and set up persistent memory for Claude Code
 === "Everything"
 
     ```bash
-    pip install omega-memory[full]
+    pip install cairn[full]
     ```
 
     Installs all optional modules: router, entity, knowledge-pdf, encrypt, and cloud.
@@ -72,10 +72,10 @@ description: Install OMEGA and set up persistent memory for Claude Code
 ## Install from source
 
 ```bash
-git clone https://github.com/omega-memory/omega.git
-cd omega
+git clone https://github.com/TracqiTechnology/cairn.git
+cd cairn
 pip install -e ".[dev]"
-omega setup
+cairn setup
 ```
 
 The `[dev]` extra includes test dependencies (pytest, ruff, etc.) in addition to core functionality.
@@ -95,62 +95,62 @@ The `[dev]` extra includes test dependencies (pytest, ruff, etc.) in addition to
 After installing, run the setup wizard:
 
 ```bash
-omega setup
+cairn setup
 ```
 
 This performs 5 steps:
 
-1. **Creates `~/.omega/`** — The storage directory for your database, profile, secrets, and logs.
-2. **Downloads the ONNX embedding model** — Fetches `bge-small-en-v1.5` (~90MB) to `~/.cache/omega/models/` for local semantic search. No API calls needed.
-3. **Registers the MCP server** — Adds an `omega-memory` entry to `~/.claude.json` so Claude Code can spawn OMEGA on demand via stdio transport.
+1. **Creates `~/.cairn/`** — The storage directory for your database, profile, secrets, and logs.
+2. **Downloads the ONNX embedding model** — Fetches `bge-small-en-v1.5` (~90MB) to `~/.cache/cairn/models/` for local semantic search. No API calls needed.
+3. **Registers the MCP server** — Adds an `cairn` entry to `~/.claude.json` so Claude Code can spawn Cairn on demand via stdio transport.
 4. **Installs hooks** — Adds 7 hook entries to `~/.claude/settings.json` for automatic memory capture, surfacing, coordination, and guard rails.
-5. **Updates CLAUDE.md** — Adds a managed `<!-- OMEGA:BEGIN -->` block to `~/.claude/CLAUDE.md` with instructions for using memory and coordination tools.
+5. **Updates CLAUDE.md** — Adds a managed `<!-- Cairn:BEGIN -->` block to `~/.claude/CLAUDE.md` with instructions for using memory and coordination tools.
 
 !!! tip "Setup is idempotent"
-    You can run `omega setup` multiple times safely. It will update existing configuration without duplicating entries.
+    You can run `cairn setup` multiple times safely. It will update existing configuration without duplicating entries.
 
 ## Verify the installation
 
 ```bash
-omega doctor
+cairn doctor
 ```
 
 This checks:
 
-- Python version and OMEGA package version
+- Python version and Cairn package version
 - SQLite database exists and is accessible
 - Embedding model is downloaded and loadable
 - MCP server entry is registered in `~/.claude.json`
 - Hooks are installed in `~/.claude/settings.json`
-- CLAUDE.md contains the OMEGA block
+- CLAUDE.md contains the Cairn block
 
 Example output:
 
 ```
-OMEGA Doctor — v0.6.1
+Cairn Doctor — v0.6.1
 ─────────────────────
 [OK] Python 3.12.4
-[OK] Database: ~/.omega/omega.db (254 memories)
+[OK] Database: ~/.cairn/cairn.db (254 memories)
 [OK] Embedding model: bge-small-en-v1.5-onnx
 [OK] MCP server registered in ~/.claude.json
 [OK] 7 hooks installed in ~/.claude/settings.json
-[OK] CLAUDE.md has OMEGA block
+[OK] CLAUDE.md has Cairn block
 
 All checks passed.
 ```
 
 !!! warning "If doctor reports issues"
-    Run `omega setup` again to repair missing configuration. If the embedding model download fails, check your internet connection — the model is fetched once from Hugging Face and cached locally.
+    Run `cairn setup` again to repair missing configuration. If the embedding model download fails, check your internet connection — the model is fetched once from Hugging Face and cached locally.
 
 ## Uninstalling
 
-To remove OMEGA completely:
+To remove Cairn completely:
 
 ```bash
-omega setup --uninstall   # Removes hooks, MCP entry, and CLAUDE.md block
-pip uninstall omega-memory
-rm -rf ~/.omega            # Delete all stored memories (irreversible)
-rm -rf ~/.cache/omega      # Delete cached embedding models
+cairn setup --uninstall   # Removes hooks, MCP entry, and CLAUDE.md block
+pip uninstall cairn
+rm -rf ~/.cairn            # Delete all stored memories (irreversible)
+rm -rf ~/.cache/cairn      # Delete cached embedding models
 ```
 
 ## Next steps

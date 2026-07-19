@@ -1,4 +1,4 @@
-"""Tests for Engram-inspired improvements to OMEGA's retrieval pipeline.
+"""Tests for Engram-inspired improvements to Cairn's retrieval pipeline.
 
 Covers all 6 improvements:
 1. Hash-based fast-path lookup (trigram fingerprints)
@@ -16,7 +16,7 @@ import time
 
 import pytest
 
-from omega.sqlite_store import (
+from cairn.sqlite_store import (
     SCHEMA_VERSION,
     SQLiteStore,
     SurfacingContext,
@@ -186,7 +186,7 @@ class TestAdaptiveRetrievalBudget:
 
     def test_navigational_intent(self, store):
         """File paths and code identifiers should classify as NAVIGATIONAL."""
-        assert store._classify_query_intent("/src/omega/bridge.py") == QueryIntent.NAVIGATIONAL
+        assert store._classify_query_intent("/src/cairn/bridge.py") == QueryIntent.NAVIGATIONAL
         assert store._classify_query_intent("`MemoryResult`") == QueryIntent.NAVIGATIONAL
 
     def test_factual_intent(self, store):
@@ -197,7 +197,7 @@ class TestAdaptiveRetrievalBudget:
     def test_conceptual_intent(self, store):
         """Conceptual questions should classify as CONCEPTUAL."""
         assert store._classify_query_intent("how does the query pipeline work") == QueryIntent.CONCEPTUAL
-        assert store._classify_query_intent("explain the architecture of omega") == QueryIntent.CONCEPTUAL
+        assert store._classify_query_intent("explain the architecture of cairn") == QueryIntent.CONCEPTUAL
 
     def test_ambiguous_returns_none(self, store):
         """Ambiguous queries return None (use default weights)."""
@@ -270,9 +270,9 @@ class TestPredictivePrefetching:
         """prefetch_for_project with explicit file stems."""
         store.store(
             content="The bridge.py module handles all MCP tool routing",
-            metadata={"project": "/proj/omega"},
+            metadata={"project": "/proj/cairn"},
         )
-        count = store.prefetch_for_project("/proj/omega", file_stems=["bridge"])
+        count = store.prefetch_for_project("/proj/cairn", file_stems=["bridge"])
         assert count >= 0  # May be 0 if content doesn't match LIKE
 
     def test_prefetch_auto_discovers_stems(self, store):
@@ -280,14 +280,14 @@ class TestPredictivePrefetching:
         for i in range(5):
             store.store(
                 content=f"Change {i} to sqlite_store.py for performance improvement",
-                metadata={"project": "/proj/omega"},
+                metadata={"project": "/proj/cairn"},
             )
             store._conn.execute(
                 "UPDATE memories SET access_count = ? WHERE node_id = (SELECT node_id FROM memories ORDER BY id DESC LIMIT 1)",
                 (10 + i,),
             )
         store._conn.commit()
-        count = store.prefetch_for_project("/proj/omega")
+        count = store.prefetch_for_project("/proj/cairn")
         assert isinstance(count, int)
 
     def test_prefetch_empty_project(self, store):
@@ -409,15 +409,15 @@ class TestEngramIntegration:
         """Full query through the enhanced pipeline."""
         store.store(
             content="Decision: use SQLite for persistence instead of Redis",
-            metadata={"event_type": "decision", "project": "/proj/omega"},
+            metadata={"event_type": "decision", "project": "/proj/cairn"},
         )
         store.store(
             content="Lesson: always validate input at API boundaries",
-            metadata={"event_type": "lesson_learned", "project": "/proj/omega"},
+            metadata={"event_type": "lesson_learned", "project": "/proj/cairn"},
         )
         store.store(
             content="Error: connection timeout when Redis is down",
-            metadata={"event_type": "error_pattern", "project": "/proj/omega"},
+            metadata={"event_type": "error_pattern", "project": "/proj/cairn"},
         )
 
         # General query

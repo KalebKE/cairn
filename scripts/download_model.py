@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Download the ONNX embedding model for OMEGA."""
+"""Download the ONNX embedding model for Cairn."""
 import os
 import sys
 import urllib.request
@@ -73,5 +73,5 @@ def download_model(output_dir: str):
         print(f"  optimum-cli export onnx --model {MODEL_REPO} {output_path}")
 
 if __name__ == "__main__":
-    output = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~/.cache/omega/models/all-MiniLM-L6-v2-onnx")
+    output = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~/.cache/cairn/models/all-MiniLM-L6-v2-onnx")
     download_model(output)

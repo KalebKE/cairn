@@ -1,45 +1,45 @@
-"""Tests for omega.milestones module."""
+"""Tests for cairn.milestones module."""
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
 
-from omega import json_compat as json
+from cairn import json_compat as json
 
 
 @pytest.fixture(autouse=True)
-def _patch_milestones_dir(tmp_omega_dir, monkeypatch):
-    """Point milestones module at the temp OMEGA_HOME."""
-    import omega.milestones as mod
-    monkeypatch.setattr(mod, "OMEGA_HOME", tmp_omega_dir)
-    monkeypatch.setattr(mod, "MILESTONES_DIR", tmp_omega_dir / "milestones")
+def _patch_milestones_dir(tmp_cairn_dir, monkeypatch):
+    """Point milestones module at the temp CAIRN_HOME."""
+    import cairn.milestones as mod
+    monkeypatch.setattr(mod, "CAIRN_HOME", tmp_cairn_dir)
+    monkeypatch.setattr(mod, "MILESTONES_DIR", tmp_cairn_dir / "milestones")
 
 
 class TestCheckMilestone:
     def test_first_time_returns_true(self):
-        from omega.milestones import _check_milestone
+        from cairn.milestones import _check_milestone
 
         assert _check_milestone("test-milestone") is True
 
     def test_already_achieved_returns_false(self):
-        from omega.milestones import _check_milestone
+        from cairn.milestones import _check_milestone
 
         _check_milestone("test-milestone")
         assert _check_milestone("test-milestone") is False
 
-    def test_creates_marker_with_json_metadata(self, tmp_omega_dir):
-        from omega.milestones import _check_milestone
+    def test_creates_marker_with_json_metadata(self, tmp_cairn_dir):
+        from cairn.milestones import _check_milestone
 
         _check_milestone("json-test")
-        marker = tmp_omega_dir / "milestones" / "json-test"
+        marker = tmp_cairn_dir / "milestones" / "json-test"
         assert marker.exists()
         data = json.loads(marker.read_text())
         assert data["name"] == "json-test"
         assert "achieved_at" in data
 
     def test_different_milestones_independent(self):
-        from omega.milestones import _check_milestone
+        from cairn.milestones import _check_milestone
 
         assert _check_milestone("a") is True
         assert _check_milestone("b") is True
@@ -48,28 +48,28 @@ class TestCheckMilestone:
 
 class TestCaptureThresholds:
     def test_threshold_1(self):
-        from omega.milestones import check_capture_milestones
+        from cairn.milestones import check_capture_milestones
 
         msg = check_capture_milestones(1)
         assert msg is not None
         assert "First memory" in msg
 
     def test_threshold_10(self):
-        from omega.milestones import check_capture_milestones
+        from cairn.milestones import check_capture_milestones
 
         msg = check_capture_milestones(10)
         assert msg is not None
         assert "10" in msg
 
     def test_threshold_50(self):
-        from omega.milestones import check_capture_milestones
+        from cairn.milestones import check_capture_milestones
 
         msg = check_capture_milestones(50)
         assert msg is not None
         assert "50" in msg
 
     def test_threshold_100(self):
-        from omega.milestones import check_capture_milestones
+        from cairn.milestones import check_capture_milestones
 
         msg = check_capture_milestones(100)
         assert msg is not None
@@ -78,21 +78,21 @@ class TestCaptureThresholds:
     @pytest.mark.parametrize("count", [500, 1000, 1500, 2000])
     def test_high_thresholds_are_neutral_messages(self, count):
         """High-count milestones celebrate without upgrade CTAs (fork: no Pro)."""
-        from omega.milestones import check_capture_milestones
+        from cairn.milestones import check_capture_milestones
 
         msg = check_capture_milestones(count)
         assert msg is not None
         assert f"{count:,}" in msg
-        assert "omegamax.co" not in msg
+        assert "tracqi.com" not in msg
         assert "Upgrade" not in msg
 
     def test_no_milestone_below_first_threshold(self):
-        from omega.milestones import check_capture_milestones
+        from cairn.milestones import check_capture_milestones
 
         assert check_capture_milestones(0) is None
 
     def test_no_milestone_after_already_achieved(self):
-        from omega.milestones import check_capture_milestones
+        from cairn.milestones import check_capture_milestones
 
         # First call at 7 triggers capture-1 (highest crossed threshold)
         assert check_capture_milestones(7) is not None
@@ -101,7 +101,7 @@ class TestCaptureThresholds:
         assert check_capture_milestones(9) is None
 
     def test_milestone_only_triggers_once(self):
-        from omega.milestones import check_capture_milestones
+        from cairn.milestones import check_capture_milestones
 
         assert check_capture_milestones(1) is not None
         assert check_capture_milestones(1) is None  # Already achieved
@@ -116,14 +116,14 @@ class TestStreak:
         return store
 
     def test_no_activity(self):
-        from omega.milestones import get_streak
+        from cairn.milestones import get_streak
 
         store = self._make_mock_store([])
         result = get_streak(store)
         assert result == {"current": 0, "longest": 0, "today_active": False}
 
     def test_today_only(self):
-        from omega.milestones import get_streak
+        from cairn.milestones import get_streak
 
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         store = self._make_mock_store([today])
@@ -133,7 +133,7 @@ class TestStreak:
         assert result["today_active"] is True
 
     def test_consecutive_days(self):
-        from omega.milestones import get_streak
+        from cairn.milestones import get_streak
 
         today = datetime.now(timezone.utc)
         days = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(5)]
@@ -144,7 +144,7 @@ class TestStreak:
         assert result["today_active"] is True
 
     def test_gap_resets_current(self):
-        from omega.milestones import get_streak
+        from cairn.milestones import get_streak
 
         today = datetime.now(timezone.utc)
         # Today, yesterday, then gap, then 3 more days
@@ -162,7 +162,7 @@ class TestStreak:
         assert result["longest"] == 3  # the 3-day block
 
     def test_old_streak_no_current(self):
-        from omega.milestones import get_streak
+        from cairn.milestones import get_streak
 
         today = datetime.now(timezone.utc)
         # Last activity was 5 days ago, 3 consecutive days
@@ -179,13 +179,13 @@ class TestStreak:
 
 
 class TestListMilestones:
-    def test_empty_dir(self, tmp_omega_dir):
-        from omega.milestones import list_milestones
+    def test_empty_dir(self, tmp_cairn_dir):
+        from cairn.milestones import list_milestones
 
         assert list_milestones() == []
 
     def test_lists_achieved_milestones(self):
-        from omega.milestones import _check_milestone, list_milestones
+        from cairn.milestones import _check_milestone, list_milestones
 
         _check_milestone("first-capture")
         _check_milestone("first-recall")
@@ -198,10 +198,10 @@ class TestListMilestones:
         for m in milestones:
             assert m["achieved_at"] != ""
 
-    def test_handles_legacy_empty_markers(self, tmp_omega_dir):
-        from omega.milestones import list_milestones
+    def test_handles_legacy_empty_markers(self, tmp_cairn_dir):
+        from cairn.milestones import list_milestones
 
-        markers_dir = tmp_omega_dir / "milestones"
+        markers_dir = tmp_cairn_dir / "milestones"
         markers_dir.mkdir(parents=True, exist_ok=True)
         (markers_dir / "legacy-marker").touch()
 
@@ -214,14 +214,14 @@ class TestListMilestones:
 class TestMilestonesHandler:
     @pytest.mark.asyncio
     async def test_handler_returns_formatted_response(self):
-        from omega.milestones import _check_milestone
+        from cairn.milestones import _check_milestone
 
         _check_milestone("test-handler")
 
-        from omega.server.handlers import handle_omega_milestones
+        from cairn.server.handlers import handle_cairn_milestones
 
         # Mock the store for streak
-        import omega.bridge as bridge
+        import cairn.bridge as bridge
         original_get_store = bridge._get_store
 
         mock_store = MagicMock()
@@ -229,7 +229,7 @@ class TestMilestonesHandler:
         bridge._get_store = lambda: mock_store
 
         try:
-            result = await handle_omega_milestones({})
+            result = await handle_cairn_milestones({})
             assert "isError" not in result
             text = result["content"][0]["text"]
             assert "Milestones" in text
@@ -240,9 +240,9 @@ class TestMilestonesHandler:
 
     @pytest.mark.asyncio
     async def test_stats_routing(self):
-        from omega.server.handlers import handle_omega_stats
+        from cairn.server.handlers import handle_cairn_stats
 
-        import omega.bridge as bridge
+        import cairn.bridge as bridge
         original_get_store = bridge._get_store
 
         mock_store = MagicMock()
@@ -250,7 +250,7 @@ class TestMilestonesHandler:
         bridge._get_store = lambda: mock_store
 
         try:
-            result = await handle_omega_stats({"action": "milestones"})
+            result = await handle_cairn_stats({"action": "milestones"})
             assert "isError" not in result
             text = result["content"][0]["text"]
             assert "Milestones" in text

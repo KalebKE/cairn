@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""OMEGA Coordination PostToolUse hook — Auto-claim files on Edit/Write.
+"""Cairn Coordination PostToolUse hook — Auto-claim files on Edit/Write.
 
 Fires after Edit|Write. Automatically claims the edited file so other agents
-see it as taken, without requiring explicit omega_file_claim calls.
+see it as taken, without requiring explicit cairn_file_claim calls.
 """
 import json
 import os
@@ -13,7 +13,7 @@ from pathlib import Path
 
 def _log_hook_error(hook_name, error):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         tb = traceback.format_exc()
@@ -46,7 +46,7 @@ def main():
     # On Read: warn if the file is claimed by another agent (no claim, just visibility)
     if tool_name == "Read":
         try:
-            from omega.coordination import get_manager
+            from cairn.coordination import get_manager
             mgr = get_manager()
             info = mgr.check_file(file_path)
             if info.get("claimed") and info.get("session_id") != session_id:
@@ -65,7 +65,7 @@ def main():
         return
 
     try:
-        from omega.coordination import get_manager
+        from cairn.coordination import get_manager
         mgr = get_manager()
         result = mgr.claim_file(session_id, file_path, task="auto-claimed on edit")
         if result.get("conflict"):

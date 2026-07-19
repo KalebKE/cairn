@@ -1,11 +1,11 @@
-"""Tests for omega.types — TTL constants, event types, and TTL mapping."""
+"""Tests for cairn.types — TTL constants, event types, and TTL mapping."""
 import sys
 from pathlib import Path
 
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from omega.types import TTLCategory, AutoCaptureEventType, EVENT_TYPE_TTL
+from cairn.types import TTLCategory, AutoCaptureEventType, EVENT_TYPE_TTL
 
 
 class TestAutoCaptureEventTypesHaveTTL:
@@ -32,5 +32,5 @@ class TestForEventType:
 
 class TestAllExports:
     def test_all_contains_expected(self):
-        import omega.types
-        assert set(omega.types.__all__) == {"TTLCategory", "AutoCaptureEventType", "EVENT_TYPE_TTL", "STABLE_EVENT_TYPES"}
+        import cairn.types
+        assert set(cairn.types.__all__) == {"TTLCategory", "AutoCaptureEventType", "EVENT_TYPE_TTL", "STABLE_EVENT_TYPES"}

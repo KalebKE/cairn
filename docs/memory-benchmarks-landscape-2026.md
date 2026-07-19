@@ -19,7 +19,7 @@ MemoryArena's central finding: systems that score near-saturated on recall bench
 
 ### Recall-Only Benchmarks (2024-2025)
 - **LoCoMo** (Maharana, 2024): Long-context conversational QA. 7,512 questions. Near-saturated by modern systems.
-- **LongMemEval** (Wu, 2025): 500 questions, 5 abilities. OMEGA: 95.4%. Tests recall, temporal reasoning, knowledge updates. No agentic actions.
+- **LongMemEval** (Wu, 2025): 500 questions, 5 abilities. Cairn: 95.4%. Tests recall, temporal reasoning, knowledge updates. No agentic actions.
 - **MemoryAgentBench** (Hu, 2025): Incremental multi-turn info intake. 2k queries. Still recall-focused.
 - **MemoryBench** (Ai, 2025): 778 queries testing memory and continual learning. QA format.
 
@@ -35,13 +35,13 @@ MemoryArena's central finding: systems that score near-saturated on recall bench
 
 ## 3. Related Memory Systems & Architectures
 
-### Hindsight (Latimer et al., Dec 2025) -- MOST RELEVANT TO OMEGA
+### Hindsight (Latimer et al., Dec 2025) -- MOST RELEVANT TO Cairn
 - Paper: "Hindsight is 20/20: Building Agent Memory that Retains, Recalls, and Reflects"
 - Code: github.com/vectorize-io/hindsight (open source, MCP server)
 - **TEMPR** (Temporal Entity Memory Priming Retrieval): Stores narrative facts in a memory graph with 4 link types: temporal, semantic, entity, causal. Retrieval fuses semantic + keyword + graph + temporal search.
 - **CARA** (Coherent Adaptive Reasoning Agents): Maintains a behavioral profile with disposition parameters (skepticism, literalism, empathy). Updates beliefs coherently.
 - Claims **83.6% on LongMemEval** with a 20B open-source model (vs 39% baseline with same model).
-- **Relevance**: Their memory graph with causal links is what MemoryArena says is missing. OMEGA stores flat facts; Hindsight stores facts with relationship structure. Their CARA reflection mechanism is similar to OMEGA's protocol but more formalized.
+- **Relevance**: Their memory graph with causal links is what MemoryArena says is missing. Cairn stores flat facts; Hindsight stores facts with relationship structure. Their CARA reflection mechanism is similar to Cairn's protocol but more formalized.
 
 ### ReasoningBank (Google Cloud, Sep 2025)
 - Distills generalizable reasoning strategies from successful agent runs.
@@ -77,7 +77,7 @@ Main frustrations:
 3. Memory inertia (outdated beliefs not updating)
 4. Retrieval returning semantically similar but causally irrelevant content
 
-## 5. What OMEGA Can Learn
+## 5. What Cairn Can Learn
 
 ### Confirmed Strengths
 1. **Category-typed storage** (decision, preference, user_preference) is a step toward structured memory.
@@ -85,13 +85,13 @@ Main frustrations:
 3. **Checkpoint/resume** preserves execution context, not just facts.
 
 ### Identified Gaps
-1. **No causal/dependency links between memories**: When decision B depends on decision A, OMEGA doesn't model that relationship. Hindsight's TEMPR does this with 4 link types.
-2. **Retrieval is similarity-based, not state-aware**: MemoryArena's POMDP framing says memory should provide sufficient statistics for belief-state estimation. OMEGA's semantic search can miss causally relevant but semantically distant facts.
-3. **No belief/state tracking**: OMEGA stores what happened but doesn't maintain an evolving model of "what is currently true." Hindsight's CARA does this.
-4. **No reflection/consolidation loop**: No background process that reviews memories, resolves conflicts, or compresses redundant entries. Oracle's blog highlights "sleep-time computation" as the next frontier. (Note: OMEGA has consolidation phases 0-2, but these are decay/prune, not semantic reflection.)
+1. **No causal/dependency links between memories**: When decision B depends on decision A, Cairn doesn't model that relationship. Hindsight's TEMPR does this with 4 link types.
+2. **Retrieval is similarity-based, not state-aware**: MemoryArena's POMDP framing says memory should provide sufficient statistics for belief-state estimation. Cairn's semantic search can miss causally relevant but semantically distant facts.
+3. **No belief/state tracking**: Cairn stores what happened but doesn't maintain an evolving model of "what is currently true." Hindsight's CARA does this.
+4. **No reflection/consolidation loop**: No background process that reviews memories, resolves conflicts, or compresses redundant entries. Oracle's blog highlights "sleep-time computation" as the next frontier. (Note: Cairn has consolidation phases 0-2, but these are decay/prune, not semantic reflection.)
 
 ### Feature Ideas (Ranked by Impact vs Effort)
-1. **Dependency-aware storage** (HIGH impact, MEDIUM effort): When storing a decision, optionally link it to prior memories it depends on. `omega_store(content, "decision", depends_on=["mem_id_123"])`
+1. **Dependency-aware storage** (HIGH impact, MEDIUM effort): When storing a decision, optionally link it to prior memories it depends on. `cairn_store(content, "decision", depends_on=["mem_id_123"])`
 2. **State tracking type** (HIGH impact, HIGH effort): A new memory type "state" that gets UPDATED (not appended) as tasks progress. Represents current belief about an ongoing situation.
 3. **Causal retrieval mode** (MEDIUM impact, MEDIUM effort): When querying, optionally traverse dependency links to surface the full chain, not just top-K similar.
 4. **Background consolidation** (MEDIUM impact, HIGH effort): Periodic process that reviews recent memories, merges duplicates, resolves conflicts. "Sleep-time compute."
@@ -99,10 +99,10 @@ Main frustrations:
 ## 6. Planned Experiments
 
 ### A. Dependency Chain Test (LOW cost, HIGH signal)
-Create 10 chains of 4-6 interdependent decisions. Test if omega_query surfaces the right chain when given only the final subtask.
+Create 10 chains of 4-6 interdependent decisions. Test if cairn_query surfaces the right chain when given only the final subtask.
 
 ### B. Belief Drift Test (LOW cost, MEDIUM signal)
-Store a fact, then store contradictions. Query: does OMEGA return latest or both?
+Store a fact, then store contradictions. Query: does Cairn return latest or both?
 
 ### C. Cross-Session Action Test (MEDIUM cost, HIGH signal) -- DEFERRED
 Simulate MemoryArena-style multi-session shopping tasks. Requires more setup.
@@ -110,7 +110,7 @@ Simulate MemoryArena-style multi-session shopping tasks. Requires more setup.
 ### D. Semantic vs Causal Retrieval (LOW cost, HIGH signal)
 Store 20 memories with deliberate semantic/causal mismatches. Measure false positive and false negative rates.
 
-### E. Run OMEGA on MemoryArena (when code drops) -- DEFERRED
+### E. Run Cairn on MemoryArena (when code drops) -- DEFERRED
 Watch memoryarena.github.io for public release.
 
 ## 7. Notes
@@ -125,6 +125,6 @@ Watch memoryarena.github.io for public release.
 
 Experiments A (Dependency Chain), B (Belief Drift), and D (Semantic vs Causal) **deferred**. Rationale: the research already confirms the gaps theoretically, and injecting test data into production memory adds noise without proportional insight.
 
-**Waiting on:** MemoryArena public code/data release (memoryarena.github.io). When available, run OMEGA as memory backend against their GPT-5.1-mini task agent on Progressive Web Search and Formal Reasoning domains.
+**Waiting on:** MemoryArena public code/data release (memoryarena.github.io). When available, run Cairn as memory backend against their GPT-5.1-mini task agent on Progressive Web Search and Formal Reasoning domains.
 
-**Next actionable step:** Scope `depends_on` parameter for omega_store (feature idea #1: dependency-aware storage). Highest impact-to-effort ratio for closing the causal linking gap.
+**Next actionable step:** Scope `depends_on` parameter for cairn_store (feature idea #1: dependency-aware storage). Highest impact-to-effort ratio for closing the causal linking gap.

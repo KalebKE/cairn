@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OMEGA PreToolUse hook — Guard checks BEFORE editing a file.
+"""Cairn PreToolUse hook — Guard checks BEFORE editing a file.
 
 Fires before Edit|Write. Checks read-before-write discipline, project
 constraints, and coordination file claims. Memory surfacing is handled
@@ -15,7 +15,7 @@ from pathlib import Path
 
 def _log_hook_error(hook_name, error):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         tb = traceback.format_exc()
@@ -31,7 +31,7 @@ def _log_hook_error(hook_name, error):
 
 def _log_timing(hook_name, elapsed_ms):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         data = f"[{timestamp}] {hook_name}: OK ({elapsed_ms:.0f}ms)\n"
@@ -47,7 +47,7 @@ def _log_timing(hook_name, elapsed_ms):
 def _check_read_before_write(file_path, session_id):
     """Check if this file was read before attempting to edit it."""
     try:
-        reads_dir = Path.home() / ".omega" / "session-reads"
+        reads_dir = Path.home() / ".cairn" / "session-reads"
         safe_id = session_id.replace("/", "_").replace("..", "_")[:64]
         reads_file = reads_dir / f"{safe_id}.json"
 
@@ -64,7 +64,7 @@ def _check_read_before_write(file_path, session_id):
 def _check_constraints(file_path, project):
     """Check per-project constraints for this file."""
     try:
-        from omega.bridge import check_constraints
+        from cairn.bridge import check_constraints
         return check_constraints(file_path, project)
     except ImportError:
         pass
@@ -76,7 +76,7 @@ def _check_constraints(file_path, project):
 def _check_claim(file_path, session_id):
     """Check if another agent has claimed this file."""
     try:
-        from omega.coordination import get_manager
+        from cairn.coordination import get_manager
         mgr = get_manager()
         info = mgr.check_file(file_path)
         if info.get("claimed") and info.get("session_id") != session_id:

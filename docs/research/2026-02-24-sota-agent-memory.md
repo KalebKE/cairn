@@ -1,12 +1,12 @@
-# SOTA AI Agent Memory: Research Report for OMEGA
+# SOTA AI Agent Memory: Research Report for Cairn
 
 > **Date:** 2026-02-24
 > **Status:** Complete
-> **Purpose:** Synthesize findings from 5 parallel research tracks (academic papers, open-source implementations, practitioner forums, commercial products, graph/structured memory) to identify what OMEGA should adopt next.
+> **Purpose:** Synthesize findings from 5 parallel research tracks (academic papers, open-source implementations, practitioner forums, commercial products, graph/structured memory) to identify what Cairn should adopt next.
 
 ## Context
 
-OMEGA is a production MCP-based memory system (SQLite + FTS5, 760+ memories, 12 core tools + 37 coordination tools, 2,500+ tests, 95.4% on LongMemEval). This report identifies the highest-impact techniques from the current landscape.
+Cairn is a production MCP-based memory system (SQLite + FTS5, 760+ memories, 12 core tools + 37 coordination tools, 2,500+ tests, 95.4% on LongMemEval). This report identifies the highest-impact techniques from the current landscape.
 
 ---
 
@@ -14,7 +14,7 @@ OMEGA is a production MCP-based memory system (SQLite + FTS5, 760+ memories, 12 
 
 | System | Architecture | Stars | Temporal | Graph | Multi-Agent | Local |
 |--------|-------------|-------|----------|-------|-------------|-------|
-| **OMEGA** | SQLite + FTS5 + MCP | -- | Timestamps | Entity relationships | 37 coord tools | Yes |
+| **Cairn** | SQLite + FTS5 + MCP | -- | Timestamps | Entity relationships | 37 coord tools | Yes |
 | **Mem0** | Vector + Graph + KV | 47.9K | Basic | Neo4j/Memgraph | Basic | Self-host option |
 | **Zep/Graphiti** | Temporal KG (Neo4j) | 23K | Bi-temporal | Core feature | Limited | Open-source KG only |
 | **Letta** | OS-inspired tiers + git | 21.2K | Basic | Planned | Limited | Self-host option |
@@ -35,23 +35,23 @@ Ranked by impact-to-effort ratio, synthesized across all 5 research tracks.
 
 **What:** Run 4 parallel retrieval paths: (a) FTS5 keyword matching, (b) vector/embedding similarity, (c) entity-graph traversal, (d) temporal filtering. Fuse and re-rank results.
 
-**Why:** Single-signal retrieval misses 60% of recalls (MemTrace study). OMEGA's FTS5 already supports keyword matching; adding graph traversal and temporal filtering as parallel paths would close the biggest retrieval gap.
+**Why:** Single-signal retrieval misses 60% of recalls (MemTrace study). Cairn's FTS5 already supports keyword matching; adding graph traversal and temporal filtering as parallel paths would close the biggest retrieval gap.
 
 **Effort:** Medium. FTS5 is in place. Graph traversal over existing entity relationships is Python-only. Temporal filtering is a WHERE clause.
 
-**OMEGA fit:** High. No new dependencies.
+**Cairn fit:** High. No new dependencies.
 
 ### 2. Automatic Entity Extraction from Conversations
 
 **Source:** Mem0, Zep, Cognee, A-Mem (NeurIPS 2025)
 
-**What:** On every `omega_store` call, run a two-stage LLM pipeline: (1) extract entities (people, projects, tools, concepts), (2) generate relationships between them. Compare against existing entities via embedding similarity to deduplicate.
+**What:** On every `cairn_store` call, run a two-stage LLM pipeline: (1) extract entities (people, projects, tools, concepts), (2) generate relationships between them. Compare against existing entities via embedding similarity to deduplicate.
 
-**Why:** Every major competitor does this automatically. It's the single biggest gap practitioners would notice. Currently OMEGA requires explicit `omega_entity_create` calls.
+**Why:** Every major competitor does this automatically. It's the single biggest gap practitioners would notice. Currently Cairn requires explicit `cairn_entity_create` calls.
 
 **Effort:** Medium-high. Needs LLM calls on the store path. Must be optional/configurable for latency-sensitive use cases.
 
-**OMEGA fit:** High. Works within SQLite. Could be async/background.
+**Cairn fit:** High. Works within SQLite. Could be async/background.
 
 ### 3. Temporal Decay + Access-Weighted Scoring
 
@@ -59,11 +59,11 @@ Ranked by impact-to-effort ratio, synthesized across all 5 research tracks.
 
 **What:** Add `strength` and `access_count` fields to memories. Score = `relevance * decay^time_since_last_access * log(access_count + 1)`. Memories that are accessed frequently decay slower; unused memories fade.
 
-**Why:** OMEGA's 760+ memories will keep growing. Without decay, search quality degrades as noise accumulates. Every practitioner forum cites memory bloat as the #1 pain point.
+**Why:** Cairn's 760+ memories will keep growing. Without decay, search quality degrades as noise accumulates. Every practitioner forum cites memory bloat as the #1 pain point.
 
 **Effort:** Low. Two new columns, scoring formula in query path.
 
-**OMEGA fit:** Very high. Minimal change.
+**Cairn fit:** Very high. Minimal change.
 
 ### 4. Contradiction Detection on Store/Update
 
@@ -75,7 +75,7 @@ Ranked by impact-to-effort ratio, synthesized across all 5 research tracks.
 
 **Effort:** Medium. LLM call on store path. Soft-delete (never hard-delete) for audit trail. AWS AgentCore demonstrates that immutable append-only with soft-deletion is the safest pattern.
 
-**OMEGA fit:** High. Pairs with temporal validity fields.
+**Cairn fit:** High. Pairs with temporal validity fields.
 
 ### 5. Bi-Temporal Data Model
 
@@ -87,19 +87,19 @@ Ranked by impact-to-effort ratio, synthesized across all 5 research tracks.
 
 **Effort:** Medium. Schema changes + query adjustments. No new dependencies.
 
-**OMEGA fit:** High. Unique differentiator for OMEGA in the MCP space.
+**Cairn fit:** High. Unique differentiator for Cairn in the MCP space.
 
 ### 6. Sleep-Time Consolidation
 
 **Source:** Letta (coined the term), claude-engram, neuroscience-inspired
 
-**What:** Background process (during `omega_maintain` or scheduled) that: (a) merges related entities, (b) generates higher-level summary entities from clusters, (c) applies decay to strength scores, (d) prunes below-threshold memories.
+**What:** Background process (during `cairn_maintain` or scheduled) that: (a) merges related entities, (b) generates higher-level summary entities from clusters, (c) applies decay to strength scores, (d) prunes below-threshold memories.
 
-**Why:** Letta calls this "the next big leap in AI." Currently OMEGA's `omega_maintain` runs GC but doesn't consolidate or abstract. Sleep-time compute turns maintenance into intelligence.
+**Why:** Letta calls this "the next big leap in AI." Currently Cairn's `cairn_maintain` runs GC but doesn't consolidate or abstract. Sleep-time compute turns maintenance into intelligence.
 
-**Effort:** Medium. `omega_maintain` is the natural hook. Needs LLM calls for summarization/merging.
+**Effort:** Medium. `cairn_maintain` is the natural hook. Needs LLM calls for summarization/merging.
 
-**OMEGA fit:** High. Natural extension of existing maintenance.
+**Cairn fit:** High. Natural extension of existing maintenance.
 
 ### 7. Memory Type Classification (Episodic / Semantic / Procedural)
 
@@ -107,11 +107,11 @@ Ranked by impact-to-effort ratio, synthesized across all 5 research tracks.
 
 **What:** Add a `memory_type` enum field: `episodic` (raw experiences/sessions), `semantic` (extracted facts/entities), `procedural` (learned behavioral patterns/rules). Different types get different retrieval weights and consolidation strategies.
 
-**Why:** The cognitive science taxonomy is now standard. Zep explicitly implements episodic and semantic as separate subgraphs; MemOS adds procedural (tool traces). A-Mem uses Zettelkasten-style self-organizing linked notes and doubles performance on multi-hop reasoning. The key insight: these types must *interact* -- episodic is raw material, semantic is extracted from it, procedural is learned from patterns across it. Formalizing this in OMEGA would: (a) improve retrieval precision by type-aware filtering, (b) enable procedural memory that feeds into agent instructions (currently missing from all MCP systems), (c) align with academic benchmarks.
+**Why:** The cognitive science taxonomy is now standard. Zep explicitly implements episodic and semantic as separate subgraphs; MemOS adds procedural (tool traces). A-Mem uses Zettelkasten-style self-organizing linked notes and doubles performance on multi-hop reasoning. The key insight: these types must *interact* -- episodic is raw material, semantic is extracted from it, procedural is learned from patterns across it. Formalizing this in Cairn would: (a) improve retrieval precision by type-aware filtering, (b) enable procedural memory that feeds into agent instructions (currently missing from all MCP systems), (c) align with academic benchmarks.
 
 **Effort:** Low. One new field. Procedural memory feeding into protocol is the ambitious part.
 
-**OMEGA fit:** High. `omega_lessons` is already proto-procedural memory.
+**Cairn fit:** High. `cairn_lessons` is already proto-procedural memory.
 
 ### 8. Feedback-Driven Quality Scoring (Memify pattern)
 
@@ -119,11 +119,11 @@ Ranked by impact-to-effort ratio, synthesized across all 5 research tracks.
 
 **What:** Track whether retrieved memories led to good outcomes. Memories that get retrieved and contribute to successful task completion get boosted; those that are retrieved but ignored or lead to errors get penalized.
 
-**Why:** Currently all memory systems (including OMEGA) treat stored memories as equally trustworthy. Quality scoring makes search results improve over time automatically.
+**Why:** Currently all memory systems (including Cairn) treat stored memories as equally trustworthy. Quality scoring makes search results improve over time automatically.
 
 **Effort:** Medium-high. Needs outcome tracking infrastructure. Start simple: boost on access, penalize on explicit correction.
 
-**OMEGA fit:** Medium. Start with access-count boosting (low effort), graduate to outcome-based scoring.
+**Cairn fit:** Medium. Start with access-count boosting (low effort), graduate to outcome-based scoring.
 
 ### 9. Git-Backed Memory Versioning
 
@@ -131,11 +131,11 @@ Ranked by impact-to-effort ratio, synthesized across all 5 research tracks.
 
 **What:** Treat memory state like a source repository. Every change gets a commit message. Subagents get isolated worktrees and merge changes through conflict resolution. Full audit trail and rollback capability.
 
-**Why:** This is Letta's newest innovation and it's genuinely novel. OMEGA's checkpoint system achieves similar goals but lacks the granularity and auditability of git-native versioning.
+**Why:** This is Letta's newest innovation and it's genuinely novel. Cairn's checkpoint system achieves similar goals but lacks the granularity and auditability of git-native versioning.
 
 **Effort:** High. Architectural change. Could be a v2 feature.
 
-**OMEGA fit:** Medium. Interesting but OMEGA's checkpoint system may be sufficient for now.
+**Cairn fit:** Medium. Interesting but Cairn's checkpoint system may be sufficient for now.
 
 ### 10. Procedural Memory (Learned Agent Behaviors)
 
@@ -143,19 +143,19 @@ Ranked by impact-to-effort ratio, synthesized across all 5 research tracks.
 
 **What:** A dedicated memory type for learned behavioral patterns and rules that automatically modify the agent's operating instructions. Example: "When the user asks about deployment, always check Vercel status first" learned from repeated patterns.
 
-**Why:** No MCP memory system has this. OMEGA's `omega_lessons` stores insights but they don't automatically modify agent behavior. Procedural memory that feeds into `omega_protocol` would be a genuine innovation.
+**Why:** No MCP memory system has this. Cairn's `cairn_lessons` stores insights but they don't automatically modify agent behavior. Procedural memory that feeds into `cairn_protocol` would be a genuine innovation.
 
 **Effort:** High. Requires careful design to avoid runaway self-modification.
 
-**OMEGA fit:** High impact, but needs careful scoping.
+**Cairn fit:** High impact, but needs careful scoping.
 
 ---
 
-## OMEGA's Competitive Position
+## Cairn's Competitive Position
 
 ### Strengths (already ahead)
 
-- **Multi-agent coordination**: 37 tools. No competitor comes close. MongoDB reports 40-80% of multi-agent implementations fail due to coordination. OMEGA solves this.
+- **Multi-agent coordination**: 37 tools. No competitor comes close. MongoDB reports 40-80% of multi-agent implementations fail due to coordination. Cairn solves this.
 - **LongMemEval #1**: 95.4% (466/500). Nearest: Mastra 94.87%, Hindsight 91.4%, Letta 74.0%, Mem0 68.5%.
 - **MCP-native**: Built for MCP from the ground up. Others added MCP as an afterthought.
 - **Local-first**: Full data locality. No cloud dependency. Privacy-first in a landscape where even Zep killed their open-source edition.
@@ -167,13 +167,13 @@ Ranked by impact-to-effort ratio, synthesized across all 5 research tracks.
 - **No temporal validity** on facts/relationships (Zep's key differentiator)
 - **No memory decay/pruning** (bloat will become an issue at scale)
 - **No contradiction detection** (second most dangerous failure mode)
-- **No memory observability** (MemTrace showed 39.6% recall; can OMEGA measure its own?)
+- **No memory observability** (MemTrace showed 39.6% recall; can Cairn measure its own?)
 
 ### Positioning Opportunities
 
 - **"The only memory system built for multi-agent"**: every competitor is single-agent
 - **"Guided agentic memory"**: protocol-driven, neither fully automatic nor fully manual
-- **Publish benchmarks head-to-head**: OMEGA 95.4% vs. field (already #1)
+- **Publish benchmarks head-to-head**: Cairn 95.4% vs. field (already #1)
 - **Local-first in a regulatory world**: EU AI Act, state privacy laws favor local data
 
 ---
@@ -198,7 +198,7 @@ Synthesized from 30+ forum threads, blog posts, and community discussions (HN, D
 
 ### Active Debates
 
-- **Explicit vs. implicit memory**: MemOS argues tool-based CRUD "falls short of systemic challenges." A-Mem proposes fully autonomous memory. Counter: practitioners report automatic memory doesn't work well enough to trust yet. OMEGA's "guided agentic" approach sits in the pragmatic middle.
+- **Explicit vs. implicit memory**: MemOS argues tool-based CRUD "falls short of systemic challenges." A-Mem proposes fully autonomous memory. Counter: practitioners report automatic memory doesn't work well enough to trust yet. Cairn's "guided agentic" approach sits in the pragmatic middle.
 - **RAG vs. agent memory vs. context engineering**: Emerging consensus: complementary, not competing. "RAG is Open-Book. Agent Memory is Learning. Context Engineering is the Cheat-Sheet."
 - **Memory as infrastructure vs. feature**: AWS, Redis, MongoDB all positioning databases as agent memory backing stores. Memory is becoming "metered infrastructure."
 
@@ -215,7 +215,7 @@ Synthesized from 30+ forum threads, blog posts, and community discussions (HN, D
 9. Version control for memory (Git-like branching/reverting)
 10. Permission control for multi-user/multi-agent access
 
-> OMEGA already addresses #1 (sessions), #2 (coordination tools), #5 (admin dashboard), and partially #9 (checkpoints). Gaps: #3, #4, #6, #7 align directly with the Phase 1-2 roadmap below.
+> Cairn already addresses #1 (sessions), #2 (coordination tools), #5 (admin dashboard), and partially #9 (checkpoints). Gaps: #3, #4, #6, #7 align directly with the Phase 1-2 roadmap below.
 
 ---
 
@@ -231,7 +231,7 @@ Synthesized from 30+ forum threads, blog posts, and community discussions (HN, D
 
 4. Contradiction detection on store/update
 5. Bi-temporal data model (event time vs. ingestion time)
-6. Sleep-time consolidation in `omega_maintain`
+6. Sleep-time consolidation in `cairn_maintain`
 
 ### Phase 3: Intelligence (make memory smarter over time)
 
@@ -298,7 +298,7 @@ Synthesized from 30+ forum threads, blog posts, and community discussions (HN, D
 
 ### Benchmarks
 
-- **LongMemEval** (ICLR 2025): OMEGA 95.4%, Mastra 94.87%, Hindsight 91.4%, Letta 74.0%, Mem0 68.5%
+- **LongMemEval** (ICLR 2025): Cairn 95.4%, Mastra 94.87%, Hindsight 91.4%, Letta 74.0%, Mem0 68.5%
 - **MemoryAgentBench** (ICLR 2026): 4 competencies (retrieval, learning, long-range, conflict)
 - **MemBench** (ACL 2025): effectiveness + efficiency + capacity
 - **LoCoMo**: Zep 75.14%, Mem0 68.5% (disputed), MemOS +159% temporal reasoning

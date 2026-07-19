@@ -1,4 +1,4 @@
-"""Tests for OMEGA contradiction surfacing — Phase 2.
+"""Tests for Cairn contradiction surfacing — Phase 2.
 
 Tests that:
 1. _check_contradictions() returns a list of dicts (not None)
@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import pytest
 
-from omega.sqlite_store import SQLiteStore
+from cairn.sqlite_store import SQLiteStore
 
 
 # ---------------------------------------------------------------------------
@@ -26,17 +26,17 @@ from omega.sqlite_store import SQLiteStore
 
 
 @pytest.fixture(autouse=True)
-def _reset_bridge(tmp_omega_dir):
+def _reset_bridge(tmp_cairn_dir):
     """Reset the bridge singleton so each test gets a fresh store."""
-    from omega.bridge import reset_memory
+    from cairn.bridge import reset_memory
     reset_memory()
     yield
     reset_memory()
 
 
-def _make_store(tmp_omega_dir):
+def _make_store(tmp_cairn_dir):
     """Create a fresh SQLiteStore in the tmp dir."""
-    return SQLiteStore(db_path=str(tmp_omega_dir / "test.db"))
+    return SQLiteStore(db_path=str(tmp_cairn_dir / "test.db"))
 
 
 # ===========================================================================
@@ -47,14 +47,14 @@ def _make_store(tmp_omega_dir):
 class TestGetLastContradictionResults:
     """Test the consume-once getter for contradiction results."""
 
-    def test_returns_empty_list_initially(self, tmp_omega_dir):
+    def test_returns_empty_list_initially(self, tmp_cairn_dir):
         """get_last_contradiction_results returns [] on a fresh store."""
-        store = _make_store(tmp_omega_dir)
+        store = _make_store(tmp_cairn_dir)
         assert store.get_last_contradiction_results() == []
 
-    def test_returns_empty_after_store_no_contradictions(self, tmp_omega_dir):
+    def test_returns_empty_after_store_no_contradictions(self, tmp_cairn_dir):
         """After storing a memory with no contradictions, result is []."""
-        store = _make_store(tmp_omega_dir)
+        store = _make_store(tmp_cairn_dir)
         store.store(
             content="Python is a programming language with dynamic typing",
             session_id="s1",
@@ -66,9 +66,9 @@ class TestGetLastContradictionResults:
         # but the type should always be list
         assert isinstance(result, list)
 
-    def test_consume_once_behavior(self, tmp_omega_dir):
+    def test_consume_once_behavior(self, tmp_cairn_dir):
         """Second call to get_last_contradiction_results returns [] (consume-once)."""
-        store = _make_store(tmp_omega_dir)
+        store = _make_store(tmp_cairn_dir)
         # Manually set some results to test consume-once
         store._last_contradiction_results = [
             {
@@ -85,9 +85,9 @@ class TestGetLastContradictionResults:
         second_call = store.get_last_contradiction_results()
         assert second_call == []
 
-    def test_consume_once_clears_internal_state(self, tmp_omega_dir):
+    def test_consume_once_clears_internal_state(self, tmp_cairn_dir):
         """After consuming, internal _last_contradiction_results is empty."""
-        store = _make_store(tmp_omega_dir)
+        store = _make_store(tmp_cairn_dir)
         store._last_contradiction_results = [{"node_id": "x", "confidence": 0.5, "reason": "test", "content_preview": "test"}]
         store.get_last_contradiction_results()
         assert store._last_contradiction_results == []
@@ -101,9 +101,9 @@ class TestGetLastContradictionResults:
 class TestCheckContradictionsReturnType:
     """Test that _check_contradictions returns a list, not None."""
 
-    def test_returns_empty_list_no_similar(self, tmp_omega_dir):
+    def test_returns_empty_list_no_similar(self, tmp_cairn_dir):
         """When no similar memories exist, returns []."""
-        store = _make_store(tmp_omega_dir)
+        store = _make_store(tmp_cairn_dir)
         # Store a memory first to have a node_id
         node_id = store.store(content="Alex prefers dark mode in all editors", session_id="s1")
 
@@ -113,9 +113,9 @@ class TestCheckContradictionsReturnType:
         result = store._check_contradictions(node_id, "something unrelated", embedding)
         assert isinstance(result, list)
 
-    def test_returns_list_with_required_fields(self, tmp_omega_dir):
+    def test_returns_list_with_required_fields(self, tmp_cairn_dir):
         """When contradictions are found, result dicts have required fields."""
-        store = _make_store(tmp_omega_dir)
+        store = _make_store(tmp_cairn_dir)
 
         # Manually test by injecting fake contradiction results
         # (full integration requires embeddings which may not be available)
@@ -141,9 +141,9 @@ class TestCheckContradictionsReturnType:
         assert isinstance(result["content_preview"], str)
         assert len(result["content_preview"]) <= 80
 
-    def test_check_contradictions_with_mocked_detect(self, tmp_omega_dir):
+    def test_check_contradictions_with_mocked_detect(self, tmp_cairn_dir):
         """_check_contradictions returns surfaced list when contradictions detected."""
-        store = _make_store(tmp_omega_dir)
+        store = _make_store(tmp_cairn_dir)
         if not store._vec_available:
             pytest.skip("sqlite-vec not available in test environment")
 
@@ -182,7 +182,7 @@ class TestBridgeContradictionSurfacing:
 
     def test_contradiction_block_formatting(self):
         """Test the [CONTRADICTION] block format with mocked get_last_contradiction_results."""
-        from omega.bridge import auto_capture, _get_store
+        from cairn.bridge import auto_capture, _get_store
 
         fake_results = [
             {
@@ -222,7 +222,7 @@ class TestBridgeContradictionSurfacing:
 
     def test_no_contradiction_block_when_empty(self):
         """When no contradictions, output should NOT contain [CONTRADICTION]."""
-        from omega.bridge import auto_capture
+        from cairn.bridge import auto_capture
 
         result = auto_capture(
             content="Python is useful for data science projects and machine learning workflows",
@@ -235,7 +235,7 @@ class TestBridgeContradictionSurfacing:
 
     def test_multiple_contradictions_formatting(self):
         """Multiple contradictions should each get a line in the block."""
-        from omega.bridge import auto_capture, _get_store
+        from cairn.bridge import auto_capture, _get_store
 
         fake_results = [
             {
@@ -290,7 +290,7 @@ class TestIncludeContradictedFilter:
 
     def test_query_without_flag_returns_all(self):
         """Normal query without include_contradicted returns all results."""
-        from omega.bridge import auto_capture, query
+        from cairn.bridge import auto_capture, query
 
         # Store some memories
         auto_capture(
@@ -309,7 +309,7 @@ class TestIncludeContradictedFilter:
 
     def test_query_with_include_contradicted_flag(self):
         """With include_contradicted=True, only contradicted memories returned."""
-        from omega.bridge import auto_capture, query, _get_store
+        from cairn.bridge import auto_capture, query, _get_store
 
         # Store a memory
         result1 = auto_capture(
@@ -341,7 +341,7 @@ class TestIncludeContradictedFilter:
 
     def test_query_structured_with_include_contradicted(self):
         """query_structured with include_contradicted filters correctly."""
-        from omega.bridge import auto_capture, query_structured, _get_store
+        from cairn.bridge import auto_capture, query_structured, _get_store
 
         # Store and manually mark as contradicted
         result1 = auto_capture(
@@ -381,7 +381,7 @@ class TestIncludeContradictedFilter:
 
     def test_include_contradicted_empty_when_none_contradicted(self):
         """include_contradicted returns empty when no memories are contradicted."""
-        from omega.bridge import auto_capture, query_structured
+        from cairn.bridge import auto_capture, query_structured
 
         auto_capture(
             content="The earth orbits the sun in approximately 365.25 days",
@@ -407,18 +407,18 @@ class TestIncludeContradictedFilter:
 class TestToolSchema:
     """Test that tool_schemas.py includes the new parameter."""
 
-    def test_omega_query_has_include_contradicted(self):
-        """omega_query schema should include include_contradicted property."""
-        from omega.server.tool_schemas import TOOL_SCHEMAS
+    def test_cairn_query_has_include_contradicted(self):
+        """cairn_query schema should include include_contradicted property."""
+        from cairn.server.tool_schemas import TOOL_SCHEMAS
 
-        omega_query = None
+        cairn_query = None
         for tool in TOOL_SCHEMAS:
-            if tool["name"] == "omega_query":
-                omega_query = tool
+            if tool["name"] == "cairn_query":
+                cairn_query = tool
                 break
 
-        assert omega_query is not None, "omega_query not found in TOOL_SCHEMAS"
-        props = omega_query["inputSchema"]["properties"]
+        assert cairn_query is not None, "cairn_query not found in TOOL_SCHEMAS"
+        props = cairn_query["inputSchema"]["properties"]
         assert "include_contradicted" in props
         assert props["include_contradicted"]["type"] == "boolean"
 
@@ -433,11 +433,11 @@ class TestHandlerIncludeContradicted:
 
     @pytest.mark.asyncio
     async def test_handler_passes_include_contradicted(self):
-        """handle_omega_query should extract and pass include_contradicted."""
-        from omega.server.handlers import handle_omega_query
+        """handle_cairn_query should extract and pass include_contradicted."""
+        from cairn.server.handlers import handle_cairn_query
 
         # Test with flag = True (should not error)
-        result = await handle_omega_query({
+        result = await handle_cairn_query({
             "query": "test query for contradicted memories",
             "include_contradicted": True,
         })
@@ -446,11 +446,11 @@ class TestHandlerIncludeContradicted:
 
     @pytest.mark.asyncio
     async def test_handler_default_false(self):
-        """handle_omega_query defaults include_contradicted to False."""
-        from omega.server.handlers import handle_omega_query
+        """handle_cairn_query defaults include_contradicted to False."""
+        from cairn.server.handlers import handle_cairn_query
 
         # Test without flag (default should be False, normal query)
-        result = await handle_omega_query({
+        result = await handle_cairn_query({
             "query": "test query for normal memories",
         })
         assert isinstance(result, dict)
@@ -464,13 +464,13 @@ class TestHandlerIncludeContradicted:
 class TestInstanceAttribute:
     """Test that _last_contradiction_results is initialized properly."""
 
-    def test_attribute_exists_on_new_store(self, tmp_omega_dir):
+    def test_attribute_exists_on_new_store(self, tmp_cairn_dir):
         """A new SQLiteStore should have _last_contradiction_results = []."""
-        store = _make_store(tmp_omega_dir)
+        store = _make_store(tmp_cairn_dir)
         assert hasattr(store, "_last_contradiction_results")
         assert store._last_contradiction_results == []
 
-    def test_attribute_is_list(self, tmp_omega_dir):
+    def test_attribute_is_list(self, tmp_cairn_dir):
         """_last_contradiction_results should always be a list."""
-        store = _make_store(tmp_omega_dir)
+        store = _make_store(tmp_cairn_dir)
         assert isinstance(store._last_contradiction_results, list)

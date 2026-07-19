@@ -11,7 +11,7 @@
                +----------+----------+
                           | stdio/MCP
                +----------v----------+
-               |   OMEGA MCP Server   |
+               |   Cairn MCP Server   |
                |   70 tools total     |
                +--+---------------+---+
                   |               |
@@ -23,7 +23,7 @@
                |                 |
                v                 v
          +--------------------------------------+
-         |         omega.db (SQLite)             |
+         |         cairn.db (SQLite)             |
          |  memories | edges | coord_* tables    |
          +--------------------------------------+
 ```
@@ -89,7 +89,7 @@ Three layers prevent redundant storage:
 
 ### Evolution
 
-When incoming content is similar (55-95%) to an existing memory, OMEGA appends new insights to the existing memory rather than creating a duplicate. This implements Zettelkasten-style knowledge growth.
+When incoming content is similar (55-95%) to an existing memory, Cairn appends new insights to the existing memory rather than creating a duplicate. This implements Zettelkasten-style knowledge growth.
 
 ### Auto-Relate
 
@@ -119,7 +119,7 @@ After storing, `_auto_relate` creates edges to the top 3 most similar existing m
 | Fallback model | all-MiniLM-L6-v2 (384 dimensions) |
 | Runtime | ONNX Runtime, CPU-only |
 | CoreML | Disabled (memory leak in Apple's ANE runtime) |
-| Model location | `~/.cache/omega/models/{model}-onnx/` |
+| Model location | `~/.cache/cairn/models/{model}-onnx/` |
 | RAM after first query | ~337 MB |
 | Circuit breaker | Fails open after transient ONNX errors |
 
@@ -148,7 +148,7 @@ Edges carry a `weight` (0.0 to 1.0) reflecting relationship strength. Traversal 
 
 ## Hook System
 
-Hooks connect Claude Code lifecycle events to OMEGA processing.
+Hooks connect Claude Code lifecycle events to Cairn processing.
 
 ### Architecture
 
@@ -185,7 +185,7 @@ Claude Code hook event
 
 ## Database Schema
 
-All data lives in a single SQLite database at `~/.omega/omega.db`.
+All data lives in a single SQLite database at `~/.cairn/cairn.db`.
 
 ### Core Tables
 

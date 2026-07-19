@@ -1,4 +1,4 @@
-# OMEGA Usage Examples
+# Cairn Usage Examples
 
 Practical examples for common workflows using the CLI and Python API.
 
@@ -20,22 +20,22 @@ Practical examples for common workflows using the CLI and Python API.
 
 ```bash
 # Store a decision
-omega store "We chose PostgreSQL over MongoDB for ACID transaction support" --type decision
+cairn store "We chose PostgreSQL over MongoDB for ACID transaction support" --type decision
 
 # Store a user preference
-omega store "Always use early returns, never nest more than 2 levels" --type user_preference
+cairn store "Always use early returns, never nest more than 2 levels" --type user_preference
 
 # Store a lesson learned from debugging
-omega store "Docker node_modules volume mount shadows container deps -- use anonymous volume" --type lesson
+cairn store "Docker node_modules volume mount shadows container deps -- use anonymous volume" --type lesson
 
 # Store with tags for better retrieval
-omega store "API rate limit is 100 req/min per user" --type decision --tags api,rate-limit
+cairn store "API rate limit is 100 req/min per user" --type decision --tags api,rate-limit
 ```
 
 ### Python API
 
 ```python
-from omega import store, remember
+from cairn import store, remember
 
 # Store a decision
 store("We chose PostgreSQL over MongoDB for ACID transaction support", "decision")
@@ -51,7 +51,7 @@ store(
 )
 
 # Batch store multiple memories at once
-from omega import batch_store
+from cairn import batch_store
 
 batch_store([
     {"content": "Use pnpm, not npm", "event_type": "user_preference"},
@@ -68,25 +68,25 @@ batch_store([
 
 ```bash
 # Semantic search -- finds relevant memories even with different wording
-omega query "database choice for orders"
+cairn query "database choice for orders"
 
 # Filter by type
-omega query "auth" --type decision
+cairn query "auth" --type decision
 
 # View recent memory timeline
-omega timeline
+cairn timeline
 
 # View timeline for last 14 days
-omega timeline --days 14
+cairn timeline --days 14
 
-# Check what OMEGA knows about a topic
-omega query "Docker deployment gotchas"
+# Check what Cairn knows about a topic
+cairn query "Docker deployment gotchas"
 ```
 
 ### Python API
 
 ```python
-from omega import query, timeline, find_similar_memories
+from cairn import query, timeline, find_similar_memories
 
 # Basic semantic search
 results = query("database choice for orders")
@@ -117,26 +117,26 @@ During a session, tell Claude:
 
 > "Checkpoint this -- I'm halfway through migrating auth to the new middleware pattern. Files changed: auth.py, middleware.py. Still need to update tests and the login route."
 
-Claude calls `omega_checkpoint` automatically. In your next session:
+Claude calls `cairn_checkpoint` automatically. In your next session:
 
 > "Resume the auth middleware migration."
 
-Claude calls `omega_resume_task` and picks up with full context.
+Claude calls `cairn_resume_task` and picks up with full context.
 
 ### CLI
 
 ```bash
 # List recent activity to find checkpointed tasks
-omega activity
+cairn activity
 
 # Query for checkpointed tasks
-omega query "auth middleware migration" --type checkpoint
+cairn query "auth middleware migration" --type checkpoint
 ```
 
 ### Python API
 
 ```python
-from omega import store, query
+from cairn import store, query
 
 # Store a checkpoint manually
 store(
@@ -159,31 +159,31 @@ print(results)
 
 ```bash
 # Check installation health
-omega doctor
+cairn doctor
 
 # View memory stats
-omega stats
+cairn stats
 
 # Deduplicate and prune old session summaries
-omega consolidate
+cairn consolidate
 
 # Cluster and summarize related memories
-omega compact
+cairn compact
 
 # Back up the database (keeps last 5 backups)
-omega backup
+cairn backup
 
 # Validate database integrity
-omega validate
+cairn validate
 
 # View hook errors
-omega logs
+cairn logs
 ```
 
 ### Python API
 
 ```python
-from omega import check_health, consolidate, compact, status, type_stats
+from cairn import check_health, consolidate, compact, status, type_stats
 
 # Quick status check
 print(status())
@@ -209,14 +209,14 @@ print(compact())
 ### CLI
 
 ```bash
-# Reminders are managed through Claude via the omega_remind MCP tool.
+# Reminders are managed through Claude via the cairn_remind MCP tool.
 # Ask Claude: "Remind me to update the API docs before the release next Friday"
 ```
 
 ### Python API
 
 ```python
-from omega import create_reminder, list_reminders, get_due_reminders, dismiss_reminder
+from cairn import create_reminder, list_reminders, get_due_reminders, dismiss_reminder
 
 # Create a reminder
 create_reminder(
@@ -244,25 +244,25 @@ dismiss_reminder(reminder_id="reminder-id-here")
 
 ```bash
 # Export all memories to JSON
-omega export memories.json
+cairn export memories.json
 
 # Import memories from JSON (replaces existing)
-omega import memories.json
+cairn import memories.json
 ```
 
 ### Python API
 
 ```python
-from omega import export_memories, import_memories
+from cairn import export_memories, import_memories
 
 # Export
-export_memories("/tmp/omega-backup.json")
+export_memories("/tmp/cairn-backup.json")
 
 # Import (clears existing memories first by default)
-import_memories("/tmp/omega-backup.json")
+import_memories("/tmp/cairn-backup.json")
 
 # Import without clearing existing
-import_memories("/tmp/omega-backup.json", clear_existing=False)
+import_memories("/tmp/cairn-backup.json", clear_existing=False)
 ```
 
 ---
@@ -273,9 +273,9 @@ import_memories("/tmp/omega-backup.json", clear_existing=False)
 
 ```python
 #!/usr/bin/env python3
-"""Post-deploy hook: store deployment context in OMEGA."""
+"""Post-deploy hook: store deployment context in Cairn."""
 import os
-from omega import store
+from cairn import store
 
 store(
     f"Deployed {os.environ['GIT_SHA'][:8]} to {os.environ['DEPLOY_ENV']}. "
@@ -297,7 +297,7 @@ MSG=$(git log -1 --pretty=%B)
 # Store architectural decisions (commits starting with "decision:" or "ADR:")
 case "$MSG" in
   decision:*|ADR:*)
-    omega store "$MSG" --type decision
+    cairn store "$MSG" --type decision
     ;;
 esac
 ```
@@ -307,10 +307,10 @@ esac
 ```python
 #!/usr/bin/env python3
 """Print a quick context briefing for the current project."""
-from omega import query, status
+from cairn import query, status
 
 s = status()
-print(f"OMEGA: {s['node_count']} memories, {s['db_size_mb']:.1f} MB")
+print(f"Cairn: {s['node_count']} memories, {s['db_size_mb']:.1f} MB")
 
 # Surface key decisions for this project
 results = query("key decisions and preferences", event_type="decision", limit=5)

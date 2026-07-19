@@ -1,7 +1,7 @@
 #!/usr/bin/env python3.11
-"""Release omega-memory to PyPI.
+"""Release cairn to PyPI.
 
-Alternative path to the GH Actions publish.yml workflow on omega-public.
+Alternative path to the GH Actions publish.yml workflow on cairn-public.
 The script pushes a git tag but does not create a GitHub release, so the
 auto-publish workflow does not fire — no double-publish risk.
 
@@ -13,7 +13,7 @@ Usage:
     python3.11 scripts/release.py <version> --skip-confirm  # CI-like, no prompts
 
 Pre-flight:
-    - PYPI_TOKEN_OMEGA in ~/.omega/secrets.json
+    - PYPI_TOKEN_CAIRN in ~/.cairn/secrets.json
     - Working tree clean on main, up to date with origin
     - Version not already tagged
 """
@@ -31,8 +31,8 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO / "pyproject.toml"
-INIT_PY = REPO / "src" / "omega" / "__init__.py"
-SECRETS = Path.home() / ".omega" / "secrets.json"
+INIT_PY = REPO / "src" / "cairn" / "__init__.py"
+SECRETS = Path.home() / ".cairn" / "secrets.json"
 
 
 def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
@@ -60,11 +60,11 @@ def preflight(version: str) -> None:
     if not SECRETS.exists():
         sys.exit(f"Missing {SECRETS}")
     secrets = json.loads(SECRETS.read_text())
-    if not secrets.get("PYPI_TOKEN_OMEGA"):
-        sys.exit("PYPI_TOKEN_OMEGA not in ~/.omega/secrets.json")
+    if not secrets.get("PYPI_TOKEN_CAIRN"):
+        sys.exit("PYPI_TOKEN_CAIRN not in ~/.cairn/secrets.json")
 
     # Only block on uncommitted changes to files this script will modify.
-    tracked_targets = ["pyproject.toml", "src/omega/__init__.py"]
+    tracked_targets = ["pyproject.toml", "src/cairn/__init__.py"]
     dirty = subprocess.run(
         ["git", "status", "--porcelain", "--"] + tracked_targets,
         cwd=REPO, capture_output=True, text=True, check=True,
@@ -119,8 +119,8 @@ def build() -> tuple[Path, Path]:
         for f in dist.iterdir():
             f.unlink()
     run([sys.executable, "-m", "build", "--wheel", "--sdist"])
-    wheels = list(dist.glob("omega_memory-*.whl"))
-    sdists = list(dist.glob("omega_memory-*.tar.gz"))
+    wheels = list(dist.glob("cairn_memory-*.whl"))
+    sdists = list(dist.glob("cairn_memory-*.tar.gz"))
     if len(wheels) != 1 or len(sdists) != 1:
         sys.exit(f"Expected 1 wheel + 1 sdist, got {wheels=} {sdists=}")
     return wheels[0], sdists[0]
@@ -128,7 +128,7 @@ def build() -> tuple[Path, Path]:
 
 def verify(wheel: Path, expected_version: str) -> None:
     step("Verifying wheel in clean venv")
-    with tempfile.TemporaryDirectory(prefix="omega-mem-verify-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="cairn-mem-verify-") as tmp:
         env_dir = Path(tmp) / "venv"
         venv.create(str(env_dir), with_pip=True)
         py = env_dir / "bin" / "python3.11"
@@ -136,7 +136,7 @@ def verify(wheel: Path, expected_version: str) -> None:
             py = env_dir / "bin" / "python"
         run([str(py), "-m", "pip", "install", "--quiet", str(wheel)])
         proc = subprocess.run(
-            [str(py), "-c", "import omega; print(omega.__version__)"],
+            [str(py), "-c", "import cairn; print(cairn.__version__)"],
             capture_output=True, text=True, check=True,
         )
         installed = proc.stdout.strip()
@@ -148,17 +148,17 @@ def verify(wheel: Path, expected_version: str) -> None:
 def publish_pypi(wheel: Path, sdist: Path) -> None:
     step("Publishing to PyPI")
     secrets = json.loads(SECRETS.read_text())
-    env = {**os.environ, "TWINE_USERNAME": "__token__", "TWINE_PASSWORD": secrets["PYPI_TOKEN_OMEGA"]}
+    env = {**os.environ, "TWINE_USERNAME": "__token__", "TWINE_PASSWORD": secrets["PYPI_TOKEN_CAIRN"]}
     subprocess.run(
         [sys.executable, "-m", "twine", "upload", "--non-interactive", str(wheel), str(sdist)],
         env=env, check=True,
     )
-    print(f"  Published: https://pypi.org/project/omega-memory/{wheel.stem.split('-')[1]}/")
+    print(f"  Published: https://pypi.org/project/cairn/{wheel.stem.split('-')[1]}/")
 
 
 def git_commit_tag_push(version: str) -> None:
     step("Committing + tagging + pushing")
-    run(["git", "add", "pyproject.toml", "src/omega/__init__.py"])
+    run(["git", "add", "pyproject.toml", "src/cairn/__init__.py"])
     staged = subprocess.run(
         ["git", "diff", "--cached", "--name-only"], cwd=REPO, capture_output=True, text=True, check=True,
     ).stdout.strip()
@@ -190,19 +190,19 @@ def main() -> int:
     if args.dry_run:
         print(f"\nDRY RUN: would publish {wheel.name} + {sdist.name} and push v{args.version}")
         print("Reverting version bump...")
-        run(["git", "checkout", "--", "pyproject.toml", "src/omega/__init__.py"])
+        run(["git", "checkout", "--", "pyproject.toml", "src/cairn/__init__.py"])
         return 0
 
-    confirm(f"Publish omega-memory {args.version} to PyPI?", args.skip_confirm)
+    confirm(f"Publish cairn {args.version} to PyPI?", args.skip_confirm)
     publish_pypi(wheel, sdist)
 
     confirm(f"Commit + tag v{args.version} + push to origin/main?", args.skip_confirm)
     git_commit_tag_push(args.version)
 
     step("Done")
-    print(f"omega-memory {args.version} released.")
-    print(f"  PyPI:   https://pypi.org/project/omega-memory/{args.version}/")
-    print(f"  GitHub: https://github.com/omega-memory/omega-memory/releases/tag/v{args.version}")
+    print(f"cairn {args.version} released.")
+    print(f"  PyPI:   https://pypi.org/project/cairn/{args.version}/")
+    print(f"  GitHub: https://github.com/TracqiTechnology/cairn/releases/tag/v{args.version}")
     return 0
 
 

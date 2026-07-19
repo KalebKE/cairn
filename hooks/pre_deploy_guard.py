@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""OMEGA PreToolUse hook — Deploy guard (fallback mode).
+"""Cairn PreToolUse hook — Deploy guard (fallback mode).
 
 BLOCKS deployment commands unless the coordination gate was cleared by
-calling omega_query(event_type="decision") in the current session.
+calling cairn_query(event_type="decision") in the current session.
 
 Exit code 2 = block the tool call.
 Exit code 0 = allow.
@@ -26,12 +26,12 @@ _DEPLOY_PATTERNS = [
 ]
 
 _DEPLOY_RE = [re.compile(p) for p in _DEPLOY_PATTERNS]
-_GATE_DIR = Path.home() / ".omega" / "gates"
+_GATE_DIR = Path.home() / ".cairn" / "gates"
 
 
 def _log_hook_error(hook_name, error):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         tb = traceback.format_exc()
@@ -47,7 +47,7 @@ def _log_hook_error(hook_name, error):
 
 def _log_timing(hook_name, elapsed_ms):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         data = f"[{timestamp}] {hook_name}: OK ({elapsed_ms:.0f}ms)\n"
@@ -116,9 +116,9 @@ def main():
     # BLOCK — identify which marker is missing
     missing = []
     if not _is_marker_fresh(session_id, "gate"):
-        missing.append("omega_query(event_type='decision', query='<target area>')")
+        missing.append("cairn_query(event_type='decision', query='<target area>')")
     if not _is_marker_fresh(session_id, "coord"):
-        missing.append("omega_coord_status")
+        missing.append("cairn_coord_status")
 
     print("\n[DEPLOY-GATE] BLOCKED: Coordination gate not cleared.")
     print("  You MUST run BOTH of these before deploying:")

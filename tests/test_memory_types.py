@@ -1,7 +1,7 @@
 """Tests for memory type classification (episodic/semantic/procedural)."""
 import pytest
 import sqlite3
-from omega.sqlite_store import SQLiteStore
+from cairn.sqlite_store import SQLiteStore
 
 
 class TestMemoryTypeSchema:
@@ -26,7 +26,7 @@ class TestMemoryTypeSchema:
         assert len(indexes) == 1
 
     def test_schema_version_is_12(self, store):
-        from omega.schema import SCHEMA_VERSION
+        from cairn.schema import SCHEMA_VERSION
         assert SCHEMA_VERSION == 14
         row = store._conn.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
         assert row[0] == 14
@@ -72,7 +72,7 @@ class TestMemoryTypeAutoClassify:
 
     def test_all_event_types_mapped(self, store):
         """Every key in _TYPE_WEIGHTS should be in _MEMORY_TYPE_MAP."""
-        from omega.sqlite_store import SQLiteStore
+        from cairn.sqlite_store import SQLiteStore
         for etype in SQLiteStore._TYPE_WEIGHTS:
             assert etype in SQLiteStore._MEMORY_TYPE_MAP, f"{etype} not in _MEMORY_TYPE_MAP"
 
@@ -80,29 +80,29 @@ class TestMemoryTypeAutoClassify:
 @pytest.mark.usefixtures("_reset_bridge")
 class TestMemoryTypeFilter:
 
-    def test_filter_procedural(self, tmp_omega_dir):
-        from omega.bridge import store, query
+    def test_filter_procedural(self, tmp_cairn_dir):
+        from cairn.bridge import store, query
         store(content="Always validate input before processing", event_type="lesson_learned")
         store(content="We decided to use REST over GraphQL", event_type="decision")
         result = query(query_text="processing", memory_type="procedural")
         assert "validate input" in result.lower() or "No matching" in result
 
-    def test_filter_semantic(self, tmp_omega_dir):
-        from omega.bridge import store, query
+    def test_filter_semantic(self, tmp_cairn_dir):
+        from cairn.bridge import store, query
         store(content="Database choice: PostgreSQL for OLTP", event_type="decision")
         store(content="Lesson: always index foreign keys", event_type="lesson_learned")
         result = query(query_text="database", memory_type="semantic")
         assert "PostgreSQL" in result or "Results: 0" in result
 
-    def test_filter_episodic(self, tmp_omega_dir):
-        from omega.bridge import store, query
+    def test_filter_episodic(self, tmp_cairn_dir):
+        from cairn.bridge import store, query
         store(content="Session: debugged memory leak in production", event_type="session_summary")
         store(content="Never ignore memory leak warnings", event_type="constraint")
         result = query(query_text="memory leak", memory_type="episodic")
         assert "debugged" in result.lower() or "Results: 0" in result
 
-    def test_no_filter_returns_all_types(self, tmp_omega_dir):
-        from omega.bridge import store, query
+    def test_no_filter_returns_all_types(self, tmp_cairn_dir):
+        from cairn.bridge import store, query
         store(content="Episodic: completed auth feature", event_type="session_summary")
         store(content="Semantic: auth uses JWT tokens", event_type="decision")
         store(content="Procedural: always check token expiry", event_type="lesson_learned")

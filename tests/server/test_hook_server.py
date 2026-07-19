@@ -1,4 +1,4 @@
-"""Tests for the lean daemon hook server (omega.server.hook_server).
+"""Tests for the lean daemon hook server (cairn.server.hook_server).
 
 Covers the wire protocol (surface block, no-op dispatch, batch, empty/watchdog
 probe), plus the surfacing logic's budget/relevance/debounce behavior against a
@@ -11,12 +11,12 @@ from pathlib import Path
 
 import pytest
 
-from omega.server import hook_server as H
+from cairn.server import hook_server as H
 
 
 # A short socket path — macOS caps AF_UNIX paths at ~104 chars, so pytest's
 # tmp_path (deep under /private/var/folders) can't be used for the socket.
-_TEST_SOCK = Path("/tmp/omega_hook_server_test.sock")
+_TEST_SOCK = Path("/tmp/cairn_hook_server_test.sock")
 
 
 def _client(sock_path, req, timeout=5.0):
@@ -105,9 +105,9 @@ def _fake_packet(markdown="", used=None):
 
 
 def _patch_builder(monkeypatch, fn):
-    from omega.server import context_handlers as ctx
+    from cairn.server import context_handlers as ctx
     monkeypatch.setattr(ctx, "build_context_packet", fn)
-    import omega.bridge as bridge
+    import cairn.bridge as bridge
     monkeypatch.setattr(bridge, "_get_store", lambda: object())
 
 
@@ -300,8 +300,8 @@ def test_do_compact_capture_stores_digest(tmp_path, monkeypatch):
             stored.update({"content": content, "metadata": metadata, **kw})
             return "mem-fake"
 
-    import omega.bridge as bridge
-    import omega.llm as llm
+    import cairn.bridge as bridge
+    import cairn.llm as llm
     monkeypatch.setattr(bridge, "_get_store", lambda: FakeStore())
     monkeypatch.setattr(llm, "llm_complete",
                         lambda *a, **k: "Session digest: fixed enrichment race, merged PR 999.")
@@ -320,8 +320,8 @@ def test_do_compact_capture_stores_digest(tmp_path, monkeypatch):
 
 def test_do_compact_capture_skips_on_empty_llm(tmp_path, monkeypatch):
     p = _write_transcript(tmp_path)
-    import omega.bridge as bridge
-    import omega.llm as llm
+    import cairn.bridge as bridge
+    import cairn.llm as llm
     called = {"store": False}
 
     class FakeStore:
@@ -385,7 +385,7 @@ def test_cfg_is_cached_until_config_mtime_changes(tmp_path, monkeypatch):
     import os
     cfg_file = tmp_path / "config.json"
     cfg_file.write_text(json.dumps({"surface": {"limit": 7}}))
-    monkeypatch.setattr(H, "_omega_home", lambda: tmp_path)
+    monkeypatch.setattr(H, "_cairn_home", lambda: tmp_path)
     H._cfg_cache = None  # reset cache state
 
     reads = {"n": 0}
@@ -412,7 +412,7 @@ def test_cfg_is_cached_until_config_mtime_changes(tmp_path, monkeypatch):
 # Socket lifecycle: rebind after external unlink, inode-guarded stop.
 #
 # Reproduces the wedged-daemon incident: another session's stop_hook_server
-# unlinks ~/.omega/hook.sock; the surviving process's watchdog calls
+# unlinks ~/.cairn/hook.sock; the surviving process's watchdog calls
 # start_hook_server(), which returns the cached _server without re-binding,
 # so the daemon loops "re-creating..." forever while clients get
 # FileNotFoundError.
@@ -449,7 +449,7 @@ def test_watchdog_iteration_restores_socket(monkeypatch):
 
 
 async def _watchdog_body():
-    from omega.server import mcp_server as M
+    from cairn.server import mcp_server as M
     H._server = None
     await H.start_hook_server()
     try:
@@ -518,7 +518,7 @@ def test_dispatch_session_end_schedules_worker(monkeypatch):
 
 
 def test_session_end_worker_calls_distill(monkeypatch):
-    import omega.bridge as bridge
+    import cairn.bridge as bridge
     seen = {}
     monkeypatch.setattr(bridge, "distill_trajectory", lambda sid: seen.setdefault("sid", sid))
     monkeypatch.setattr(H, "_do_compact_capture", lambda payload, source="pre-compact": None)
@@ -527,7 +527,7 @@ def test_session_end_worker_calls_distill(monkeypatch):
 
 
 def test_session_end_missing_session_id_fail_open(monkeypatch):
-    import omega.bridge as bridge
+    import cairn.bridge as bridge
     monkeypatch.setattr(
         bridge, "distill_trajectory",
         lambda sid: (_ for _ in ()).throw(AssertionError("must not distill without session_id")),
@@ -537,15 +537,15 @@ def test_session_end_missing_session_id_fail_open(monkeypatch):
 
 
 def test_session_end_stores_digest_with_session_end_tag(tmp_path, monkeypatch):
-    import omega.bridge as bridge
-    import omega.llm as llm
+    import cairn.bridge as bridge
+    import cairn.llm as llm
 
     transcript = tmp_path / "t.jsonl"
     lines = []
     for i in range(30):
         lines.append(json.dumps({
             "type": "user",
-            "message": {"content": f"prompt {i}: please fix the flaky rollup test in omega"},
+            "message": {"content": f"prompt {i}: please fix the flaky rollup test in cairn"},
         }))
         lines.append(json.dumps({
             "type": "assistant",

@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from omega.evaluation.context_packet_eval import (
+from cairn.evaluation.context_packet_eval import (
     PacketEvalReport,
     backfill_packet_miss_edges,
     backfill_packet_miss_report,
@@ -19,11 +19,11 @@ from omega.evaluation.context_packet_eval import (
     run_context_packet_evaluation,
     _classify_packet_miss,
 )
-from omega.sqlite_store import SQLiteStore
+from cairn.sqlite_store import SQLiteStore
 
 
-def _seed_store(tmp_omega_dir):
-    store = SQLiteStore(str(tmp_omega_dir / "omega.db"))
+def _seed_store(tmp_cairn_dir):
+    store = SQLiteStore(str(tmp_cairn_dir / "cairn.db"))
     memories = [
         ("Decision: auth handlers validate JWT tokens before database lookup.", "decision"),
         ("Lesson: OAuth callbacks must validate state nonce to prevent replay.", "lesson_learned"),
@@ -36,11 +36,11 @@ def _seed_store(tmp_omega_dir):
     return store
 
 
-def test_run_context_packet_evaluation_basic(tmp_omega_dir):
-    store = _seed_store(tmp_omega_dir)
+def test_run_context_packet_evaluation_basic(tmp_cairn_dir):
+    store = _seed_store(tmp_cairn_dir)
     try:
         report = run_context_packet_evaluation(
-            db_path=str(tmp_omega_dir / "omega.db"),
+            db_path=str(tmp_cairn_dir / "cairn.db"),
             sample_size=5,
             budget_tokens=500,
             seed=7,
@@ -66,13 +66,13 @@ def test_run_context_packet_evaluation_basic(tmp_omega_dir):
     assert report.avg_rendered_warnings >= 0.0
 
 
-def test_context_packet_evaluation_writes_output_and_probe_cache(tmp_omega_dir):
-    store = _seed_store(tmp_omega_dir)
-    output = tmp_omega_dir / "packet-report.json"
-    cache = tmp_omega_dir / "packet-probes.json"
+def test_context_packet_evaluation_writes_output_and_probe_cache(tmp_cairn_dir):
+    store = _seed_store(tmp_cairn_dir)
+    output = tmp_cairn_dir / "packet-report.json"
+    cache = tmp_cairn_dir / "packet-probes.json"
     try:
         report = run_context_packet_evaluation(
-            db_path=str(tmp_omega_dir / "omega.db"),
+            db_path=str(tmp_cairn_dir / "cairn.db"),
             sample_size=4,
             budget_tokens=500,
             output_path=str(output),
@@ -88,14 +88,14 @@ def test_context_packet_evaluation_writes_output_and_probe_cache(tmp_omega_dir):
     assert "packet_hit_rate" in loaded
 
 
-def test_context_packet_evaluation_restores_access_state(tmp_omega_dir):
-    store = _seed_store(tmp_omega_dir)
+def test_context_packet_evaluation_restores_access_state(tmp_cairn_dir):
+    store = _seed_store(tmp_cairn_dir)
     try:
         before = store._conn.execute(
             "SELECT node_id, access_count, last_accessed FROM memories ORDER BY node_id"
         ).fetchall()
         run_context_packet_evaluation(
-            db_path=str(tmp_omega_dir / "omega.db"),
+            db_path=str(tmp_cairn_dir / "cairn.db"),
             sample_size=4,
             budget_tokens=500,
             seed=11,
@@ -218,7 +218,7 @@ def test_classify_packet_miss_reasons():
 
 def test_cli_eval_context_packet_json(capsys):
     from argparse import Namespace
-    from omega.cli import cmd_eval_context_packet
+    from cairn.cli import cmd_eval_context_packet
 
     report = PacketEvalReport(
         timestamp="2026-06-12T00:00:00+00:00",
@@ -230,7 +230,7 @@ def test_cli_eval_context_packet_json(capsys):
     )
 
     with patch(
-        "omega.evaluation.context_packet_eval.run_context_packet_evaluation",
+        "cairn.evaluation.context_packet_eval.run_context_packet_evaluation",
         return_value=report,
     ):
         cmd_eval_context_packet(Namespace(
@@ -250,7 +250,7 @@ def test_cli_eval_context_packet_json(capsys):
 
 def test_cli_backfill_context_packet_json(capsys):
     from argparse import Namespace
-    from omega.cli import cmd_backfill_context_packet
+    from cairn.cli import cmd_backfill_context_packet
 
     manifest = {
         "report_path": "packet-report.json",
@@ -268,8 +268,8 @@ def test_cli_backfill_context_packet_json(capsys):
         "edges": [],
     }
 
-    with patch("omega.bridge._get_store", return_value=object()), patch(
-        "omega.evaluation.context_packet_eval.backfill_packet_miss_report",
+    with patch("cairn.bridge._get_store", return_value=object()), patch(
+        "cairn.evaluation.context_packet_eval.backfill_packet_miss_report",
         return_value=manifest,
     ) as mocked:
         cmd_backfill_context_packet(Namespace(
@@ -293,7 +293,7 @@ def test_cli_backfill_context_packet_json(capsys):
 
 def test_cli_backfill_context_packet_apply(capsys):
     from argparse import Namespace
-    from omega.cli import cmd_backfill_context_packet
+    from cairn.cli import cmd_backfill_context_packet
 
     manifest = {
         "report_path": "packet-report.json",
@@ -312,9 +312,9 @@ def test_cli_backfill_context_packet_apply(capsys):
     }
 
     with patch(
-        "omega.bridge._get_store", return_value=object()
+        "cairn.bridge._get_store", return_value=object()
     ), patch(
-        "omega.evaluation.context_packet_eval.backfill_packet_miss_report",
+        "cairn.evaluation.context_packet_eval.backfill_packet_miss_report",
         return_value=manifest,
     ) as mocked:
         cmd_backfill_context_packet(Namespace(
@@ -332,15 +332,15 @@ def test_cli_backfill_context_packet_apply(capsys):
     assert mocked.call_args.kwargs["dry_run"] is False
 
 
-def test_diagnose_context_packet_report_explains_miss(tmp_omega_dir):
-    store = _seed_store(tmp_omega_dir)
-    output = tmp_omega_dir / "diagnosis.json"
+def test_diagnose_context_packet_report_explains_miss(tmp_cairn_dir):
+    store = _seed_store(tmp_cairn_dir)
+    output = tmp_cairn_dir / "diagnosis.json"
     try:
         ids = store.get_recent(limit=2)
         source_id = ids[0].id
         rendered_id = ids[1].id
         store.add_edge(source_id, rendered_id, edge_type="related", weight=0.8)
-        report_path = tmp_omega_dir / "packet-report.json"
+        report_path = tmp_cairn_dir / "packet-report.json"
         report_path.write_text(json.dumps({
             "sample_size": 1,
             "packet_hit_rate": 0.0,
@@ -392,7 +392,7 @@ def test_diagnose_context_packet_report_explains_miss(tmp_omega_dir):
 
 def test_cli_diagnose_context_packet_json(capsys):
     from argparse import Namespace
-    from omega.cli import cmd_diagnose_context_packet
+    from cairn.cli import cmd_diagnose_context_packet
 
     result = {
         "report_path": "packet-report.json",
@@ -400,8 +400,8 @@ def test_cli_diagnose_context_packet_json(capsys):
         "diagnoses": [],
     }
 
-    with patch("omega.bridge._get_store", return_value=object()), patch(
-        "omega.evaluation.context_packet_eval.diagnose_context_packet_report",
+    with patch("cairn.bridge._get_store", return_value=object()), patch(
+        "cairn.evaluation.context_packet_eval.diagnose_context_packet_report",
         return_value=result,
     ) as mocked:
         cmd_diagnose_context_packet(Namespace(
@@ -420,7 +420,7 @@ def test_cli_diagnose_context_packet_json(capsys):
 
 def test_cli_maintain_context_packet_json(capsys):
     from argparse import Namespace
-    from omega.cli import cmd_maintain_context_packet
+    from cairn.cli import cmd_maintain_context_packet
 
     result = {
         "artifact_prefix": "packet-loop",
@@ -434,9 +434,9 @@ def test_cli_maintain_context_packet_json(capsys):
     }
 
     with patch(
-        "omega.bridge._get_store", return_value=object()
+        "cairn.bridge._get_store", return_value=object()
     ), patch(
-        "omega.evaluation.context_packet_eval.run_context_packet_maintenance_loop",
+        "cairn.evaluation.context_packet_eval.run_context_packet_maintenance_loop",
         return_value=result,
     ) as mocked:
         cmd_maintain_context_packet(Namespace(
@@ -463,8 +463,8 @@ def test_cli_maintain_context_packet_json(capsys):
     assert mocked.call_args.kwargs["event_types"] == ["decision"]
 
 
-def test_backfill_source_edges_dry_run_does_not_mutate(tmp_omega_dir):
-    store = _seed_store(tmp_omega_dir)
+def test_backfill_source_edges_dry_run_does_not_mutate(tmp_cairn_dir):
+    store = _seed_store(tmp_cairn_dir)
     try:
         source_id = store.get_by_type("decision", limit=1)[0].id
         result = backfill_source_edges(
@@ -486,8 +486,8 @@ def test_backfill_source_edges_dry_run_does_not_mutate(tmp_omega_dir):
     assert edge_count == 0
 
 
-def test_backfill_source_edges_creates_typed_edge(tmp_omega_dir):
-    store = _seed_store(tmp_omega_dir)
+def test_backfill_source_edges_creates_typed_edge(tmp_cairn_dir):
+    store = _seed_store(tmp_cairn_dir)
     try:
         source_id = store.get_by_type("decision", limit=1)[0].id
         result = backfill_source_edges(
@@ -511,8 +511,8 @@ def test_backfill_source_edges_creates_typed_edge(tmp_omega_dir):
     assert "context_packet_eval_backfill" in rows[0][1]
 
 
-def test_backfill_packet_miss_edges_links_source_to_used_memory(tmp_omega_dir):
-    store = _seed_store(tmp_omega_dir)
+def test_backfill_packet_miss_edges_links_source_to_used_memory(tmp_cairn_dir):
+    store = _seed_store(tmp_cairn_dir)
     try:
         ids = store.get_recent(limit=2)
         source_id = ids[0].id
@@ -544,8 +544,8 @@ def test_backfill_packet_miss_edges_links_source_to_used_memory(tmp_omega_dir):
     assert "context_packet_miss_backfill" in rows[0][1]
 
 
-def test_backfill_packet_miss_edges_respects_global_cap(tmp_omega_dir):
-    store = _seed_store(tmp_omega_dir)
+def test_backfill_packet_miss_edges_respects_global_cap(tmp_cairn_dir):
+    store = _seed_store(tmp_cairn_dir)
     try:
         ids = store.get_recent(limit=3)
         probe_results = [
@@ -605,9 +605,9 @@ def test_filter_packet_miss_probes_respects_event_type_allowlist():
     assert [probe["source_id"] for probe in eligible] == ["mem-decision"]
 
 
-def test_backfill_packet_miss_report_dry_run_writes_manifest(tmp_omega_dir):
-    store = _seed_store(tmp_omega_dir)
-    output = tmp_omega_dir / "backfill-manifest.json"
+def test_backfill_packet_miss_report_dry_run_writes_manifest(tmp_cairn_dir):
+    store = _seed_store(tmp_cairn_dir)
+    output = tmp_cairn_dir / "backfill-manifest.json"
     try:
         ids = store.get_recent(limit=2)
         source_id = ids[0].id
@@ -622,7 +622,7 @@ def test_backfill_packet_miss_report_dry_run_writes_manifest(tmp_omega_dir):
                 }
             ]
         }
-        report_path = tmp_omega_dir / "packet-report.json"
+        report_path = tmp_cairn_dir / "packet-report.json"
         report_path.write_text(json.dumps(report))
 
         result = backfill_packet_miss_report(
@@ -650,8 +650,8 @@ def test_backfill_packet_miss_report_dry_run_writes_manifest(tmp_omega_dir):
     assert json.loads(output.read_text())["created"] == 1
 
 
-def test_context_packet_maintenance_loop_dry_run_skips_after_eval(tmp_omega_dir):
-    store = _seed_store(tmp_omega_dir)
+def test_context_packet_maintenance_loop_dry_run_skips_after_eval(tmp_cairn_dir):
+    store = _seed_store(tmp_cairn_dir)
     before = PacketEvalReport(
         timestamp="2026-06-12T00:00:00+00:00",
         sample_size=1,
@@ -669,7 +669,7 @@ def test_context_packet_maintenance_loop_dry_run_skips_after_eval(tmp_omega_dir)
         avg_rendered_warnings=0.5,
     )
     manifest = {
-        "report_path": str(tmp_omega_dir / "loop-before.json"),
+        "report_path": str(tmp_cairn_dir / "loop-before.json"),
         "total_probes": 1,
         "eligible_misses": 1,
         "candidate_edges": 1,
@@ -683,15 +683,15 @@ def test_context_packet_maintenance_loop_dry_run_skips_after_eval(tmp_omega_dir)
     }
     try:
         with patch(
-            "omega.evaluation.context_packet_eval.run_context_packet_evaluation",
+            "cairn.evaluation.context_packet_eval.run_context_packet_evaluation",
             return_value=before,
         ) as eval_mock, patch(
-            "omega.evaluation.context_packet_eval.backfill_packet_miss_report",
+            "cairn.evaluation.context_packet_eval.backfill_packet_miss_report",
             return_value=manifest,
         ) as backfill_mock:
             result = run_context_packet_maintenance_loop(
                 store,
-                artifact_prefix=str(tmp_omega_dir / "loop"),
+                artifact_prefix=str(tmp_cairn_dir / "loop"),
                 sample_size=1,
                 budget_tokens=500,
                 apply=False,
@@ -711,8 +711,8 @@ def test_context_packet_maintenance_loop_dry_run_skips_after_eval(tmp_omega_dir)
     assert result["before"]["avg_rendered_warnings"] == 0.5
 
 
-def test_context_packet_maintenance_loop_apply_re_eval_runs_after(tmp_omega_dir):
-    store = _seed_store(tmp_omega_dir)
+def test_context_packet_maintenance_loop_apply_re_eval_runs_after(tmp_cairn_dir):
+    store = _seed_store(tmp_cairn_dir)
     before = PacketEvalReport(
         timestamp="2026-06-12T00:00:00+00:00",
         sample_size=1,
@@ -733,15 +733,15 @@ def test_context_packet_maintenance_loop_apply_re_eval_runs_after(tmp_omega_dir)
     )
     try:
         with patch(
-            "omega.evaluation.context_packet_eval.run_context_packet_evaluation",
+            "cairn.evaluation.context_packet_eval.run_context_packet_evaluation",
             side_effect=[before, after],
         ) as eval_mock, patch(
-            "omega.evaluation.context_packet_eval.backfill_packet_miss_report",
+            "cairn.evaluation.context_packet_eval.backfill_packet_miss_report",
             return_value={"created": 1, "eligible_misses": 1, "total_probes": 1},
         ) as backfill_mock:
             result = run_context_packet_maintenance_loop(
                 store,
-                artifact_prefix=str(tmp_omega_dir / "loop-apply"),
+                artifact_prefix=str(tmp_cairn_dir / "loop-apply"),
                 sample_size=1,
                 budget_tokens=500,
                 apply=True,

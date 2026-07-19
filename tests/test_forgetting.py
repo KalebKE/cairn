@@ -1,9 +1,9 @@
-"""Tests for OMEGA Forgetting Audit Trail (Feature 1)."""
+"""Tests for Cairn Forgetting Audit Trail (Feature 1)."""
 
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from omega.server.handlers import HANDLERS
+from cairn.server.handlers import HANDLERS
 
 
 # ============================================================================
@@ -12,9 +12,9 @@ from omega.server.handlers import HANDLERS
 
 
 @pytest.fixture(autouse=True)
-def _reset_bridge(tmp_omega_dir):
+def _reset_bridge(tmp_cairn_dir):
     """Reset the bridge singleton so each test gets a fresh store."""
-    from omega.bridge import reset_memory
+    from cairn.bridge import reset_memory
 
     reset_memory()
     yield
@@ -22,7 +22,7 @@ def _reset_bridge(tmp_omega_dir):
 
 
 def _get_store():
-    from omega.bridge import _get_store
+    from cairn.bridge import _get_store
 
     return _get_store()
 
@@ -247,14 +247,14 @@ def test_schema_migration_creates_table():
 
 @pytest.mark.asyncio
 async def test_forgetting_log_handler():
-    """The omega_forgetting_log handler should return formatted markdown."""
+    """The cairn_forgetting_log handler should return formatted markdown."""
     store = _get_store()
 
     # Create and delete a memory
     node_id = store.store(content="Handler test memory", metadata={"event_type": "decision"})
     store.delete_node(node_id)
 
-    result = await HANDLERS["omega_forgetting_log"]({"limit": 10})
+    result = await HANDLERS["cairn_forgetting_log"]({"limit": 10})
     assert not result.get("isError"), result
     text = result["content"][0]["text"]
     assert "Forgetting Log" in text

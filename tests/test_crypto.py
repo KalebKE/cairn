@@ -1,4 +1,4 @@
-"""Tests for omega.crypto — encryption at rest, key management, passthrough."""
+"""Tests for cairn.crypto — encryption at rest, key management, passthrough."""
 import sys
 from pathlib import Path
 
@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from omega.crypto import (
+from cairn.crypto import (
     is_enabled,
     encrypt,
     decrypt,
@@ -33,35 +33,35 @@ def _reset_crypto():
 
 class TestIsEnabled:
     def test_enabled_by_default(self, monkeypatch):
-        monkeypatch.delenv("OMEGA_ENCRYPT", raising=False)
+        monkeypatch.delenv("CAIRN_ENCRYPT", raising=False)
         assert is_enabled() is True
 
     def test_enabled_with_1(self, monkeypatch):
-        monkeypatch.setenv("OMEGA_ENCRYPT", "1")
+        monkeypatch.setenv("CAIRN_ENCRYPT", "1")
         assert is_enabled() is True
 
     def test_enabled_with_true(self, monkeypatch):
-        monkeypatch.setenv("OMEGA_ENCRYPT", "true")
+        monkeypatch.setenv("CAIRN_ENCRYPT", "true")
         assert is_enabled() is True
 
     def test_enabled_with_yes(self, monkeypatch):
-        monkeypatch.setenv("OMEGA_ENCRYPT", "yes")
+        monkeypatch.setenv("CAIRN_ENCRYPT", "yes")
         assert is_enabled() is True
 
     def test_disabled_with_0(self, monkeypatch):
-        monkeypatch.setenv("OMEGA_ENCRYPT", "0")
+        monkeypatch.setenv("CAIRN_ENCRYPT", "0")
         assert is_enabled() is False
 
     def test_disabled_with_false(self, monkeypatch):
-        monkeypatch.setenv("OMEGA_ENCRYPT", "false")
+        monkeypatch.setenv("CAIRN_ENCRYPT", "false")
         assert is_enabled() is False
 
     def test_disabled_with_no(self, monkeypatch):
-        monkeypatch.setenv("OMEGA_ENCRYPT", "no")
+        monkeypatch.setenv("CAIRN_ENCRYPT", "no")
         assert is_enabled() is False
 
     def test_enabled_with_empty(self, monkeypatch):
-        monkeypatch.setenv("OMEGA_ENCRYPT", "")
+        monkeypatch.setenv("CAIRN_ENCRYPT", "")
         assert is_enabled() is True
 
 
@@ -72,14 +72,14 @@ class TestIsEnabled:
 
 class TestPlaintextPassthrough:
     def test_encrypt_returns_plaintext_when_disabled(self, monkeypatch):
-        monkeypatch.setenv("OMEGA_ENCRYPT", "0")
+        monkeypatch.setenv("CAIRN_ENCRYPT", "0")
         assert encrypt("hello world") == "hello world"
 
     def test_decrypt_returns_plaintext_without_prefix(self):
         assert decrypt("just plain text") == "just plain text"
 
     def test_encrypt_line_returns_line_when_disabled(self, monkeypatch):
-        monkeypatch.setenv("OMEGA_ENCRYPT", "0")
+        monkeypatch.setenv("CAIRN_ENCRYPT", "0")
         line = '{"content": "test"}'
         assert encrypt_line(line) == line
 
@@ -93,21 +93,21 @@ class TestPlaintextPassthrough:
 
 
 class TestKeyManagement:
-    def test_key_created_on_first_use(self, tmp_omega_dir):
-        key_path = tmp_omega_dir / ".key"
+    def test_key_created_on_first_use(self, tmp_cairn_dir):
+        key_path = tmp_cairn_dir / ".key"
         assert not key_path.exists()
         key = _get_or_create_key()
         assert key_path.exists()
         assert len(key) > 0
 
-    def test_key_reused_on_second_call(self, tmp_omega_dir):
+    def test_key_reused_on_second_call(self, tmp_cairn_dir):
         key1 = _get_or_create_key()
         key2 = _get_or_create_key()
         assert key1 == key2
 
-    def test_key_path_uses_omega_home(self, tmp_omega_dir):
+    def test_key_path_uses_cairn_home(self, tmp_cairn_dir):
         kp = _key_path()
-        assert str(tmp_omega_dir) in str(kp)
+        assert str(tmp_cairn_dir) in str(kp)
 
 
 # ============================================================================
@@ -117,8 +117,8 @@ class TestKeyManagement:
 
 class TestEncryptDecryptRoundtrip:
     @pytest.fixture(autouse=True)
-    def _enable_encryption(self, monkeypatch, tmp_omega_dir):
-        monkeypatch.setenv("OMEGA_ENCRYPT", "1")
+    def _enable_encryption(self, monkeypatch, tmp_cairn_dir):
+        monkeypatch.setenv("CAIRN_ENCRYPT", "1")
         reset_crypto_state()
 
     def _has_cryptography(self):
@@ -161,8 +161,8 @@ class TestEncryptDecryptRoundtrip:
 
 
 class TestResetCryptoState:
-    def test_reset_clears_state(self, monkeypatch, tmp_omega_dir):
-        monkeypatch.setenv("OMEGA_ENCRYPT", "1")
+    def test_reset_clears_state(self, monkeypatch, tmp_cairn_dir):
+        monkeypatch.setenv("CAIRN_ENCRYPT", "1")
         try:
             import cryptography  # noqa: F401
         except ImportError:

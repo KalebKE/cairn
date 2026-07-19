@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
-from omega.sqlite_store import SQLiteStore, MemoryResult
+from cairn.sqlite_store import SQLiteStore, MemoryResult
 
 
 # ============================================================================
@@ -24,7 +24,7 @@ from omega.sqlite_store import SQLiteStore, MemoryResult
 def _make_store(tmp_path) -> SQLiteStore:
     """Create a fresh SQLiteStore in tmp_path."""
     db_path = str(tmp_path / "test.db")
-    os.environ["OMEGA_HOME"] = str(tmp_path)
+    os.environ["CAIRN_HOME"] = str(tmp_path)
     return SQLiteStore(db_path)
 
 
@@ -37,35 +37,35 @@ class TestFactExtraction:
     """Tests for _extract_facts() heuristic NLP."""
 
     def test_extracts_camelcase(self):
-        from omega.bridge import _extract_facts
+        from cairn.bridge import _extract_facts
 
         facts = _extract_facts("We chose SQLiteStore for persistence and MemoryResult for queries.")
         assert "sqlitestore" in facts
         assert "memoryresult" in facts
 
     def test_extracts_upper_case_constants(self):
-        from omega.bridge import _extract_facts
+        from cairn.bridge import _extract_facts
 
         facts = _extract_facts("Set MAX_NODES to 10000 and API_KEY to secret.")
         assert "max_nodes" in facts
         assert "api_key" in facts
 
     def test_extracts_backtick_tokens(self):
-        from omega.bridge import _extract_facts
+        from cairn.bridge import _extract_facts
 
         facts = _extract_facts("Use `jwt` for auth and `sqlite_store.py` for storage.")
         assert "jwt" in facts
         assert "sqlite_store.py" in facts
 
     def test_extracts_quoted_strings(self):
-        from omega.bridge import _extract_facts
+        from cairn.bridge import _extract_facts
 
         facts = _extract_facts('Decided on "refresh token" approach with "15-min expiry".')
         assert "refresh token" in facts
         assert "15-min expiry" in facts
 
     def test_extracts_decision_verbs(self):
-        from omega.bridge import _extract_facts
+        from cairn.bridge import _extract_facts
 
         facts = _extract_facts("We chose JWT for authentication. Switched to FastAPI for the backend.")
         fact_str = " ".join(facts)
@@ -73,27 +73,27 @@ class TestFactExtraction:
         assert "fastapi" in fact_str.lower()
 
     def test_extracts_dotted_paths(self):
-        from omega.bridge import _extract_facts
+        from cairn.bridge import _extract_facts
 
-        facts = _extract_facts("The module omega.sqlite_store handles all persistence.")
-        assert "omega.sqlite_store" in facts
+        facts = _extract_facts("The module cairn.sqlite_store handles all persistence.")
+        assert "cairn.sqlite_store" in facts
 
     def test_skips_version_numbers(self):
-        from omega.bridge import _extract_facts
+        from cairn.bridge import _extract_facts
 
         facts = _extract_facts("Updated to version 1.0.0 and deployed 2.3.1.")
         assert "1.0.0" not in facts
         assert "2.3.1" not in facts
 
     def test_extracts_hyphenated_terms(self):
-        from omega.bridge import _extract_facts
+        from cairn.bridge import _extract_facts
 
         facts = _extract_facts("The multi-session reasoning and cross-agent coordination work well.")
         assert "multi-session" in facts
         assert "cross-agent" in facts
 
     def test_caps_at_20(self):
-        from omega.bridge import _extract_facts
+        from cairn.bridge import _extract_facts
 
         # Generate content with many extractable facts
         content = " ".join(f"`term{i}` and TermCamel{i}" for i in range(30))
@@ -101,7 +101,7 @@ class TestFactExtraction:
         assert len(facts) <= 20
 
     def test_empty_content(self):
-        from omega.bridge import _extract_facts
+        from cairn.bridge import _extract_facts
 
         facts = _extract_facts("")
         assert facts == []
@@ -111,10 +111,10 @@ class TestFactExtraction:
 
         Facts are merged into the 'tags' metadata field (not a separate 'facts' key).
         """
-        from omega.bridge import auto_capture, _get_store
-        import omega.bridge as bridge
+        from cairn.bridge import auto_capture, _get_store
+        import cairn.bridge as bridge
 
-        os.environ["OMEGA_HOME"] = str(tmp_path)
+        os.environ["CAIRN_HOME"] = str(tmp_path)
         bridge._store = None  # Force re-init
 
         result = auto_capture(
@@ -145,10 +145,10 @@ class TestFactExtraction:
 
     def test_facts_not_extracted_for_plain_memory(self, tmp_path):
         """Plain 'memory' type should not trigger fact extraction."""
-        from omega.bridge import auto_capture, _get_store
-        import omega.bridge as bridge
+        from cairn.bridge import auto_capture, _get_store
+        import cairn.bridge as bridge
 
-        os.environ["OMEGA_HOME"] = str(tmp_path)
+        os.environ["CAIRN_HOME"] = str(tmp_path)
         bridge._store = None
 
         auto_capture(
@@ -382,7 +382,7 @@ class TestTemporalRangeInference:
 
     def test_bridge_auto_infer_sets_soft_mode(self):
         """bridge.py should set temporal_boost_only=True for auto-inferred ranges."""
-        from omega.bridge import _infer_temporal_range
+        from cairn.bridge import _infer_temporal_range
 
         # "last week" should produce a temporal range
         result = _infer_temporal_range("What did we decide last week about auth")
@@ -391,7 +391,7 @@ class TestTemporalRangeInference:
         # The bridge code sets temporal_boost_only=True when this is auto-inferred
 
     def test_infer_temporal_range_parses_last_n_days(self):
-        from omega.bridge import _infer_temporal_range
+        from cairn.bridge import _infer_temporal_range
 
         result = _infer_temporal_range("decisions from last 3 days")
         assert result is not None
@@ -402,13 +402,13 @@ class TestTemporalRangeInference:
         assert abs(datetime.fromisoformat(start).timestamp() - expected_start.timestamp()) < 60
 
     def test_infer_temporal_range_parses_yesterday(self):
-        from omega.bridge import _infer_temporal_range
+        from cairn.bridge import _infer_temporal_range
 
         result = _infer_temporal_range("what happened yesterday")
         assert result is not None
 
     def test_infer_temporal_range_parses_month_name(self):
-        from omega.bridge import _infer_temporal_range
+        from cairn.bridge import _infer_temporal_range
 
         result = _infer_temporal_range("decisions made in January 2025")
         assert result is not None
@@ -417,7 +417,7 @@ class TestTemporalRangeInference:
         assert "2025-02" in end
 
     def test_infer_temporal_range_returns_none_for_no_signal(self):
-        from omega.bridge import _infer_temporal_range
+        from cairn.bridge import _infer_temporal_range
 
         result = _infer_temporal_range("what auth method did we use")
         assert result is None

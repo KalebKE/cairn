@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-LongMemEval-inspired benchmark for OMEGA retrieval quality.
+LongMemEval-inspired benchmark for Cairn retrieval quality.
 
 Measures retrieval accuracy across 5 categories inspired by the LongMemEval
 benchmark (Wang et al., 2024):
-  - Information extraction (IE): Can OMEGA find specific facts?
-  - Multi-session reasoning (MS): Can OMEGA connect info across sessions?
-  - Temporal reasoning (TR): Can OMEGA handle time-based queries?
-  - Knowledge update (KU): Does OMEGA prefer updated info over stale?
-  - Abstention (AB): Does OMEGA avoid surfacing irrelevant results?
+  - Information extraction (IE): Can Cairn find specific facts?
+  - Multi-session reasoning (MS): Can Cairn connect info across sessions?
+  - Temporal reasoning (TR): Can Cairn handle time-based queries?
+  - Knowledge update (KU): Does Cairn prefer updated info over stale?
+  - Abstention (AB): Does Cairn avoid surfacing irrelevant results?
 
 Scores: "Did the correct memory appear in top-3 results?"
 No LLM API calls — purely local, free, fast, repeatable.
@@ -23,15 +23,15 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-# Ensure omega is importable
+# Ensure cairn is importable
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
 def create_bench_store(db_path: str):
     """Create a fresh SQLiteStore for benchmarking."""
     import os
-    os.environ["OMEGA_HOME"] = str(Path(db_path).parent)
-    from omega.sqlite_store import SQLiteStore
+    os.environ["CAIRN_HOME"] = str(Path(db_path).parent)
+    from cairn.sqlite_store import SQLiteStore
     return SQLiteStore(db_path=db_path)
 
 
@@ -91,14 +91,14 @@ def seed_memories(store):
     # === Multi-session reasoning (20 memories across 4 sessions) ===
     ms_sessions = ["bench-ms-1", "bench-ms-2", "bench-ms-3", "bench-ms-4"]
     ms_data = [
-        ("Decided to use SQLite for the OMEGA backend because it's zero-config and embedded.", "bench-ms-1",
-         {"event_type": "decision", "priority": 4, "tags": ["sqlite", "omega"]}),
-        ("Added sqlite-vec extension for vector similarity search in OMEGA.", "bench-ms-2",
-         {"event_type": "task_completion", "priority": 3, "tags": ["sqlite", "omega"]}),
-        ("FTS5 full-text search index added to OMEGA for fast keyword queries.", "bench-ms-3",
-         {"event_type": "task_completion", "priority": 3, "tags": ["sqlite", "omega"]}),
-        ("OMEGA schema migration system uses ALTER TABLE for backwards-compatible upgrades.", "bench-ms-4",
-         {"event_type": "decision", "priority": 4, "tags": ["sqlite", "omega"]}),
+        ("Decided to use SQLite for the Cairn backend because it's zero-config and embedded.", "bench-ms-1",
+         {"event_type": "decision", "priority": 4, "tags": ["sqlite", "cairn"]}),
+        ("Added sqlite-vec extension for vector similarity search in Cairn.", "bench-ms-2",
+         {"event_type": "task_completion", "priority": 3, "tags": ["sqlite", "cairn"]}),
+        ("FTS5 full-text search index added to Cairn for fast keyword queries.", "bench-ms-3",
+         {"event_type": "task_completion", "priority": 3, "tags": ["sqlite", "cairn"]}),
+        ("Cairn schema migration system uses ALTER TABLE for backwards-compatible upgrades.", "bench-ms-4",
+         {"event_type": "decision", "priority": 4, "tags": ["sqlite", "cairn"]}),
         ("The API server uses FastAPI with uvicorn for the HTTP layer.", "bench-ms-1",
          {"event_type": "decision", "priority": 4, "tags": ["fastapi", "python"]}),
         ("Added rate limiting middleware to the API — 100 req/min per IP.", "bench-ms-2",
@@ -246,9 +246,9 @@ def run_benchmark(store, verbose=False):
     check_top3("state management library choice", "Zustand", "information_extraction")
 
     # === Multi-session reasoning ===
-    check_top3("OMEGA database backend decision", "SQLite for the OMEGA backend", "multi_session")
-    check_top3("OMEGA vector search implementation", "sqlite-vec extension", "multi_session")
-    check_top3("OMEGA text search", "FTS5 full-text search", "multi_session")
+    check_top3("Cairn database backend decision", "SQLite for the Cairn backend", "multi_session")
+    check_top3("Cairn vector search implementation", "sqlite-vec extension", "multi_session")
+    check_top3("Cairn text search", "FTS5 full-text search", "multi_session")
     check_top3("API framework choice", "FastAPI", "multi_session")
     check_top3("rate limiting configuration", "100 req/min", "multi_session")
     check_top3("main database migration from JSON", "PostgreSQL for the main application", "multi_session")
@@ -396,7 +396,7 @@ def run_benchmark(store, verbose=False):
 def print_results(results):
     """Print formatted benchmark results."""
     print("\n" + "=" * 60)
-    print("  OMEGA LongMemEval Benchmark Results")
+    print("  Cairn LongMemEval Benchmark Results")
     print("=" * 60)
 
     total_correct = 0
@@ -433,7 +433,7 @@ def print_results(results):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="OMEGA LongMemEval Benchmark")
+    parser = argparse.ArgumentParser(description="Cairn LongMemEval Benchmark")
     parser.add_argument("--verbose", "-v", action="store_true", help="Show per-question details")
     args = parser.parse_args()
 

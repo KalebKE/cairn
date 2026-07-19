@@ -1,4 +1,4 @@
-"""Generate social preview image for omega-memory/omega-memory GitHub repo."""
+"""Generate social preview image for cairn/cairn GitHub repo."""
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
@@ -41,7 +41,7 @@ for y in range(HEIGHT):
 LEFT_X = 80
 
 # Title
-draw.text((LEFT_X, 80), "OMEGA", fill=WHITE, font=FONT_BOLD_72)
+draw.text((LEFT_X, 80), "Cairn", fill=WHITE, font=FONT_BOLD_72)
 
 # Tagline
 draw.text((LEFT_X, 175), "Persistent memory for AI coding agents", fill=LIGHT_GRAY, font=FONT_BOLD_28)
@@ -92,10 +92,10 @@ for client in clients:
 # Install command
 install_y = client_y + 55
 draw.text((LEFT_X, install_y), "$ ", fill=GREEN, font=FONT_MONO_18)
-draw.text((LEFT_X + 24, install_y), "pip install omega-memory", fill=WHITE, font=FONT_MONO_18)
+draw.text((LEFT_X + 24, install_y), "pip install cairn", fill=WHITE, font=FONT_MONO_18)
 
 # GitHub URL
-draw.text((LEFT_X, HEIGHT - 60), "github.com/omega-memory/omega-memory", fill=DIM, font=FONT_REG_20)
+draw.text((LEFT_X, HEIGHT - 60), "github.com/TracqiTechnology/cairn", fill=DIM, font=FONT_REG_20)
 
 # === RIGHT SIDE (terminal mockup) ===
 TERM_X = 700
@@ -121,7 +121,7 @@ ty = TERM_Y + 48
 line_h = 26
 
 lines = [
-    (GREEN,  "$ omega setup"),
+    (GREEN,  "$ cairn setup"),
     (GREEN,  "✓ Memory system ready"),
     (None, ""),
     (DIM,    "# 3 weeks later, new session..."),

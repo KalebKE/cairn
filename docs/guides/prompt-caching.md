@@ -1,8 +1,8 @@
-# Prompt Caching with OMEGA Context
+# Prompt Caching with Cairn Context
 
 ## The Pattern
 
-When you build an agent that uses OMEGA for memory, a common pattern emerges: every API call sends the same growing prefix (system prompt + OMEGA context + conversation history) with only the latest user message changing.
+When you build an agent that uses Cairn for memory, a common pattern emerges: every API call sends the same growing prefix (system prompt + Cairn context + conversation history) with only the latest user message changing.
 
 Without caching, you pay full input token pricing on every call. With **automatic prompt caching**, the repeated prefix is cached after the first call, and subsequent calls pay only **10% of the base input price** for the cached portion.
 
@@ -15,8 +15,8 @@ import anthropic
 
 client = anthropic.Anthropic()
 
-# Fetch OMEGA context once at the start of a conversation
-omega_context = get_omega_context()  # your function to query OMEGA
+# Fetch Cairn context once at the start of a conversation
+cairn_context = get_cairn_context()  # your function to query Cairn
 
 response = client.messages.create(
     model="claude-sonnet-4-6",
@@ -24,14 +24,14 @@ response = client.messages.create(
     cache_control={"type": "ephemeral"},  # one line enables auto-caching
     system=f"""You are a coding assistant with persistent memory.
 
-## Prior Context from OMEGA
-{omega_context}
+## Prior Context from Cairn
+{cairn_context}
 """,
     messages=conversation_history,
 )
 ```
 
-On the first call, the system prompt + OMEGA context is written to cache. On every subsequent call in that conversation, it's read from cache at 10% cost.
+On the first call, the system prompt + Cairn context is written to cache. On every subsequent call in that conversation, it's read from cache at 10% cost.
 
 ## Multi-Turn Conversations
 
@@ -39,8 +39,8 @@ Automatic caching handles multi-turn conversations without any extra work. The c
 
 | Turn | What's Cached | What's New |
 |------|---------------|------------|
-| Turn 1 | System + OMEGA context + User:A written to cache | Everything is a cache write |
-| Turn 2 | System + OMEGA context + User:A read from cache | Asst:B + User:C written to cache |
+| Turn 1 | System + Cairn context + User:A written to cache | Everything is a cache write |
+| Turn 2 | System + Cairn context + User:A read from cache | Asst:B + User:C written to cache |
 | Turn 3 | System through User:C read from cache | Asst:D + User:E written to cache |
 
 ## Agentic Tool Use
@@ -54,7 +54,7 @@ while True:
         model="claude-sonnet-4-6",
         max_tokens=4096,
         cache_control={"type": "ephemeral"},
-        system=system_with_omega_context,
+        system=system_with_cairn_context,
         tools=tool_definitions,
         messages=conversation,
     )
@@ -70,7 +70,7 @@ while True:
 
 ## Explicit Breakpoints for Mixed-Frequency Content
 
-If your OMEGA context changes more frequently than your system prompt or tool definitions, use explicit breakpoints to cache them independently:
+If your Cairn context changes more frequently than your system prompt or tool definitions, use explicit breakpoints to cache them independently:
 
 ```python
 response = client.messages.create(
@@ -85,7 +85,7 @@ response = client.messages.create(
         },
         {
             "type": "text",
-            "text": f"## OMEGA Context\n{omega_context}",
+            "text": f"## Cairn Context\n{cairn_context}",
             "cache_control": {"type": "ephemeral"},  # changes per session
         },
     ],
@@ -93,7 +93,7 @@ response = client.messages.create(
 )
 ```
 
-This way, if you refresh the OMEGA context mid-conversation, the system prompt cache is preserved while only the OMEGA block is rewritten.
+This way, if you refresh the Cairn context mid-conversation, the system prompt cache is preserved while only the Cairn block is rewritten.
 
 ## Pricing
 
@@ -118,18 +118,18 @@ The default 5-minute cache works for active conversations. Use the 1-hour TTL wh
 
 - Your agent has long-running sub-tasks (>5 min between API calls)
 - Users may pause and resume conversations
-- You're running batch evaluations with the same OMEGA context
+- You're running batch evaluations with the same Cairn context
 
 ```python
 cache_control={"type": "ephemeral", "ttl": "1h"}
 ```
 
-## OMEGA-Specific Tips
+## Cairn-Specific Tips
 
-1. **Front-load OMEGA context**: Place it in the system prompt, not in user messages. System prompts are cached first in the hierarchy (`tools` > `system` > `messages`).
+1. **Front-load Cairn context**: Place it in the system prompt, not in user messages. System prompts are cached first in the hierarchy (`tools` > `system` > `messages`).
 
-2. **Stable context ordering**: OMEGA query results should be deterministically ordered. If the order changes between calls, the cache is invalidated.
+2. **Stable context ordering**: Cairn query results should be deterministically ordered. If the order changes between calls, the cache is invalidated.
 
-3. **Batch OMEGA queries**: Make one `omega_query` call with broad context rather than many narrow calls. A single large cached block is more efficient than many small ones.
+3. **Batch Cairn queries**: Make one `cairn_query` call with broad context rather than many narrow calls. A single large cached block is more efficient than many small ones.
 
-4. **Session-scoped context**: Fetch OMEGA context once at session start and inject it into the system prompt. Avoid re-querying OMEGA on every turn unless the context genuinely needs refreshing.
+4. **Session-scoped context**: Fetch Cairn context once at session start and inject it into the system prompt. Avoid re-querying Cairn on every turn unless the context genuinely needs refreshing.

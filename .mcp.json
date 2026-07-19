@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "omega-memory": {
+    "cairn": {
       "command": "python3.11",
-      "args": ["-m", "omega.server.mcp_server"],
+      "args": ["-m", "cairn.server.mcp_server"],
       "env": {}
     }
   }

@@ -1,6 +1,6 @@
 """Backbone Resilience Tests (arxiv 2602.19320 §5.2).
 
-Tests that OMEGA gracefully handles malformed inputs that smaller
+Tests that Cairn gracefully handles malformed inputs that smaller
 backbone models produce: malformed JSON metadata, empty content,
 invalid event types, oversized payloads, and special characters.
 
@@ -16,13 +16,13 @@ import threading
 
 import pytest
 
-from omega.exceptions import StorageError
+from cairn.exceptions import StorageError
 
 
 @pytest.fixture
 def store(tmp_path):
     """Create a fresh SQLiteStore for testing."""
-    from omega.sqlite_store import SQLiteStore
+    from cairn.sqlite_store import SQLiteStore
 
     return SQLiteStore(db_path=tmp_path / "test.db")
 

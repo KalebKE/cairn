@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""OMEGA PreToolUse hook — Protocol gate (fallback mode).
+"""Cairn PreToolUse hook — Protocol gate (fallback mode).
 
 Degraded fallback for when the hook daemon is unavailable.
 Checks if multiple agents are active and reminds the agent to call
-omega_welcome / omega_inbox before editing files.
+cairn_welcome / cairn_inbox before editing files.
 
 Unlike the daemon version, this has no in-memory debounce state, so it
 checks the DB directly (heavier, but only runs in fallback mode).
@@ -21,7 +21,7 @@ from pathlib import Path
 
 def _log_hook_error(hook_name, error):
     try:
-        log_path = Path.home() / ".omega" / "hooks.log"
+        log_path = Path.home() / ".cairn" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         tb = traceback.format_exc()
@@ -55,7 +55,7 @@ def main():
         if not session_id:
             return
 
-        from omega.coordination import get_manager
+        from cairn.coordination import get_manager
 
         mgr = get_manager()
         count = mgr.active_session_count()
@@ -63,12 +63,12 @@ def main():
             _warned = True
             print(
                 "[PROTOCOL-GATE] You have active peers. "
-                "Call omega_inbox() to check for messages before editing files."
+                "Call cairn_inbox() to check for messages before editing files."
             )
         elif count == 1:
             _warned = True
             print(
-                "[PROTOCOL-REMINDER] Call omega_welcome() for memory context before starting work."
+                "[PROTOCOL-REMINDER] Call cairn_welcome() for memory context before starting work."
             )
 
     except Exception as e:

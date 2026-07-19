@@ -6,7 +6,7 @@ import time
 import pytest
 from unittest.mock import patch, MagicMock
 
-from omega.query_expansion import (
+from cairn.query_expansion import (
     expand_query,
     is_expansion_enabled,
     clear_cache,
@@ -18,22 +18,22 @@ class TestExpansionEnabled:
     """Test the gating env var."""
 
     def test_enabled_by_default(self):
-        os.environ.pop("OMEGA_QUERY_EXPANSION", None)
+        os.environ.pop("CAIRN_QUERY_EXPANSION", None)
         assert is_expansion_enabled()
 
     def test_enabled_when_set(self):
-        os.environ["OMEGA_QUERY_EXPANSION"] = "1"
+        os.environ["CAIRN_QUERY_EXPANSION"] = "1"
         try:
             assert is_expansion_enabled()
         finally:
-            os.environ.pop("OMEGA_QUERY_EXPANSION", None)
+            os.environ.pop("CAIRN_QUERY_EXPANSION", None)
 
     def test_disabled_when_zero(self):
-        os.environ["OMEGA_QUERY_EXPANSION"] = "0"
+        os.environ["CAIRN_QUERY_EXPANSION"] = "0"
         try:
             assert not is_expansion_enabled()
         finally:
-            os.environ.pop("OMEGA_QUERY_EXPANSION", None)
+            os.environ.pop("CAIRN_QUERY_EXPANSION", None)
 
 
 class TestExpandQuery:
@@ -47,7 +47,7 @@ class TestExpandQuery:
         result = expand_query("ab")
         assert result == {"lex": [], "vec": [], "hyde": ""}
 
-    @patch("omega.llm.llm_complete")
+    @patch("cairn.llm.llm_complete")
     def test_successful_expansion(self, mock_llm):
         mock_llm.return_value = json.dumps({
             "lex": ["deployment config", "deploy settings"],
@@ -61,7 +61,7 @@ class TestExpandQuery:
         assert result["hyde"] == ""
         mock_llm.assert_called_once()
 
-    @patch("omega.llm.llm_complete")
+    @patch("cairn.llm.llm_complete")
     def test_hyde_generation(self, mock_llm):
         mock_llm.return_value = json.dumps({
             "lex": ["auth bug fix"],
@@ -73,7 +73,7 @@ class TestExpandQuery:
         assert result["hyde"] != ""
         assert "authentication" in result["hyde"].lower() or "JWT" in result["hyde"]
 
-    @patch("omega.llm.llm_complete")
+    @patch("cairn.llm.llm_complete")
     def test_hyde_omitted_when_not_requested(self, mock_llm):
         mock_llm.return_value = json.dumps({
             "lex": ["auth bug"],
@@ -84,7 +84,7 @@ class TestExpandQuery:
         result = expand_query("the auth issue", include_hyde=False)
         assert result["hyde"] == ""
 
-    @patch("omega.llm.llm_complete")
+    @patch("cairn.llm.llm_complete")
     def test_max_variants_respected(self, mock_llm):
         mock_llm.return_value = json.dumps({
             "lex": ["a", "b", "c", "d", "e"],
@@ -96,21 +96,21 @@ class TestExpandQuery:
         assert len(result["lex"]) <= 2
         assert len(result["vec"]) <= 2
 
-    @patch("omega.llm.llm_complete")
+    @patch("cairn.llm.llm_complete")
     def test_llm_returns_empty(self, mock_llm):
         mock_llm.return_value = ""
         clear_cache()
         result = expand_query("test query")
         assert result == {"lex": [], "vec": [], "hyde": ""}
 
-    @patch("omega.llm.llm_complete")
+    @patch("cairn.llm.llm_complete")
     def test_llm_returns_invalid_json(self, mock_llm):
         mock_llm.return_value = "not json at all"
         clear_cache()
         result = expand_query("test query")
         assert result == {"lex": [], "vec": [], "hyde": ""}
 
-    @patch("omega.llm.llm_complete")
+    @patch("cairn.llm.llm_complete")
     def test_llm_returns_markdown_wrapped_json(self, mock_llm):
         mock_llm.return_value = '```json\n{"lex": ["foo"], "vec": ["bar"], "hyde": ""}\n```'
         clear_cache()
@@ -118,7 +118,7 @@ class TestExpandQuery:
         assert result["lex"] == ["foo"]
         assert result["vec"] == ["bar"]
 
-    @patch("omega.llm.llm_complete")
+    @patch("cairn.llm.llm_complete")
     def test_llm_exception_returns_empty(self, mock_llm):
         mock_llm.side_effect = RuntimeError("API down")
         clear_cache()
@@ -129,7 +129,7 @@ class TestExpandQuery:
 class TestExpansionCache:
     """Test the LRU cache behavior."""
 
-    @patch("omega.llm.llm_complete")
+    @patch("cairn.llm.llm_complete")
     def test_cache_hit_avoids_llm_call(self, mock_llm):
         mock_llm.return_value = json.dumps({
             "lex": ["cached variant"],
@@ -147,7 +147,7 @@ class TestExpansionCache:
         assert mock_llm.call_count == 1
         assert result1 == result2
 
-    @patch("omega.llm.llm_complete")
+    @patch("cairn.llm.llm_complete")
     def test_different_queries_different_cache_keys(self, mock_llm):
         mock_llm.return_value = json.dumps({
             "lex": ["v"], "vec": ["v"], "hyde": "",
@@ -162,7 +162,7 @@ class TestExpansionCache:
         clear_cache()
         assert clear_cache() == 0  # Already empty
 
-    @patch("omega.llm.llm_complete")
+    @patch("cairn.llm.llm_complete")
     def test_cache_ttl_expiry(self, mock_llm):
         mock_llm.return_value = json.dumps({
             "lex": ["v"], "vec": ["v"], "hyde": "",
@@ -170,7 +170,7 @@ class TestExpansionCache:
         clear_cache()
 
         # Manually insert expired entry
-        from omega.query_expansion import _cache, _cache_lock
+        from cairn.query_expansion import _cache, _cache_lock
         cache_key = ("ttl test query", False, 3)
         with _cache_lock:
             _cache[cache_key] = (time.monotonic() - _CACHE_TTL_S - 10, {"lex": ["old"], "vec": [], "hyde": ""})

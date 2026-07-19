@@ -97,7 +97,7 @@ class TestKnowledgeDecay:
 
 class TestTemporalInferenceWordBoundary:
     def _infer(self, text):
-        from omega.bridge import _infer_temporal_range
+        from cairn.bridge import _infer_temporal_range
         return _infer_temporal_range(text)
 
     @pytest.mark.parametrize("text", [

@@ -1,4 +1,4 @@
-"""OMEGA integration tests — verify the full stack works end-to-end."""
+"""Cairn integration tests — verify the full stack works end-to-end."""
 
 import os
 import sys
@@ -7,35 +7,35 @@ from contextlib import contextmanager
 import pytest
 from pathlib import Path
 
-from omega.exceptions import StorageError
+from cairn.exceptions import StorageError
 
-# Ensure omega package is importable
+# Ensure cairn package is importable
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
 class TestPackageImport:
     """P0: The package must import without error."""
 
-    def test_import_omega(self):
-        from omega import __version__
+    def test_import_cairn(self):
+        from cairn import __version__
         assert __version__
 
     def test_import_bridge(self):
-        from omega.bridge import auto_capture, query, status
+        from cairn.bridge import auto_capture, query, status
         assert callable(auto_capture)
         assert callable(query)
         assert callable(status)
 
     def test_import_handlers(self):
-        from omega.server.handlers import HANDLERS
+        from cairn.server.handlers import HANDLERS
         assert len(HANDLERS) >= 20
 
     def test_import_tool_schemas(self):
-        from omega.server.tool_schemas import TOOL_SCHEMAS
+        from cairn.server.tool_schemas import TOOL_SCHEMAS
         assert len(TOOL_SCHEMAS) >= 10  # 12 consolidated tools
 
     def test_import_types(self):
-        from omega.types import AutoCaptureEventType, TTLCategory
+        from cairn.types import AutoCaptureEventType, TTLCategory
         assert AutoCaptureEventType.GIT_CONFLICT == "git_conflict"
         assert TTLCategory.PERMANENT is None
 
@@ -43,22 +43,22 @@ class TestPackageImport:
 @contextmanager
 def _skip_embeddings():
     """Context manager that skips embeddings and resets the circuit breaker after."""
-    from omega.embedding import reset_embedding_state
-    os.environ["OMEGA_SKIP_EMBEDDINGS"] = "1"
+    from cairn.embedding import reset_embedding_state
+    os.environ["CAIRN_SKIP_EMBEDDINGS"] = "1"
     try:
         yield
     finally:
-        os.environ.pop("OMEGA_SKIP_EMBEDDINGS", None)
+        os.environ.pop("CAIRN_SKIP_EMBEDDINGS", None)
         reset_embedding_state()
 
 
 class TestDatabaseRoundtrip:
     """Verify store → query → delete works with a temp database."""
 
-    def test_store_and_query(self, tmp_omega_dir):
+    def test_store_and_query(self, tmp_cairn_dir):
         with _skip_embeddings():
-            from omega.sqlite_store import SQLiteStore
-            store = SQLiteStore(db_path=tmp_omega_dir / "test.db")
+            from cairn.sqlite_store import SQLiteStore
+            store = SQLiteStore(db_path=tmp_cairn_dir / "test.db")
 
             # Store
             node_id = store.store(
@@ -81,11 +81,11 @@ class TestDatabaseRoundtrip:
 
             store.close()
 
-    def test_content_dedup(self, tmp_omega_dir):
+    def test_content_dedup(self, tmp_cairn_dir):
         """Storing identical content twice should return the same node_id."""
         with _skip_embeddings():
-            from omega.sqlite_store import SQLiteStore
-            store = SQLiteStore(db_path=tmp_omega_dir / "test.db")
+            from cairn.sqlite_store import SQLiteStore
+            store = SQLiteStore(db_path=tmp_cairn_dir / "test.db")
 
             id1 = store.store(content="Exact duplicate test content here")
             id2 = store.store(content="Exact duplicate test content here")
@@ -94,11 +94,11 @@ class TestDatabaseRoundtrip:
 
             store.close()
 
-    def test_null_content_rejected(self, tmp_omega_dir):
+    def test_null_content_rejected(self, tmp_cairn_dir):
         """Storing empty content should raise ValueError."""
         with _skip_embeddings():
-            from omega.sqlite_store import SQLiteStore
-            store = SQLiteStore(db_path=tmp_omega_dir / "test.db")
+            from cairn.sqlite_store import SQLiteStore
+            store = SQLiteStore(db_path=tmp_cairn_dir / "test.db")
 
             with pytest.raises(StorageError):
                 store.store(content="")
@@ -109,9 +109,9 @@ class TestDatabaseRoundtrip:
 class TestBridge:
     """Verify bridge-level API works."""
 
-    def test_auto_capture_and_query(self, tmp_omega_dir):
+    def test_auto_capture_and_query(self, tmp_cairn_dir):
         with _skip_embeddings():
-            from omega.bridge import auto_capture, query, reset_memory
+            from cairn.bridge import auto_capture, query, reset_memory
             reset_memory()
 
             result = auto_capture(
@@ -132,32 +132,32 @@ class TestHandlerValidation:
 
     @pytest.mark.asyncio
     async def test_backup_export_rejects_path_traversal(self):
-        from omega.server.handlers import handle_omega_backup
-        result = await handle_omega_backup({"filepath": "/etc/passwd", "mode": "export"})
+        from cairn.server.handlers import handle_cairn_backup
+        result = await handle_cairn_backup({"filepath": "/etc/passwd", "mode": "export"})
         assert result.get("isError")
 
     @pytest.mark.asyncio
     async def test_backup_import_rejects_path_traversal(self):
-        from omega.server.handlers import handle_omega_backup
-        result = await handle_omega_backup({"filepath": "/etc/passwd", "mode": "import"})
+        from cairn.server.handlers import handle_cairn_backup
+        result = await handle_cairn_backup({"filepath": "/etc/passwd", "mode": "import"})
         assert result.get("isError")
 
 
 @pytest.mark.skipif(
     subprocess.run(
-        [sys.executable, "-c", "import omega"],
+        [sys.executable, "-c", "import cairn"],
         capture_output=True,
     ).returncode != 0,
-    reason="omega not installed as package",
+    reason="cairn not installed as package",
 )
 class TestCLIDoctor:
-    """Verify omega doctor runs without crashing."""
+    """Verify cairn doctor runs without crashing."""
 
     def test_doctor_runs(self):
         result = subprocess.run(
-            [sys.executable, "-m", "omega.cli", "doctor"],
+            [sys.executable, "-m", "cairn.cli", "doctor"],
             capture_output=True, text=True, timeout=45,
         )
         # Doctor may exit 0 or 1 depending on environment, but should not crash
         assert result.returncode in (0, 1)
-        assert "OMEGA Doctor" in result.stdout
+        assert "Cairn Doctor" in result.stdout

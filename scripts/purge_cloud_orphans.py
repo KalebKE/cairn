@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 # ── Load Supabase credentials ──────────────────────────────────────
-secrets_path = Path.home() / ".omega" / "secrets.json"
+secrets_path = Path.home() / ".cairn" / "secrets.json"
 if not secrets_path.exists():
     print(f"ERROR: {secrets_path} not found")
     sys.exit(1)
@@ -31,7 +31,7 @@ except ImportError:
 client = create_client(sb_url, sb_key)
 
 # ── Get all local_ids from local SQLite ────────────────────────────
-db_path = Path.home() / ".omega" / "omega.db"
+db_path = Path.home() / ".cairn" / "cairn.db"
 conn = sqlite3.connect(str(db_path))
 local_ids = {row[0] for row in conn.execute("SELECT id FROM memories").fetchall()}
 conn.close()

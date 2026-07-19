@@ -1,19 +1,19 @@
-"""Tests for OMEGA SQLiteStore — the core storage backend."""
+"""Tests for Cairn SQLiteStore — the core storage backend."""
 import importlib.util
 import json
 import os
 import pytest
-from omega.exceptions import StorageError
-from omega.sqlite_store import SQLiteStore
+from cairn.exceptions import StorageError
+from cairn.sqlite_store import SQLiteStore
 
 _HAS_PRO = hasattr(SQLiteStore, "batch_record_feedback")
 _skip_pro = pytest.mark.skipif(not _HAS_PRO, reason="pro-only feature")
 
-# Some Pro-tier tests also depend on omega.pattern_learner which is stripped
+# Some Pro-tier tests also depend on cairn.pattern_learner which is stripped
 # from the public package independently of batch_record_feedback.
-_HAS_PATTERN_LEARNER = importlib.util.find_spec("omega.pattern_learner") is not None
+_HAS_PATTERN_LEARNER = importlib.util.find_spec("cairn.pattern_learner") is not None
 _skip_no_pattern_learner = pytest.mark.skipif(
-    not _HAS_PATTERN_LEARNER, reason="requires omega.pattern_learner (pro-only)"
+    not _HAS_PATTERN_LEARNER, reason="requires cairn.pattern_learner (pro-only)"
 )
 
 
@@ -189,12 +189,12 @@ class TestCrossEncoderReranking:
     def test_reranking_graceful_when_disabled(self, store):
         """Query still works when cross-encoder is disabled via env var."""
         store.store(content="Test memory about databases")
-        os.environ["OMEGA_CROSS_ENCODER"] = "0"
+        os.environ["CAIRN_CROSS_ENCODER"] = "0"
         try:
             results = store.query("databases", limit=5)
             assert len(results) >= 1
         finally:
-            os.environ.pop("OMEGA_CROSS_ENCODER", None)
+            os.environ.pop("CAIRN_CROSS_ENCODER", None)
 
     def test_reranking_skipped_for_single_result(self, store):
         """Single-result queries skip reranking (len check)."""
@@ -216,7 +216,7 @@ class TestCrossEncoderReranking:
             # Return scores that invert passage order
             return list(reversed([float(i) for i in range(len(passages))]))
 
-        with patch("omega.sqlite_store.cross_encoder_score", mock_ce_score, create=True):
+        with patch("cairn.sqlite_store.cross_encoder_score", mock_ce_score, create=True):
             # Can't easily patch the lazy import, but we can verify the
             # real path works without error
             pass
@@ -226,8 +226,8 @@ class TestCrossEncoderReranking:
 
 
 @pytest.mark.skipif(
-    importlib.util.find_spec("omega.contradictions") is None,
-    reason="omega.contradictions is pro-only",
+    importlib.util.find_spec("cairn.contradictions") is None,
+    reason="cairn.contradictions is pro-only",
 )
 class TestContradictionOnStore:
     """Contradiction detection during store()."""
@@ -235,7 +235,7 @@ class TestContradictionOnStore:
     def test_contradicting_memories_get_annotated(self, store):
         """Storing a contradictory memory should annotate both old and new."""
         from unittest.mock import patch
-        from omega.contradictions import ContradictionResult
+        from cairn.contradictions import ContradictionResult
 
         old_id = store.store(content="The user prefers light mode for the editor")
 
@@ -249,15 +249,15 @@ class TestContradictionOnStore:
             signals=["antonym", "preference_change"],
         )
 
-        with patch("omega.sqlite_store.detect_contradictions", return_value=[mock_result], create=True):
+        with patch("cairn.sqlite_store.detect_contradictions", return_value=[mock_result], create=True):
             # We need to patch the import inside _check_contradictions
-            import omega.sqlite_store as mod
+            import cairn.sqlite_store as mod
             original = mod.SQLiteStore._check_contradictions
 
             def patched_check(self_store, new_node_id, new_content, embedding):
-                from omega.contradictions import detect_contradictions as real_detect
+                from cairn.contradictions import detect_contradictions as real_detect
                 # Patch the function that gets imported inside
-                with patch("omega.contradictions.detect_contradictions", return_value=[mock_result]):
+                with patch("cairn.contradictions.detect_contradictions", return_value=[mock_result]):
                     original(self_store, new_node_id, new_content, embedding)
 
             with patch.object(mod.SQLiteStore, "_check_contradictions", patched_check):
@@ -354,7 +354,7 @@ class TestBatchOps:
         store.store(content="Cooking recipes for dinner")
 
         # find_similar takes an embedding vector, not text — generate one
-        from omega.embedding import generate_embedding
+        from cairn.embedding import generate_embedding
         emb = generate_embedding("Python code")
         results = store.find_similar(emb, limit=5)
         # Should return results
@@ -364,9 +364,9 @@ class TestBatchOps:
 class TestPersistence:
     """Database persistence."""
 
-    def test_data_survives_reopen(self, tmp_omega_dir):
-        from omega.sqlite_store import SQLiteStore
-        db_path = tmp_omega_dir / "persist.db"
+    def test_data_survives_reopen(self, tmp_cairn_dir):
+        from cairn.sqlite_store import SQLiteStore
+        db_path = tmp_cairn_dir / "persist.db"
 
         # Write
         s1 = SQLiteStore(db_path=db_path)
@@ -406,10 +406,10 @@ class TestEdgeCases:
         node = store.get_node(nid)
         assert "quotes" in node.metadata["key"]
 
-    def test_concurrent_access(self, tmp_omega_dir):
+    def test_concurrent_access(self, tmp_cairn_dir):
         """Two store instances can read/write the same DB (WAL mode)."""
-        from omega.sqlite_store import SQLiteStore
-        db_path = tmp_omega_dir / "concurrent.db"
+        from cairn.sqlite_store import SQLiteStore
+        db_path = tmp_cairn_dir / "concurrent.db"
 
         s1 = SQLiteStore(db_path=db_path)
         s2 = SQLiteStore(db_path=db_path)
@@ -491,9 +491,9 @@ class TestEvictLru:
 class TestStatsPersistence:
     """Tests for _save_stats / _load_stats round-trip."""
 
-    def test_stats_round_trip(self, tmp_omega_dir):
-        from omega.sqlite_store import SQLiteStore
-        db_path = tmp_omega_dir / "stats_test.db"
+    def test_stats_round_trip(self, tmp_cairn_dir):
+        from cairn.sqlite_store import SQLiteStore
+        db_path = tmp_cairn_dir / "stats_test.db"
 
         s1 = SQLiteStore(db_path=db_path)
         s1.store(content="Bump the store counter")
@@ -506,10 +506,10 @@ class TestStatsPersistence:
         assert s2.stats["stores"] == stores_before
         s2.close()
 
-    def test_stats_load_missing_file(self, tmp_omega_dir):
+    def test_stats_load_missing_file(self, tmp_cairn_dir):
         """_load_stats with no sidecar file doesn't crash."""
-        from omega.sqlite_store import SQLiteStore
-        db_path = tmp_omega_dir / "no_stats.db"
+        from cairn.sqlite_store import SQLiteStore
+        db_path = tmp_cairn_dir / "no_stats.db"
         s = SQLiteStore(db_path=db_path)
         assert s.stats["stores"] == 0
         s.close()
@@ -685,13 +685,13 @@ class TestCircuitBreakerCooldown:
     def test_circuit_breaker_cooldown_recovery(self):
         """After cooldown expires, circuit breaker allows fresh attempts."""
         from unittest.mock import patch
-        from omega.embedding import (
+        from cairn.embedding import (
             _get_embedding_model, reset_embedding_state,
             _time_module,
         )
 
         reset_embedding_state()
-        os.environ["OMEGA_SKIP_EMBEDDINGS"] = "1"
+        os.environ["CAIRN_SKIP_EMBEDDINGS"] = "1"
         # Use controlled fake time to avoid issues on CI where monotonic()
         # may be small (fresh runner), making backdated values negative.
         fake_time = [10000.0]
@@ -710,15 +710,15 @@ class TestCircuitBreakerCooldown:
                 _get_embedding_model()
                 assert _get_embedding_model._attempt_count == 1  # Fresh cycle started
         finally:
-            os.environ.pop("OMEGA_SKIP_EMBEDDINGS", None)
+            os.environ.pop("CAIRN_SKIP_EMBEDDINGS", None)
             reset_embedding_state()
 
     def test_circuit_breaker_stays_tripped_before_cooldown(self):
         """Before cooldown expires, circuit breaker remains tripped."""
-        from omega.embedding import _get_embedding_model, reset_embedding_state
+        from cairn.embedding import _get_embedding_model, reset_embedding_state
 
         reset_embedding_state()
-        os.environ["OMEGA_SKIP_EMBEDDINGS"] = "1"
+        os.environ["CAIRN_SKIP_EMBEDDINGS"] = "1"
         try:
             # Exhaust 3 attempts
             for _ in range(3):
@@ -729,7 +729,7 @@ class TestCircuitBreakerCooldown:
             assert _get_embedding_model() is None
             assert _get_embedding_model._attempt_count == 3
         finally:
-            os.environ.pop("OMEGA_SKIP_EMBEDDINGS", None)
+            os.environ.pop("CAIRN_SKIP_EMBEDDINGS", None)
             reset_embedding_state()
 
 
@@ -1069,9 +1069,9 @@ class TestQueryComprehensive:
 
     def test_get_by_type_with_entity_id_filter(self, store):
         store.store(
-            content="OMEGA versioning strategy uses semantic versioning for releases",
+            content="Cairn versioning strategy uses semantic versioning for releases",
             metadata={"event_type": "decision"},
-            entity_id="omega",
+            entity_id="cairn",
         )
         store.store(
             content="Kubernetes resource limits set to 512Mi memory per container",
@@ -1079,10 +1079,10 @@ class TestQueryComprehensive:
             entity_id="other",
         )
         # entity_id filter includes matching + NULL
-        results = store.get_by_type("decision", entity_id="omega")
+        results = store.get_by_type("decision", entity_id="cairn")
         assert len(results) >= 1
         contents = [r.content for r in results]
-        assert any("OMEGA" in c for c in contents)
+        assert any("Cairn" in c for c in contents)
 
     def test_get_recent_ordering(self, store):
         store.store(content="First: PostgreSQL indexing strategies for large tables")
@@ -1168,28 +1168,28 @@ class TestMaintenanceComprehensive:
 class TestExportImportComprehensive:
     """Thorough export/import round-trip coverage."""
 
-    def test_export_creates_valid_json(self, store, tmp_omega_dir):
+    def test_export_creates_valid_json(self, store, tmp_cairn_dir):
         store.store(content="OAuth2 PKCE flow implementation for mobile clients", metadata={"event_type": "decision"})
         store.store(content="Sentry error tracking integration with source maps", session_id="s-exp")
 
-        path = tmp_omega_dir / "export_valid.json"
+        path = tmp_cairn_dir / "export_valid.json"
         result = store.export_to_file(path)
         assert path.exists()
         assert result["node_count"] == 2
 
         data = json.loads(path.read_text())
-        assert data["version"] == "omega-sqlite-v1"
+        assert data["version"] == "cairn-sqlite-v1"
         assert len(data["nodes"]) == 2
         assert "exported_at" in data
 
-    def test_import_restores_nodes(self, store, tmp_omega_dir):
+    def test_import_restores_nodes(self, store, tmp_cairn_dir):
         store.store(content="JWT token rotation strategy with Redis blacklist")
         store.store(content="Celery beat scheduler for periodic background tasks")
-        path = tmp_omega_dir / "export_for_import.json"
+        path = tmp_cairn_dir / "export_for_import.json"
         store.export_to_file(path)
 
-        from omega.sqlite_store import SQLiteStore
-        db2 = tmp_omega_dir / "import_target.db"
+        from cairn.sqlite_store import SQLiteStore
+        db2 = tmp_cairn_dir / "import_target.db"
         s2 = SQLiteStore(db_path=db2)
         try:
             result = s2.import_from_file(path)
@@ -1198,7 +1198,7 @@ class TestExportImportComprehensive:
         finally:
             s2.close()
 
-    def test_roundtrip_preserves_count(self, store, tmp_omega_dir):
+    def test_roundtrip_preserves_count(self, store, tmp_cairn_dir):
         items = [
             "Webpack module federation for micro-frontend architecture",
             "Istio virtual service routing with canary deployment weights",
@@ -1209,11 +1209,11 @@ class TestExportImportComprehensive:
         for item in items:
             store.store(content=item)
 
-        path = tmp_omega_dir / "roundtrip_count.json"
+        path = tmp_cairn_dir / "roundtrip_count.json"
         export_res = store.export_to_file(path)
 
-        from omega.sqlite_store import SQLiteStore
-        db2 = tmp_omega_dir / "roundtrip_count_target.db"
+        from cairn.sqlite_store import SQLiteStore
+        db2 = tmp_cairn_dir / "roundtrip_count_target.db"
         s2 = SQLiteStore(db_path=db2)
         try:
             import_res = s2.import_from_file(path)
@@ -1222,16 +1222,16 @@ class TestExportImportComprehensive:
         finally:
             s2.close()
 
-    def test_roundtrip_preserves_content_and_type(self, store, tmp_omega_dir):
+    def test_roundtrip_preserves_content_and_type(self, store, tmp_cairn_dir):
         store.store(
             content="preservable roundtrip content xyz",
             metadata={"event_type": "lesson_learned"},
         )
-        path = tmp_omega_dir / "roundtrip_type.json"
+        path = tmp_cairn_dir / "roundtrip_type.json"
         store.export_to_file(path)
 
-        from omega.sqlite_store import SQLiteStore
-        db2 = tmp_omega_dir / "roundtrip_type_target.db"
+        from cairn.sqlite_store import SQLiteStore
+        db2 = tmp_cairn_dir / "roundtrip_type_target.db"
         s2 = SQLiteStore(db_path=db2)
         try:
             s2.import_from_file(path)
@@ -1252,24 +1252,24 @@ class TestCosineSimilarity:
     """Test the _cosine_similarity helper."""
 
     def test_identical_vectors(self):
-        from omega.sqlite_store import _cosine_similarity
+        from cairn.sqlite_store import _cosine_similarity
         v = [1.0, 0.0, 0.0]
         assert abs(_cosine_similarity(v, v) - 1.0) < 1e-6
 
     def test_orthogonal_vectors(self):
-        from omega.sqlite_store import _cosine_similarity
+        from cairn.sqlite_store import _cosine_similarity
         a = [1.0, 0.0, 0.0]
         b = [0.0, 1.0, 0.0]
         assert abs(_cosine_similarity(a, b)) < 1e-6
 
     def test_opposite_vectors(self):
-        from omega.sqlite_store import _cosine_similarity
+        from cairn.sqlite_store import _cosine_similarity
         a = [1.0, 0.0]
         b = [-1.0, 0.0]
         assert abs(_cosine_similarity(a, b) - (-1.0)) < 1e-6
 
     def test_zero_vector(self):
-        from omega.sqlite_store import _cosine_similarity
+        from cairn.sqlite_store import _cosine_similarity
         a = [0.0, 0.0, 0.0]
         b = [1.0, 2.0, 3.0]
         assert _cosine_similarity(a, b) == 0.0
@@ -1467,10 +1467,10 @@ class TestEdgeCasesComprehensive:
         assert store.node_count() == 1
         assert store.edge_count() == 0  # No deps = no edges
 
-    def test_close_and_reopen_preserves_data(self, tmp_omega_dir):
+    def test_close_and_reopen_preserves_data(self, tmp_cairn_dir):
         """After close(), re-opening the same DB preserves data."""
-        from omega.sqlite_store import SQLiteStore
-        db_path = tmp_omega_dir / "closetest.db"
+        from cairn.sqlite_store import SQLiteStore
+        db_path = tmp_cairn_dir / "closetest.db"
         s1 = SQLiteStore(db_path=db_path)
         s1.store(content="survive close test for persistence verification")
         s1.close()

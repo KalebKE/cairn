@@ -1,4 +1,4 @@
-"""Tests for OMEGA Visibility UX features (v0.2.7).
+"""Tests for Cairn Visibility UX features (v0.2.7).
 
 Tests:
 - _human_ttl() formatting (permanent, minutes, hours, days)
@@ -28,9 +28,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 # ============================================================================
 
 @pytest.fixture(autouse=True)
-def _reset_bridge(tmp_omega_dir):
+def _reset_bridge(tmp_cairn_dir):
     """Reset bridge singleton before and after each test."""
-    from omega.bridge import reset_memory
+    from cairn.bridge import reset_memory
     reset_memory()
     yield
     reset_memory()
@@ -44,34 +44,34 @@ class TestHumanTTL:
     """Test human-readable TTL formatting."""
 
     def test_none_is_permanent(self):
-        from omega.bridge import _human_ttl
+        from cairn.bridge import _human_ttl
         assert _human_ttl(None) == "permanent"
 
     def test_zero_is_permanent(self):
-        from omega.bridge import _human_ttl
+        from cairn.bridge import _human_ttl
         assert _human_ttl(0) == "permanent"
 
     def test_minutes(self):
-        from omega.bridge import _human_ttl
+        from cairn.bridge import _human_ttl
         assert _human_ttl(1800) == "30m"
         assert _human_ttl(300) == "5m"
         assert _human_ttl(60) == "1m"
 
     def test_hours(self):
-        from omega.bridge import _human_ttl
+        from cairn.bridge import _human_ttl
         assert _human_ttl(3600) == "1h"
         assert _human_ttl(7200) == "2h"
         assert _human_ttl(43200) == "12h"
 
     def test_days(self):
-        from omega.bridge import _human_ttl
+        from cairn.bridge import _human_ttl
         assert _human_ttl(86400) == "1d"
         assert _human_ttl(7776000) == "90d"
         assert _human_ttl(604800) == "7d"
 
-    def test_auto_capture_uses_human_ttl(self, tmp_omega_dir):
+    def test_auto_capture_uses_human_ttl(self, tmp_cairn_dir):
         """auto_capture output should show human-readable TTL, not raw seconds."""
-        from omega.bridge import auto_capture
+        from cairn.bridge import auto_capture
         result = auto_capture(
             content="Test human TTL display in auto_capture output",
             event_type="decision",
@@ -89,8 +89,8 @@ class TestHumanTTL:
 class TestQueryStructured:
     """Test query_structured returns relevance and accepts context params."""
 
-    def test_returns_relevance_field(self, tmp_omega_dir):
-        from omega.bridge import auto_capture, query_structured
+    def test_returns_relevance_field(self, tmp_cairn_dir):
+        from cairn.bridge import auto_capture, query_structured
         auto_capture(
             content="Python debugging tips for pytest fixtures",
             event_type="lesson_learned",
@@ -105,8 +105,8 @@ class TestQueryStructured:
         assert "relevance" in results[0]
         assert isinstance(results[0]["relevance"], float)
 
-    def test_accepts_context_file(self, tmp_omega_dir):
-        from omega.bridge import auto_capture, query_structured
+    def test_accepts_context_file(self, tmp_cairn_dir):
+        from cairn.bridge import auto_capture, query_structured
         auto_capture(
             content="Bridge module handles all query routing",
             event_type="decision",
@@ -116,12 +116,12 @@ class TestQueryStructured:
         results = query_structured(
             query_text="bridge query",
             limit=3,
-            context_file="/src/omega/bridge.py",
+            context_file="/src/cairn/bridge.py",
         )
         assert isinstance(results, list)
 
-    def test_accepts_context_tags(self, tmp_omega_dir):
-        from omega.bridge import auto_capture, query_structured
+    def test_accepts_context_tags(self, tmp_cairn_dir):
+        from cairn.bridge import auto_capture, query_structured
         auto_capture(
             content="Use SQLite for persistent storage",
             event_type="decision",
@@ -234,7 +234,7 @@ class TestActivityReport:
         assert "1 decision" in parts[0]
         assert "decisions" not in parts[0]
 
-    def test_empty_session_id_skips_report(self, tmp_omega_dir):
+    def test_empty_session_id_skips_report(self, tmp_cairn_dir):
         """Empty session_id should produce no output."""
         # Import the hook's function
         hooks_dir = str(Path(__file__).parent.parent / "hooks")
@@ -258,9 +258,9 @@ class TestActivityReport:
 class TestSurfacingCounter:
     """Test the file-based surfacing counter and auto-feedback."""
 
-    def test_surfaced_file_count(self, tmp_omega_dir):
+    def test_surfaced_file_count(self, tmp_cairn_dir):
         """Surfacing counter file size equals number of surfacing events."""
-        marker = tmp_omega_dir / "session-test123.surfaced"
+        marker = tmp_cairn_dir / "session-test123.surfaced"
         # Simulate 3 surfacing events
         with open(marker, "a") as f:
             f.write("x")
@@ -270,9 +270,9 @@ class TestSurfacingCounter:
             f.write("x")
         assert marker.stat().st_size == 3
 
-    def test_surfaced_json_tracks_ids(self, tmp_omega_dir):
+    def test_surfaced_json_tracks_ids(self, tmp_cairn_dir):
         """Surfaced memory IDs are tracked per file in .surfaced.json."""
-        json_path = tmp_omega_dir / "session-test123.surfaced.json"
+        json_path = tmp_cairn_dir / "session-test123.surfaced.json"
         data = {"/foo/bar.py": ["mem-aaa", "mem-bbb"]}
         json_path.write_text(json.dumps(data))
 
@@ -280,11 +280,11 @@ class TestSurfacingCounter:
         assert "mem-aaa" in loaded["/foo/bar.py"]
         assert len(loaded["/foo/bar.py"]) == 2
 
-    def test_auto_feedback_cleans_up_json(self, tmp_omega_dir, store):
+    def test_auto_feedback_cleans_up_json(self, tmp_cairn_dir, store):
         """Auto-feedback should clean up the .surfaced.json file."""
         # Create a memory and a surfaced.json referencing it
         nid = store.store(content="Test memory for feedback", session_id="s1")
-        json_path = tmp_omega_dir / "session-s1.surfaced.json"
+        json_path = tmp_cairn_dir / "session-s1.surfaced.json"
         json_path.write_text(json.dumps({"/foo.py": [nid]}))
 
         hooks_dir = str(Path(__file__).parent.parent / "hooks")
@@ -293,8 +293,8 @@ class TestSurfacingCounter:
             import importlib
             import session_stop
             importlib.reload(session_stop)
-            # Patch Path.home() so the function finds our tmp_omega_dir
-            with patch.object(Path, "home", return_value=tmp_omega_dir.parent):
+            # Patch Path.home() so the function finds our tmp_cairn_dir
+            with patch.object(Path, "home", return_value=tmp_cairn_dir.parent):
                 session_stop._auto_feedback_on_surfaced("s1")
             # File should be cleaned up
             assert not json_path.exists()
@@ -309,8 +309,8 @@ class TestSurfacingCounter:
 class TestCaptureConfirmations:
     """Test that auto_capture returns appropriate confirmation strings."""
 
-    def test_new_capture_contains_memory_captured(self, tmp_omega_dir):
-        from omega.bridge import auto_capture
+    def test_new_capture_contains_memory_captured(self, tmp_cairn_dir):
+        from cairn.bridge import auto_capture
         result = auto_capture(
             content="A completely novel error that has never been seen before in testing xyz123",
             event_type="error_pattern",
@@ -318,16 +318,16 @@ class TestCaptureConfirmations:
         )
         assert "Stored" in result or "Deduped" in result or "Evolved" in result
 
-    def test_dedup_returns_deduplicated(self, tmp_omega_dir):
-        from omega.bridge import auto_capture
+    def test_dedup_returns_deduplicated(self, tmp_cairn_dir):
+        from cairn.bridge import auto_capture
         content = "The exact same error repeated for dedup testing purposes with enough words"
         auto_capture(content=content, event_type="error_pattern", session_id="s1")
         result = auto_capture(content=content, event_type="error_pattern", session_id="s1")
         assert "Deduped" in result
 
-    def test_ttl_display_in_capture(self, tmp_omega_dir):
+    def test_ttl_display_in_capture(self, tmp_cairn_dir):
         """Captured memory should show human TTL, not raw seconds."""
-        from omega.bridge import auto_capture
+        from cairn.bridge import auto_capture
         result = auto_capture(
             content="Decision: use SQLite for persistent storage backend in production",
             event_type="decision",

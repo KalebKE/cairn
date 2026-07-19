@@ -1,4 +1,4 @@
-"""Tests for OMEGA contradiction detection — pure function + integration tests."""
+"""Tests for Cairn contradiction detection — pure function + integration tests."""
 
 import math
 import os
@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import pytest
 
-from omega.contradictions import (
+from cairn.contradictions import (
     detect_contradictions,
     _check_negation_asymmetry,
     _check_antonyms,
@@ -322,7 +322,7 @@ class TestHelpers:
 # 7. TestTemporalSupersession (integration — requires SQLiteStore + sqlite-vec)
 # ---------------------------------------------------------------------------
 
-from omega.sqlite_store import SQLiteStore, EMBEDDING_DIM
+from cairn.sqlite_store import SQLiteStore, EMBEDDING_DIM
 
 
 def _make_embedding(seed: float = 1.0) -> list:
@@ -343,15 +343,15 @@ def _perturb_embedding(base: list, amount: float = 0.4) -> list:
 @pytest.fixture
 def vec_store(tmp_path):
     """SQLiteStore with vec support for supersession tests."""
-    db_path = tmp_path / ".omega" / "test.db"
+    db_path = tmp_path / ".cairn" / "test.db"
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    os.environ["OMEGA_HOME"] = str(tmp_path / ".omega")
+    os.environ["CAIRN_HOME"] = str(tmp_path / ".cairn")
     s = SQLiteStore(db_path=db_path)
     if not s._vec_available:
         pytest.skip("sqlite-vec not available")
     yield s
     s.close()
-    os.environ.pop("OMEGA_HOME", None)
+    os.environ.pop("CAIRN_HOME", None)
 
 
 class TestTemporalSupersession:

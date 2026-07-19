@@ -2,7 +2,7 @@
 
 import ast
 
-from omega.server.context_handlers import (
+from cairn.server.context_handlers import (
     build_context_packet,
     handle_context_packet,
     _estimate_tokens,
@@ -22,14 +22,14 @@ def _is_error(resp: dict) -> bool:
 
 
 def test_context_packet_schema_exposed_by_default():
-    from omega.server.tool_schemas import TOOL_SCHEMAS
+    from cairn.server.tool_schemas import TOOL_SCHEMAS
 
     names = {schema["name"] for schema in TOOL_SCHEMAS}
     assert "context_packet" in names
     assert "context_assemble" not in names
 
 
-async def test_context_packet_empty_store_is_well_formed(tmp_omega_dir, _reset_bridge):
+async def test_context_packet_empty_store_is_well_formed(tmp_cairn_dir, _reset_bridge):
     resp = await handle_context_packet({
         "task": "edit auth handler",
         "files": ["src/auth.py"],
@@ -44,24 +44,24 @@ async def test_context_packet_empty_store_is_well_formed(tmp_omega_dir, _reset_b
     assert payload["estimated_tokens"] <= payload["budget_tokens"]
 
 
-async def test_context_packet_rejects_non_list_files(tmp_omega_dir):
+async def test_context_packet_rejects_non_list_files(tmp_cairn_dir):
     resp = await handle_context_packet({"files": "src/auth.py"})
     assert _is_error(resp)
 
 
-async def test_context_packet_includes_relevant_seed(tmp_omega_dir):
-    from omega.bridge import store
+async def test_context_packet_includes_relevant_seed(tmp_cairn_dir):
+    from cairn.bridge import store
 
     store(
         content="Decision: auth handlers must validate JWT tokens server-side before any database lookup.",
         event_type="decision",
-        entity_id="omega-packet-seed",
+        entity_id="cairn-packet-seed",
     )
 
     resp = await handle_context_packet({
         "task": "update JWT auth handler",
         "files": ["src/auth.py"],
-        "scope": {"entity_id": "omega-packet-seed"},
+        "scope": {"entity_id": "cairn-packet-seed"},
         "budget_tokens": 500,
     })
     payload = _payload(resp)
@@ -77,19 +77,19 @@ async def test_context_packet_includes_relevant_seed(tmp_omega_dir):
     assert payload["metrics"]["estimated_tokens"] == payload["estimated_tokens"]
 
 
-async def test_context_packet_includes_graph_chain(tmp_omega_dir):
-    from omega.bridge import _get_store
+async def test_context_packet_includes_graph_chain(tmp_cairn_dir):
+    from cairn.bridge import _get_store
 
     db = _get_store()
     parent = db.store(
         content="Decision: use local-first BYOS as the customer acceptance boundary.",
         metadata={"event_type": "decision"},
-        entity_id="omega-packet-chain",
+        entity_id="cairn-packet-chain",
     )
     child = db.store(
         content="Lesson: do not cite operator-only infrastructure as customer pilot evidence.",
         metadata={"event_type": "lesson_learned"},
-        entity_id="omega-packet-chain",
+        entity_id="cairn-packet-chain",
     )
     db.add_edge(parent, child, edge_type="related", weight=0.95)
 
@@ -97,7 +97,7 @@ async def test_context_packet_includes_graph_chain(tmp_omega_dir):
         db,
         task="write customer pilot evidence",
         files=["docs/audits/enterprise-readiness-baseline.md"],
-        scope={"entity_id": "omega-packet-chain"},
+        scope={"entity_id": "cairn-packet-chain"},
         budget_tokens=700,
     )
 
@@ -112,24 +112,24 @@ async def test_context_packet_includes_graph_chain(tmp_omega_dir):
     )
 
 
-async def test_context_packet_prefers_validated_typed_edges(tmp_omega_dir):
-    from omega.bridge import _get_store
+async def test_context_packet_prefers_validated_typed_edges(tmp_cairn_dir):
+    from cairn.bridge import _get_store
 
     db = _get_store()
     seed = db.store(
         content="Decision: packet ranking seed for context packet graph scoring.",
         metadata={"event_type": "decision"},
-        entity_id="omega-packet-edge-rank",
+        entity_id="cairn-packet-edge-rank",
     )
     generic = db.store(
         content="Lesson: generic related edge should rank below validated packet miss edge.",
         metadata={"event_type": "lesson_learned"},
-        entity_id="omega-packet-edge-rank",
+        entity_id="cairn-packet-edge-rank",
     )
     validated = db.store(
         content="Lesson: validated packet miss edge should surface first in graph scoring.",
         metadata={"event_type": "lesson_learned"},
-        entity_id="omega-packet-edge-rank",
+        entity_id="cairn-packet-edge-rank",
     )
     db.add_edge(seed, generic, edge_type="related", weight=0.95, metadata={"source": "manual"})
     db.add_edge(
@@ -144,7 +144,7 @@ async def test_context_packet_prefers_validated_typed_edges(tmp_omega_dir):
         db,
         task="packet ranking seed graph scoring",
         files=["src/context.py"],
-        scope={"entity_id": "omega-packet-edge-rank"},
+        scope={"entity_id": "cairn-packet-edge-rank"},
         budget_tokens=700,
     )
 
@@ -153,19 +153,19 @@ async def test_context_packet_prefers_validated_typed_edges(tmp_omega_dir):
     assert first_chain["nodes"][0]["edge_source"] == "context_packet_miss_backfill"
 
 
-async def test_context_packet_surfaces_stale_as_warning(tmp_omega_dir):
-    from omega.bridge import _get_store
+async def test_context_packet_surfaces_stale_as_warning(tmp_cairn_dir):
+    from cairn.bridge import _get_store
 
     db = _get_store()
     active = db.store(
         content="Decision: route customer cloud setup through BYOS Supabase.",
         metadata={"event_type": "decision"},
-        entity_id="omega-packet-stale",
+        entity_id="cairn-packet-stale",
     )
     stale = db.store(
         content="Old lesson: use the operator Supabase project for customer setup.",
         metadata={"event_type": "lesson_learned"},
-        entity_id="omega-packet-stale",
+        entity_id="cairn-packet-stale",
     )
     db.add_edge(active, stale, edge_type="related", weight=0.9)
     db._conn.execute("UPDATE memories SET status = 'stale' WHERE node_id = ?", (stale,))
@@ -175,7 +175,7 @@ async def test_context_packet_surfaces_stale_as_warning(tmp_omega_dir):
         db,
         task="customer Supabase setup",
         files=["docs/setup.md"],
-        scope={"entity_id": "omega-packet-stale"},
+        scope={"entity_id": "cairn-packet-stale"},
         budget_tokens=700,
     )
 
@@ -244,20 +244,20 @@ def test_context_packet_renders_top_scored_item_before_section_order():
     assert md.count("- `") <= 8
 
 
-async def test_context_packet_excludes_superseded_memories(tmp_omega_dir):
-    from omega.bridge import _get_store
+async def test_context_packet_excludes_superseded_memories(tmp_cairn_dir):
+    from cairn.bridge import _get_store
 
     db = _get_store()
     current = db.store(
         content="Decision: current OAuth callback implementation must validate state nonce.",
         metadata={"event_type": "decision"},
-        entity_id="omega-packet-superseded",
+        entity_id="cairn-packet-superseded",
         skip_inference=True,
     )
     old = db.store(
         content="Old decision: OAuth callback can skip state nonce validation.",
         metadata={"event_type": "decision"},
-        entity_id="omega-packet-superseded",
+        entity_id="cairn-packet-superseded",
         skip_inference=True,
     )
     db.add_edge(current, old, edge_type="supersedes", weight=0.98)
@@ -267,7 +267,7 @@ async def test_context_packet_excludes_superseded_memories(tmp_omega_dir):
         db,
         task="update OAuth callback nonce validation",
         files=["src/auth/oauth.py"],
-        scope={"entity_id": "omega-packet-superseded"},
+        scope={"entity_id": "cairn-packet-superseded"},
         budget_tokens=700,
     )
 
@@ -277,20 +277,20 @@ async def test_context_packet_excludes_superseded_memories(tmp_omega_dir):
     assert all(w["reason"] != "superseded" for w in packet["warnings"])
 
 
-async def test_context_packet_contradiction_edges_are_warnings(tmp_omega_dir):
-    from omega.bridge import _get_store
+async def test_context_packet_contradiction_edges_are_warnings(tmp_cairn_dir):
+    from cairn.bridge import _get_store
 
     db = _get_store()
     active = db.store(
         content="Decision: license checks fail closed for remote validation errors.",
         metadata={"event_type": "decision"},
-        entity_id="omega-packet-contradiction",
+        entity_id="cairn-packet-contradiction",
         skip_inference=True,
     )
     contradictory = db.store(
         content="Conflicting note: license checks may fail open during remote validation errors.",
         metadata={"event_type": "lesson_learned"},
-        entity_id="omega-packet-contradiction",
+        entity_id="cairn-packet-contradiction",
         skip_inference=True,
     )
     db.add_edge(active, contradictory, edge_type="contradicts", weight=0.9)
@@ -299,7 +299,7 @@ async def test_context_packet_contradiction_edges_are_warnings(tmp_omega_dir):
         db,
         task="license remote validation error handling",
         files=["src/license.py"],
-        scope={"entity_id": "omega-packet-contradiction"},
+        scope={"entity_id": "cairn-packet-contradiction"},
         budget_tokens=700,
     )
 
@@ -310,20 +310,20 @@ async def test_context_packet_contradiction_edges_are_warnings(tmp_omega_dir):
     assert "fail open" not in md.split("Warnings:")[0]
 
 
-async def test_context_packet_respects_sensitivity_limit(tmp_omega_dir):
-    from omega.bridge import _get_store
+async def test_context_packet_respects_sensitivity_limit(tmp_cairn_dir):
+    from cairn.bridge import _get_store
 
     db = _get_store()
     db.store(
         content="Decision: public launch copy can mention local-first memory packets.",
         metadata={"event_type": "decision"},
-        entity_id="omega-packet-sensitivity",
+        entity_id="cairn-packet-sensitivity",
         sensitivity="public",
     )
     db.store(
         content="Decision: confidential enterprise pilot pricing is ACME-only.",
         metadata={"event_type": "decision"},
-        entity_id="omega-packet-sensitivity",
+        entity_id="cairn-packet-sensitivity",
         sensitivity="confidential",
     )
 
@@ -331,7 +331,7 @@ async def test_context_packet_respects_sensitivity_limit(tmp_omega_dir):
         db,
         task="prepare public launch copy for local-first memory packets",
         files=["docs/launch.md"],
-        scope={"entity_id": "omega-packet-sensitivity"},
+        scope={"entity_id": "cairn-packet-sensitivity"},
         max_sensitivity="public",
         budget_tokens=700,
     )
@@ -341,8 +341,8 @@ async def test_context_packet_respects_sensitivity_limit(tmp_omega_dir):
     assert "confidential enterprise pilot pricing" not in md
 
 
-async def test_context_packet_respects_budget(tmp_omega_dir):
-    from omega.bridge import store
+async def test_context_packet_respects_budget(tmp_cairn_dir):
+    from cairn.bridge import store
 
     for i in range(8):
         store(
@@ -351,31 +351,31 @@ async def test_context_packet_respects_budget(tmp_omega_dir):
                 "and avoid dumping long raw memory bodies into the prompt. " * 4
             ),
             event_type="decision",
-            entity_id="omega-packet-budget",
+            entity_id="cairn-packet-budget",
         )
 
     resp = await handle_context_packet({
         "task": "context packet budget test",
-        "scope": {"entity_id": "omega-packet-budget"},
+        "scope": {"entity_id": "cairn-packet-budget"},
         "budget_tokens": 180,
     })
     payload = _payload(resp)
     assert _estimate_tokens(payload["packet_markdown"]) <= 180
 
 
-async def test_context_packet_caps_rendered_memories(tmp_omega_dir):
-    from omega.bridge import store
+async def test_context_packet_caps_rendered_memories(tmp_cairn_dir):
+    from cairn.bridge import store
 
     for i in range(10):
         store(
             content=f"Decision {i}: rendered packet cap test should prefer focused memory packets.",
             event_type="decision",
-            entity_id="omega-packet-render-cap",
+            entity_id="cairn-packet-render-cap",
         )
 
     resp = await handle_context_packet({
         "task": "rendered packet cap test focused memory packets",
-        "scope": {"entity_id": "omega-packet-render-cap"},
+        "scope": {"entity_id": "cairn-packet-render-cap"},
         "budget_tokens": 1000,
     })
     payload = _payload(resp)
@@ -383,23 +383,23 @@ async def test_context_packet_caps_rendered_memories(tmp_omega_dir):
     assert payload["metrics"]["memories_used"] <= 8
 
 
-async def test_context_packet_handler_tracks_telemetry(tmp_omega_dir, monkeypatch):
-    from omega.bridge import store
+async def test_context_packet_handler_tracks_telemetry(tmp_cairn_dir, monkeypatch):
+    from cairn.bridge import store
 
     calls = []
     monkeypatch.setattr(
-        "omega.telemetry.track_context_packet",
+        "cairn.telemetry.track_context_packet",
         lambda metrics, surface="unknown": calls.append((metrics, surface)),
     )
     store(
         content="Decision: telemetry packet test should count packet usage.",
         event_type="decision",
-        entity_id="omega-packet-telemetry",
+        entity_id="cairn-packet-telemetry",
     )
 
     resp = await handle_context_packet({
         "task": "telemetry packet test",
-        "scope": {"entity_id": "omega-packet-telemetry"},
+        "scope": {"entity_id": "cairn-packet-telemetry"},
     })
 
     assert not _is_error(resp)
@@ -427,7 +427,7 @@ def test_context_packet_rendered_warning_metric_matches_visible_top_lines():
         include_receipt=True,
     )
 
-    from omega.server.context_handlers import _rendered_packet_warning_count
+    from cairn.server.context_handlers import _rendered_packet_warning_count
 
     assert _rendered_packet_warning_count(md) == 1
 
@@ -440,12 +440,12 @@ def test_context_packet_rendered_warning_metric_matches_visible_top_lines():
 
 
 def _db():
-    from omega.bridge import _get_store
+    from cairn.bridge import _get_store
     return _get_store()
 
 
 def test_packet_query_text_naturalizes_files():
-    from omega.server.context_handlers import _packet_query_text
+    from cairn.server.context_handlers import _packet_query_text
 
     q = _packet_query_text("", ["/repo/service/VehicleSpecService.kt"])
     assert "/" not in q, "raw paths classify keyword-sufficient and skip the vector channel"
@@ -453,8 +453,8 @@ def test_packet_query_text_naturalizes_files():
     assert "vehicle spec service" in q
 
 
-def test_packet_event_types_filter(tmp_omega_dir, _reset_bridge):
-    from omega.bridge import store
+def test_packet_event_types_filter(tmp_cairn_dir, _reset_bridge):
+    from cairn.bridge import store
 
     store(content="Decision: packet filters admit only requested event types for pass two",
           event_type="decision")
@@ -473,8 +473,8 @@ def test_packet_event_types_filter(tmp_omega_dir, _reset_bridge):
         assert "requested event types" in admitted_md
 
 
-def test_packet_min_seed_relevance_suppresses_fallback(tmp_omega_dir, _reset_bridge, monkeypatch):
-    from omega.bridge import store
+def test_packet_min_seed_relevance_suppresses_fallback(tmp_cairn_dir, _reset_bridge, monkeypatch):
+    from cairn.bridge import store
 
     store(content="Decision: something entirely about kitchen cabinets and paint",
           event_type="decision")
@@ -498,8 +498,8 @@ def test_packet_min_seed_relevance_suppresses_fallback(tmp_omega_dir, _reset_bri
     assert pkt["memories_used"] == [], "below the floor means stay silent, not backfill"
 
 
-def test_packet_exclude_ids(tmp_omega_dir, _reset_bridge):
-    from omega.bridge import store
+def test_packet_exclude_ids(tmp_cairn_dir, _reset_bridge):
+    from cairn.bridge import store
 
     store(content="Decision: exclusion list drops memories already surfaced by pass one",
           event_type="decision")

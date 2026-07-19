@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.cairn.kb-sync</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PYTHON_PATH__</string>
+        <string>-m</string>
+        <string>cairn.cli</string>
+        <string>knowledge</string>
+        <string>sync-kb</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>CAIRN_HOME</key>
+        <string>__CAIRN_HOME__</string>
+    </dict>
+    <key>StartInterval</key>
+    <integer>300</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>__CAIRN_HOME__/kb-sync.log</string>
+    <key>StandardErrorPath</key>
+    <string>__CAIRN_HOME__/kb-sync.log</string>
+</dict>
+</plist>

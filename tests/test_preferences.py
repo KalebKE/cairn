@@ -1,4 +1,4 @@
-"""Tests for omega.preferences — extraction, contradiction detection, store pipeline."""
+"""Tests for cairn.preferences — extraction, contradiction detection, store pipeline."""
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from omega.preferences import (
+from cairn.preferences import (
     extract_preferences,
     detect_contradictions,
     store_extracted_preferences,
@@ -129,16 +129,16 @@ class TestStoreExtractedPreferences:
         assert result["stored"] == 0
 
     def test_import_error_returns_gracefully(self):
-        """When omega.bridge is unavailable, should return gracefully."""
+        """When cairn.bridge is unavailable, should return gracefully."""
         import builtins
         real_import = builtins.__import__
 
         def mock_import(name, *args, **kwargs):
-            if name == "omega.bridge":
+            if name == "cairn.bridge":
                 raise ImportError("mocked")
             return real_import(name, *args, **kwargs)
 
-        with patch("omega.preferences.extract_preferences", return_value=[
+        with patch("cairn.preferences.extract_preferences", return_value=[
             {"content": "I prefer dark mode for editors", "confidence": 0.7, "pattern_matched": "test"}
         ]):
             with patch.object(builtins, "__import__", side_effect=mock_import):
@@ -151,7 +151,7 @@ class TestStoreExtractedPreferences:
         mock_store.get_by_type.return_value = []
         mock_store.store.return_value = "new-node-id"
 
-        with patch("omega.bridge._get_store", return_value=mock_store):
+        with patch("cairn.bridge._get_store", return_value=mock_store):
             result = store_extracted_preferences(
                 "I prefer using ruff over flake8 for Python linting always"
             )
@@ -169,8 +169,8 @@ class TestStoreExtractedPreferences:
         mock_store.get_by_type.return_value = [mock_existing]
         mock_store.store.return_value = "new-node-id"
 
-        with patch("omega.bridge._get_store", return_value=mock_store), \
-             patch("omega.preferences.extract_preferences", return_value=[
+        with patch("cairn.bridge._get_store", return_value=mock_store), \
+             patch("cairn.preferences.extract_preferences", return_value=[
                  {"content": "I never use flake8 for Python linting", "confidence": 0.7, "pattern_matched": "test"}
              ]):
             result = store_extracted_preferences("I never use flake8 for Python linting")
