@@ -153,24 +153,12 @@ def _file_path_from_payload(payload: Dict[str, Any]) -> str:
     return ""
 
 
-def _format_results(header: str, results, pc: int, seen_ids: set) -> list:
-    """Render one block of surfaced memories as lines (header + entries)."""
-    lines = [header]
-    for r in results:
-        nid_full = r.get("id", "") or ""
-        if nid_full in seen_ids:
-            continue
-        seen_ids.add(nid_full)
-        score = r.get("relevance", 0.0)
-        etype = r.get("event_type", "memory")
-        preview = (r.get("content", "") or "")[:pc].replace("\n", " ").strip()
-        lines.append(f"  [{score:.0%}] {etype}: {preview} (id:{nid_full[:8]})")
-    return lines if len(lines) > 1 else []
-
-
 def _do_surface(payload: Dict[str, Any]) -> str:
-    """Synchronous surfacing. Runs in the DB executor. Returns a ``[MEMORY]``
-    block, or ``""`` when there is nothing worth injecting.
+    """Synchronous surfacing. Runs in the DB executor. Returns a
+    ``[MEMORY_CONTEXT]`` packet block (rendered by
+    context_handlers.build_context_packet — one rendering path shared with
+    the MCP ``context_packet`` tool), or ``""`` when there is nothing worth
+    injecting.
 
     Two passes, both semantic (vector channel ON — see _natural_tokens):
 
@@ -188,17 +176,27 @@ def _do_surface(payload: Dict[str, Any]) -> str:
 
     now = time.monotonic()
     floor = float(cfg["relevance_floor"])
-    limit = int(cfg["limit"])
-    pc = int(cfg["preview_chars"])
     budget = int(cfg["max_block_chars"])
+    # ~4 chars/token: the packet's own token budget is the primary bound,
+    # the char budget below is the backstop.
+    packet_budget = max(120, budget // 4)
     project = payload.get("project") or ""
     session_id = payload.get("session_id") or None
 
-    from omega.bridge import query_structured
-    from omega.sqlite_store._types import SurfacingContext
+    import omega.bridge as _bridge
+    from omega.server import context_handlers as _ctx
 
     lines: list = []
-    seen_ids: set = set()
+    pass1_used: set = set()
+
+    def _emit(pkt) -> None:
+        if pkt.get("memories_used"):
+            lines.extend(pkt["packet_markdown"].splitlines())
+        try:
+            from omega.telemetry import track_context_packet
+            track_context_packet(pkt.get("metrics"), surface="hook")
+        except Exception:
+            pass
 
     # --- Pass 1: file-context recall (per-file debounce) ---
     if now - _last_surfaced.get(file_path, 0.0) >= float(cfg["debounce_s"]):
@@ -209,44 +207,46 @@ def _do_surface(payload: Dict[str, Any]) -> str:
 
         filename = os.path.basename(file_path)
         dirname = os.path.basename(os.path.dirname(file_path))
-        qtext = f"{_natural_tokens(filename)} {_natural_tokens(dirname)}".strip()
-        results = query_structured(
-            query_text=qtext or filename,
-            limit=limit,
-            session_id=session_id,
-            project=project or None,
-            context_file=file_path,
-            surfacing_context=SurfacingContext.FILE_EDIT,
-        ) or []
-        results = [r for r in results if r.get("relevance", 0.0) >= floor]
-        lines.extend(_format_results(
-            f"[MEMORY] Relevant prior context for {filename}:", results, pc, seen_ids,
-        ))
+        try:
+            pkt = _ctx.build_context_packet(
+                _bridge._get_store(),
+                task=f"{_natural_tokens(filename)} {_natural_tokens(dirname)}".strip(),
+                files=[file_path],
+                scope={"project": project or None, "session_id": session_id},
+                mode="before_edit",
+                budget_tokens=packet_budget,
+                include_receipt=False,
+                min_seed_relevance=floor,
+            )
+            pass1_used = set(pkt.get("memories_used") or [])
+            _emit(pkt)
+        except Exception as e:
+            logger.debug("surface pass 1 failed: %s", e)
 
     # --- Pass 2: project knowledge briefing (long per-project debounce) ---
     if project and now - _last_project_surfaced.get(project, 0.0) >= float(cfg["project_debounce_s"]):
         _last_project_surfaced[project] = now
         pname = os.path.basename(project.rstrip("/")) or project
-        results = query_structured(
-            query_text=f"{_natural_tokens(pname)} architecture decisions constraints lessons plans",
-            limit=limit,
-            session_id=session_id,
-            project=project,
-            surfacing_context=SurfacingContext.PLANNING,
-        ) or []
-        results = [
-            r for r in results
-            if r.get("event_type") in _KNOWLEDGE_SURFACE_TYPES
-            and r.get("relevance", 0.0) >= floor
-        ]
-        lines.extend(_format_results(
-            f"[MEMORY] Active project knowledge ({pname}):", results, pc, seen_ids,
-        ))
+        try:
+            pkt = _ctx.build_context_packet(
+                _bridge._get_store(),
+                task=f"{_natural_tokens(pname)} architecture decisions constraints lessons plans",
+                scope={"project": project, "session_id": session_id},
+                mode="planning",
+                budget_tokens=packet_budget,
+                include_receipt=False,
+                min_seed_relevance=floor,
+                event_types=_KNOWLEDGE_SURFACE_TYPES,
+                exclude_ids=pass1_used,
+            )
+            _emit(pkt)
+        except Exception as e:
+            logger.debug("surface pass 2 failed: %s", e)
 
     if not lines:
         return ""
 
-    # Enforce the overall character budget across both blocks.
+    # Enforce the overall character budget across both packets.
     out: list = []
     used = 0
     for line in lines:
@@ -254,8 +254,9 @@ def _do_surface(payload: Dict[str, Any]) -> str:
             break
         out.append(line)
         used += len(line) + 1
-    # Never emit a dangling header with no entries.
-    while out and out[-1].startswith("[MEMORY]"):
+    # Never end on a dangling header/section line with no entries under it.
+    while out and (out[-1].startswith("[MEMORY") or out[-1].rstrip().endswith(":")
+                   or not out[-1].strip()):
         out.pop()
     return "\n".join(out) if out else ""
 

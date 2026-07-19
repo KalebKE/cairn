@@ -267,15 +267,20 @@ def _coerce_packet_budget(raw: Any) -> int:
 
 
 def _packet_query_text(task: str, files: List[str]) -> str:
+    """Build the seed-query text. File parts are naturalized (CamelCase and
+    snake_case split into words, extensions dropped): raw paths and
+    identifiers classify as keyword-sufficient and skip the vector channel,
+    which blinds the packet to knowledge memories — the same failure the
+    surfacing hook fixed (see hook_server._natural_tokens)."""
+    from omega.server.hook_server import _natural_tokens
     parts: List[str] = []
     if task:
         parts.append(task)
     for file_path in files:
-        parts.append(file_path)
-        parts.append(os.path.basename(file_path))
+        parts.append(_natural_tokens(os.path.basename(file_path)))
         parent = os.path.basename(os.path.dirname(file_path))
         if parent:
-            parts.append(parent)
+            parts.append(_natural_tokens(parent))
     return " ".join(p for p in parts if p).strip()
 
 
@@ -771,8 +776,19 @@ def build_context_packet(
     budget_tokens: int = _DEFAULT_PACKET_BUDGET,
     max_sensitivity: str = "restricted",
     include_receipt: bool = True,
+    event_types: Optional[frozenset] = None,
+    min_seed_relevance: float = 0.0,
+    exclude_ids: Optional[set] = None,
 ) -> Dict[str, Any]:
-    """Build a task-aware context packet from retrieval seeds plus graph chains."""
+    """Build a task-aware context packet from retrieval seeds plus graph chains.
+
+    The last three kwargs exist for the ambient surfacing hook (which
+    renders through this builder so there is exactly one rendering path):
+    *event_types* restricts admitted items to those types, *min_seed_relevance*
+    applies the hook's relevance floor to seeds AND suppresses the
+    scope-fallback re-seed (below the floor means stay silent, not backfill),
+    *exclude_ids* drops memories already surfaced by an earlier pass.
+    Defaults preserve the MCP tool behavior exactly."""
     files = files or []
     scope_flat = _flatten_scope(scope)
     mode = mode if mode in _PACKET_MODE_TO_SURFACING else "before_edit"
@@ -807,7 +823,12 @@ def build_context_packet(
     if query_params and "max_sensitivity" not in query_params:
         query_kwargs.pop("max_sensitivity", None)
     seeds = db.query(query_text, **query_kwargs)
-    if not seeds:
+    if min_seed_relevance > 0:
+        seeds = [
+            s for s in seeds
+            if float(getattr(s, "relevance", 0.0) or 0.0) >= min_seed_relevance
+        ]
+    if not seeds and min_seed_relevance <= 0:
         seeds = _query_packet_scope_fallback(
             db,
             scope=scope_flat,
@@ -906,7 +927,7 @@ def build_context_packet(
         if chain_nodes:
             chains.append({"seed_id": seed_id, "nodes": chain_nodes[:4]})
 
-    if not any(
+    if min_seed_relevance <= 0 and not any(
         _admit_packet_item(item, scope=scope_flat, max_sensitivity=max_sensitivity)[0]
         for item in candidates.values()
     ):
@@ -923,6 +944,16 @@ def build_context_packet(
             )
             if item and item["id"] not in candidates:
                 candidates[item["id"]] = item
+
+    if event_types:
+        candidates = {
+            nid: item for nid, item in candidates.items()
+            if item.get("event_type") in event_types
+        }
+    if exclude_ids:
+        candidates = {
+            nid: item for nid, item in candidates.items() if nid not in exclude_ids
+        }
 
     _apply_contradiction_warnings(db, candidates)
 

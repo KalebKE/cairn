@@ -464,8 +464,8 @@ CONDENSED_TOOL_SCHEMAS = [
 
 # Harness-agnostic context wire contract. Gate the lower-level generic
 # context_assemble alias behind an env var, but expose context_packet by
-# default because it is the task-aware memory packet used by current hook and
-# daemon surfaces.
+# default: build_context_packet is the single rendering path for both this
+# MCP tool and the daemon's PostToolUse surfacing hook.
 import os as _os
 from omega.server.context_tool_schemas import CONTEXT_TOOL_SCHEMAS  # noqa: E402
 

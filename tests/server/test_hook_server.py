@@ -100,37 +100,44 @@ def _reset_debounce():
     H._last_project_surfaced.clear()
 
 
-def test_surface_budget_relevance_and_debounce(monkeypatch):
-    """_do_surface applies the relevance floor, per-block char budget, and
-    per-file/per-project debounce, using a mocked query_structured."""
+def _fake_packet(markdown="", used=None):
+    return {"packet_markdown": markdown, "memories_used": used or [], "metrics": {}}
+
+
+def _patch_builder(monkeypatch, fn):
+    from omega.server import context_handlers as ctx
+    monkeypatch.setattr(ctx, "build_context_packet", fn)
+    import omega.bridge as bridge
+    monkeypatch.setattr(bridge, "_get_store", lambda: object())
+
+
+def test_surface_budget_floor_and_debounce(monkeypatch):
+    """_do_surface renders via build_context_packet, forwards the relevance
+    floor, enforces the char-budget backstop, and debounces per file/project."""
     _reset_debounce()
     monkeypatch.setattr(H, "_cfg", lambda: _base_cfg(max_block_chars=130))
 
-    calls = {"n": 0}
+    calls = []
 
-    def fake_query(**kwargs):
-        calls["n"] += 1
-        return [
-            {"relevance": 0.95, "event_type": "decision", "content": "high relevance A" * 5, "id": "aaaaaaaa11"},
-            {"relevance": 0.80, "event_type": "lesson_learned", "content": "high relevance B" * 5, "id": "bbbbbbbb22"},
-            {"relevance": 0.10, "event_type": "memory", "content": "LOW relevance should be dropped", "id": "cccccccc33"},
-        ]
+    def fake_builder(db, **kw):
+        calls.append(kw)
+        md = "[MEMORY_CONTEXT] f.py\nPrior Decisions:\n- `aaaaaaaaaaaa` high relevance A\n- `bbbbbbbbbbbb` high relevance B"
+        return _fake_packet(md, ["aaaaaaaaaaaa-full", "bbbbbbbbbbbb-full"])
 
-    import omega.bridge as bridge
-    monkeypatch.setattr(bridge, "query_structured", fake_query)
+    _patch_builder(monkeypatch, fake_builder)
 
     payload = {"tool_input": json.dumps({"file_path": "/proj/Service.kt"}), "project": "/proj"}
     block = H._do_surface(payload)
 
-    assert block.startswith("[MEMORY] Relevant prior context for Service.kt:")
-    assert "cccccccc" not in block          # relevance floor dropped the 0.10 item
-    assert len(block) <= 130                 # max_block_chars budget respected
-    assert calls["n"] == 2                   # pass 1 (file) + pass 2 (project)
+    assert block.startswith("[MEMORY_CONTEXT]")
+    assert len(block) <= 130                 # max_block_chars backstop respected
+    assert len(calls) == 2                   # pass 1 (file) + pass 2 (project)
+    assert calls[0]["min_seed_relevance"] == pytest.approx(0.30)
 
     # Second call on the same file within both debounce windows: no re-query.
     block2 = H._do_surface(payload)
     assert block2 == ""
-    assert calls["n"] == 2
+    assert len(calls) == 2
 
 
 def test_natural_tokens():
@@ -139,60 +146,54 @@ def test_natural_tokens():
     assert H._natural_tokens("billfold-web") == "billfold web"
 
 
-def test_pass1_query_is_semantic_not_filepath(monkeypatch):
-    """Pass 1 must send natural-word queries with the FILE_EDIT profile —
-    paths/CamelCase classify as keyword-sufficient and skip the vector
-    channel, which made the old hook blind to knowledge memory."""
+def test_pass1_task_is_semantic_not_filepath(monkeypatch):
+    """Pass 1 must hand the builder a natural-word task — paths/CamelCase
+    classify as keyword-sufficient and skip the vector channel, which made
+    the old hook blind to knowledge memory. (The builder itself also
+    naturalizes `files` — see test_context_packet.py.)"""
     _reset_debounce()
     monkeypatch.setattr(H, "_cfg", lambda: _base_cfg())
     captured = []
-
-    import omega.bridge as bridge
-    monkeypatch.setattr(bridge, "query_structured", lambda **kw: captured.append(kw) or [])
+    _patch_builder(monkeypatch,
+                   lambda db, **kw: captured.append(kw) or _fake_packet())
 
     H._do_surface({"tool_input": json.dumps({"file_path": "/repo/service/VehicleSpecService.kt"}),
                    "project": "/repo"})
 
-    from omega.sqlite_store._types import SurfacingContext
     p1 = captured[0]
-    assert "/" not in p1["query_text"], "no raw paths in the semantic query"
-    assert "VehicleSpecService" not in p1["query_text"], "no CamelCase identifiers"
-    assert "vehicle spec service" in p1["query_text"]
-    assert p1["surfacing_context"] is SurfacingContext.FILE_EDIT
-    assert p1["context_file"] == "/repo/service/VehicleSpecService.kt"
+    assert "/" not in p1["task"], "no raw paths in the semantic task"
+    assert "VehicleSpecService" not in p1["task"], "no CamelCase identifiers"
+    assert "vehicle spec service" in p1["task"]
+    assert p1["mode"] == "before_edit"
+    assert p1["files"] == ["/repo/service/VehicleSpecService.kt"]
+    assert p1["include_receipt"] is False
 
 
-def test_pass2_project_briefing_knowledge_types_only(monkeypatch):
-    """Pass 2 surfaces only durable knowledge (decisions/lessons/constraints),
-    never episodic exhaust, under the PLANNING profile."""
+def test_pass2_project_briefing_knowledge_types_and_dedup(monkeypatch):
+    """Pass 2 runs in planning mode restricted to durable knowledge types
+    and excludes everything pass 1 already surfaced."""
     _reset_debounce()
     monkeypatch.setattr(H, "_cfg", lambda: _base_cfg())
     captured = []
 
-    def fake_query(**kw):
+    def fake_builder(db, **kw):
         captured.append(kw)
         if len(captured) == 1:  # pass 1: file context
-            return [{"relevance": 0.7, "event_type": "memory",
-                     "content": "notes about x.py refactor", "id": "f1"}]
-        return [  # pass 2: project knowledge
-            {"relevance": 0.9, "event_type": "decision", "content": "ship dashboards in August", "id": "d1"},
-            {"relevance": 0.8, "event_type": "task_completion", "content": "bumped gradle", "id": "t1"},
-        ]
+            return _fake_packet("[MEMORY_CONTEXT] x.py\n- `f1` notes about x.py refactor", ["f1-full-id"])
+        return _fake_packet("[MEMORY_CONTEXT] tracqi-web\nPrior Decisions:\n- `d1` ship dashboards in August", ["d1-full-id"])
 
-    import omega.bridge as bridge
-    monkeypatch.setattr(bridge, "query_structured", fake_query)
+    _patch_builder(monkeypatch, fake_builder)
 
     block = H._do_surface({"tool_input": json.dumps({"file_path": "/repo/x.py"}),
                            "project": "/Users/k/Projects/tracqi-web"})
 
-    from omega.sqlite_store._types import SurfacingContext
-    assert captured[1]["surfacing_context"] is SurfacingContext.PLANNING
-    assert captured[1]["project"] == "/Users/k/Projects/tracqi-web"
-    assert "Active project knowledge (tracqi-web):" in block
+    p2 = captured[1]
+    assert p2["mode"] == "planning"
+    assert p2["event_types"] is H._KNOWLEDGE_SURFACE_TYPES
+    assert p2["exclude_ids"] == {"f1-full-id"}
+    assert "tracqi web" in p2["task"]  # _natural_tokens splits the hyphen
+    assert p2["scope"]["project"] == "/Users/k/Projects/tracqi-web"
     assert "ship dashboards" in block
-    # decision appears in both passes but is deduped; episodic never appears in pass 2
-    p2_section = block.split("Active project knowledge")[1]
-    assert "bumped gradle" not in p2_section
 
 
 def test_pass2_debounced_per_project(monkeypatch):
@@ -201,15 +202,33 @@ def test_pass2_debounced_per_project(monkeypatch):
     _reset_debounce()
     monkeypatch.setattr(H, "_cfg", lambda: _base_cfg(debounce_s=0))
     calls = []
-
-    import omega.bridge as bridge
-    monkeypatch.setattr(bridge, "query_structured", lambda **kw: calls.append(kw) or [])
+    _patch_builder(monkeypatch, lambda db, **kw: calls.append(kw) or _fake_packet())
 
     for f in ("/repo/a.py", "/repo/b.py", "/repo/c.py"):
         H._do_surface({"tool_input": json.dumps({"file_path": f}), "project": "/repo"})
 
-    planning_calls = [c for c in calls if str(c.get("surfacing_context")) .endswith("PLANNING")]
+    planning_calls = [c for c in calls if c.get("mode") == "planning"]
     assert len(planning_calls) == 1, "project briefing must fire once per window"
+
+
+def test_surface_fail_open_when_builder_raises(monkeypatch):
+    _reset_debounce()
+    monkeypatch.setattr(H, "_cfg", lambda: _base_cfg())
+
+    def boom(db, **kw):
+        raise RuntimeError("packet build exploded")
+
+    _patch_builder(monkeypatch, boom)
+    block = H._do_surface({"tool_input": json.dumps({"file_path": "/p/f.py"}), "project": "/p"})
+    assert block == ""
+
+
+def test_surface_empty_packet_returns_empty_string(monkeypatch):
+    _reset_debounce()
+    monkeypatch.setattr(H, "_cfg", lambda: _base_cfg())
+    _patch_builder(monkeypatch, lambda db, **kw: _fake_packet("ignored markdown", used=[]))
+    block = H._do_surface({"tool_input": json.dumps({"file_path": "/p/g.py"}), "project": "/p"})
+    assert block == ""
 
 
 def _write_transcript(tmp_path):
@@ -316,17 +335,14 @@ def test_do_compact_capture_skips_on_empty_llm(tmp_path, monkeypatch):
 
 
 def test_no_dangling_header_when_budget_cuts_entries(monkeypatch):
-    """A header whose entries were all trimmed by the budget must not be
-    emitted on its own."""
+    """A header/section line whose entries were all trimmed by the char
+    budget must not be emitted on its own."""
     _reset_debounce()
     monkeypatch.setattr(H, "_cfg", lambda: _base_cfg(max_block_chars=60))
 
-    def fake_query(**kw):
-        return [{"relevance": 0.9, "event_type": "decision",
-                 "content": "some quite long content here", "id": "dddddddd44"}]
-
-    import omega.bridge as bridge
-    monkeypatch.setattr(bridge, "query_structured", fake_query)
+    md = ("[MEMORY_CONTEXT] f.py\nPrior Decisions:\n"
+          "- `dddddddddddd` some quite long decision content that will not fit the budget")
+    _patch_builder(monkeypatch, lambda db, **kw: _fake_packet(md, ["dddddddddddd-full"]))
 
     block = H._do_surface({"tool_input": json.dumps({"file_path": "/p/f.py"}), "project": "/p"})
     assert not block.rstrip().endswith(":"), f"dangling header in: {block!r}"
@@ -356,8 +372,7 @@ def test_last_surfaced_debounce_dict_is_bounded(monkeypatch):
         "limit": 1, "relevance_floor": 0.30, "preview_chars": 40,
         "debounce_s": 999, "max_block_chars": 200,
     })
-    import omega.bridge as bridge
-    monkeypatch.setattr(bridge, "query_structured", lambda **kw: [])
+    _patch_builder(monkeypatch, lambda db, **kw: _fake_packet())
     cap = H._MAX_DEBOUNCE_ENTRIES
     for i in range(cap + 50):
         H._do_surface({"tool_input": json.dumps({"file_path": f"/proj/file_{i}.py"})})

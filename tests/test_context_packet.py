@@ -29,7 +29,7 @@ def test_context_packet_schema_exposed_by_default():
     assert "context_assemble" not in names
 
 
-async def test_context_packet_empty_store_is_well_formed(tmp_omega_dir):
+async def test_context_packet_empty_store_is_well_formed(tmp_omega_dir, _reset_bridge):
     resp = await handle_context_packet({
         "task": "edit auth handler",
         "files": ["src/auth.py"],
@@ -430,3 +430,87 @@ def test_context_packet_rendered_warning_metric_matches_visible_top_lines():
     from omega.server.context_handlers import _rendered_packet_warning_count
 
     assert _rendered_packet_warning_count(md) == 1
+
+
+# ---------------------------------------------------------------------------
+# Surfacing-hook kwargs (event_types / min_seed_relevance / exclude_ids) and
+# naturalized file query text — the hook renders through this builder, so
+# these are the knobs that preserve its old two-pass semantics.
+# ---------------------------------------------------------------------------
+
+
+def _db():
+    from omega.bridge import _get_store
+    return _get_store()
+
+
+def test_packet_query_text_naturalizes_files():
+    from omega.server.context_handlers import _packet_query_text
+
+    q = _packet_query_text("", ["/repo/service/VehicleSpecService.kt"])
+    assert "/" not in q, "raw paths classify keyword-sufficient and skip the vector channel"
+    assert "VehicleSpecService" not in q
+    assert "vehicle spec service" in q
+
+
+def test_packet_event_types_filter(tmp_omega_dir, _reset_bridge):
+    from omega.bridge import store
+
+    store(content="Decision: packet filters admit only requested event types for pass two",
+          event_type="decision")
+    store(content="Completed: packet filters chore for event type coverage run",
+          event_type="task_completion")
+
+    pkt = build_context_packet(
+        _db(),
+        task="packet filters event types",
+        event_types=frozenset({"decision"}),
+        budget_tokens=400,
+    )
+    admitted_md = pkt["packet_markdown"]
+    assert "chore for event type" not in admitted_md
+    if pkt["memories_used"]:
+        assert "requested event types" in admitted_md
+
+
+def test_packet_min_seed_relevance_suppresses_fallback(tmp_omega_dir, _reset_bridge, monkeypatch):
+    from omega.bridge import store
+
+    store(content="Decision: something entirely about kitchen cabinets and paint",
+          event_type="decision")
+
+    db = _db()
+    orig_query = db.query
+
+    def low_relevance_query(query_text, **kw):
+        seeds = orig_query(query_text, **kw)
+        for s in seeds:
+            s.relevance = 0.1  # everything lands below the hook's floor
+        return seeds
+
+    monkeypatch.setattr(db, "query", low_relevance_query)
+    pkt = build_context_packet(
+        db,
+        task="kitchen cabinets paint",
+        min_seed_relevance=0.3,
+        budget_tokens=400,
+    )
+    assert pkt["memories_used"] == [], "below the floor means stay silent, not backfill"
+
+
+def test_packet_exclude_ids(tmp_omega_dir, _reset_bridge):
+    from omega.bridge import store
+
+    store(content="Decision: exclusion list drops memories already surfaced by pass one",
+          event_type="decision")
+
+    first = build_context_packet(_db(), task="exclusion list surfaced pass", budget_tokens=400)
+    assert first["memories_used"], "seed must surface before exclusion is tested"
+
+    second = build_context_packet(
+        _db(),
+        task="exclusion list surfaced pass",
+        exclude_ids=set(first["memories_used"]),
+        budget_tokens=400,
+    )
+    assert not (set(second["memories_used"]) & set(first["memories_used"]))
