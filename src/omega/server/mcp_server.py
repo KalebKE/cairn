@@ -113,6 +113,11 @@ _last_activity: float = time.monotonic()
 # Shutdown flag — set True during graceful shutdown to reject new tool calls
 _shutting_down: bool = False
 
+# Periodic maintenance (omega.scheduler): tick interval and the no-tool-call
+# quiet period required before DB-holding jobs (VACUUM) may run. 0 disables.
+_MAINT_INTERVAL_S = int(os.environ.get("OMEGA_MAINT_INTERVAL_S", "900"))
+_MAINT_IDLE_THRESHOLD_S = 120
+
 
 def _close_on_exit():
     """Close SQLite store and unregister PID when the MCP server process exits."""
@@ -378,6 +383,41 @@ async def _socket_watchdog_once():
                 await hs.start_hook_server()
     except Exception as e:
         logger.warning("Socket watchdog iteration failed: %s", e)
+
+
+async def _maintenance_once():
+    """One maintenance tick: run due jobs in the SQLite executor.
+
+    Never raises. Uses the shared executor deliberately — running SQLite
+    work on a second thread pool would reintroduce the concurrent-access
+    SIGSEGV race the shared executor exists to prevent.
+    """
+    try:
+        from omega.scheduler import run_due_jobs
+        loop = asyncio.get_running_loop()
+
+        def _is_idle() -> bool:
+            return (time.monotonic() - _last_activity) >= _MAINT_IDLE_THRESHOLD_S
+
+        ran = await loop.run_in_executor(
+            _SQLITE_EXECUTOR, run_due_jobs, _is_idle, lambda: _shutting_down)
+        if ran:
+            logger.info("Maintenance ran: %s", ", ".join(ran))
+    except Exception as e:
+        logger.warning("Maintenance tick failed: %s", e)
+
+
+async def _maintenance_scheduler():
+    """Periodic maintenance loop (rollup/link/gc/consolidate/compact/backup).
+
+    Initial delay keeps the first tick clear of prewarm, plugin wiring and
+    the startup integrity check, which share the same executor.
+    """
+    await asyncio.sleep(300)
+    while True:
+        if not _shutting_down:
+            await _maintenance_once()
+        await asyncio.sleep(_MAINT_INTERVAL_S)
 
 
 async def _socket_watchdog():
@@ -826,6 +866,11 @@ async def main():
 
     # Socket watchdog — re-creates hook.sock if deleted by another session's stop
     _sock_watchdog_task = asyncio.create_task(_socket_watchdog())
+
+    # Periodic maintenance (both transports; flock-guarded markers make it
+    # safe when several daemon processes run concurrently)
+    if _MAINT_INTERVAL_S > 0:
+        _maint_task = asyncio.create_task(_maintenance_scheduler())
 
     # Fork note: the upstream background coordination loop was removed — it
     # depended entirely on the absent omega_platform coordination module and

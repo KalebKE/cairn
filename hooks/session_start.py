@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """OMEGA SessionStart hook — Welcome briefing with recent context."""
-import fcntl
 import os
 import time
 import traceback
@@ -24,156 +23,14 @@ def _log_hook_error(hook_name, error):
         pass
 
 
-def _try_acquire_periodic(marker_name: str, min_age_days: int):
-    """Atomically check and claim a periodic task via file lock.
-
-    Returns the old marker content (for rollback) if claimed, None if skipped.
-    Uses fcntl.flock to prevent concurrent processes from racing.
-    """
-    omega_dir = Path.home() / ".omega"
-    omega_dir.mkdir(parents=True, exist_ok=True)
-    marker = omega_dir / marker_name
-    lock_path = omega_dir / f"{marker_name}.lock"
-    lock_fd = os.open(str(lock_path), os.O_WRONLY | os.O_CREAT, 0o600)
-    try:
-        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except (OSError, BlockingIOError):
-        os.close(lock_fd)
-        return None  # Another process holds the lock
-
-    try:
-        old_content = None
-        if marker.exists():
-            old_content = marker.read_text().strip()
-            last = datetime.fromisoformat(old_content)
-            if last.tzinfo is None:
-                last = last.replace(tzinfo=timezone.utc)
-            age_days = (datetime.now(timezone.utc) - last).days
-            if age_days < min_age_days:
-                return None
-
-        # Write marker BEFORE the slow operation to block other processes
-        marker.write_text(datetime.now(timezone.utc).isoformat())
-        return old_content if old_content else ""
-    except Exception:
-        return None
-    finally:
-        fcntl.flock(lock_fd, fcntl.LOCK_UN)
-        os.close(lock_fd)
-
-
-def _rollback_marker(marker_name: str, old_content: str):
-    """Restore a marker to its previous value on failure."""
-    marker = Path.home() / ".omega" / marker_name
-    if old_content == "":
-        marker.unlink(missing_ok=True)
-    else:
-        marker.write_text(old_content)
-
-
-def _maybe_auto_consolidate():
-    """Run lightweight consolidation if >3 days since last run."""
-    try:
-        old = _try_acquire_periodic("last-consolidate", 3)
-        if old is None:
-            return
-        try:
-            from omega.bridge import consolidate
-            consolidate(prune_days=7, max_summaries=30)
-        except ImportError:
-            _rollback_marker("last-consolidate", old)
-        except Exception:
-            _rollback_marker("last-consolidate", old)
-            raise
-    except ImportError:
-        pass
-    except Exception as e:
-        _log_hook_error("auto_consolidate", e)
-
-
-def _maybe_auto_backup():
-    """Export a backup if >7 days since last backup. Keep last 4."""
-    try:
-        old = _try_acquire_periodic("last-backup", 7)
-        if old is None:
-            return
-        try:
-            backup_dir = Path.home() / ".omega" / "backups"
-            backup_dir.mkdir(parents=True, exist_ok=True)
-            dest = backup_dir / f"omega-{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.json"
-            from omega.bridge import export_memories
-            export_memories(filepath=str(dest))
-            backups = sorted(backup_dir.glob("omega-*.json"), key=lambda p: p.name, reverse=True)
-            for b in backups[4:]:
-                b.unlink()
-        except ImportError:
-            _rollback_marker("last-backup", old)
-        except Exception:
-            _rollback_marker("last-backup", old)
-            raise
-    except ImportError:
-        pass
-    except Exception as e:
-        _log_hook_error("auto_backup", e)
-
-
-def _maybe_auto_compact():
-    """Run compaction of high-volume memory types if >3 days since last run."""
-    try:
-        old = _try_acquire_periodic("last-compact", 3)
-        if old is None:
-            return
-        try:
-            from omega.bridge import compact
-            for etype in ("advisor_insight", "lesson_learned", "decision",
-                          "observation", "session_summary", "handoff", "task_completion"):
-                compact(event_type=etype, similarity_threshold=0.50, min_cluster_size=2)
-        except ImportError:
-            _rollback_marker("last-compact", old)
-        except Exception:
-            _rollback_marker("last-compact", old)
-            raise
-    except ImportError:
-        pass
-    except Exception as e:
-        _log_hook_error("auto_compact", e)
-
-
-def _maybe_analyze_behavior():
-    """Run behavioral pattern extraction if >3 days since last run."""
-    try:
-        old = _try_acquire_periodic("last-behavioral-analysis", 3)
-        if old is None:
-            return
-        try:
-            from omega.behavioral import analyze_and_store
-            analyze_and_store()
-        except ImportError:
-            _rollback_marker("last-behavioral-analysis", old)
-        except Exception:
-            _rollback_marker("last-behavioral-analysis", old)
-            raise
-    except ImportError:
-        pass
-    except Exception as e:
-        _log_hook_error("behavioral_analysis", e)
-
+# Periodic maintenance (consolidate/compact/backup/...) moved to the
+# daemon-side scheduler: src/omega/scheduler.py (run from mcp_server's
+# event loop). The SessionStart hook path is dead in the lean daemon, so
+# jobs living here silently never ran.
 
 def main():
     project = os.environ.get("PROJECT_DIR", os.getcwd())
     session_id = os.environ.get("SESSION_ID", "")
-
-    # Auto-consolidation check (lightweight, max once per 3 days)
-    _maybe_auto_consolidate()
-
-    # Auto-compaction check (max once per 3 days)
-    _maybe_auto_compact()
-
-    # Auto-backup check (max once per 7 days)
-    _maybe_auto_backup()
-
-    # Behavioral pattern extraction (max once per 3 days)
-    _maybe_analyze_behavior()
 
     try:
         from omega.bridge import welcome
