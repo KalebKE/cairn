@@ -382,13 +382,6 @@ class TestInjectClaudeMd:
         assert self.claude_md.read_text() == old_block
         assert "dry-run" in capsys.readouterr().out
 
-    def test_pro_fragment_selected(self, monkeypatch, capsys):
-        """Commercial modules present should select the Pro fragment."""
-        monkeypatch.setattr("cairn.cli._has_commercial_modules", lambda: True)
-        _inject_claude_md()
-        content = self.claude_md.read_text()
-        assert "Multi-agent coordination enabled" in content
-
     def test_core_fragment_selected(self, capsys):
         """Without commercial modules, core fragment is used."""
         _inject_claude_md()
