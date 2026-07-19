@@ -539,6 +539,26 @@ async def handle_omega_query(arguments: dict) -> dict:
             logger.error("omega_query (phrase) failed: %s", e, exc_info=True)
             return mcp_error("Phrase search failed")
 
+    # Regex mode — Python-side re over a bounded recency scan
+    if mode == "regex":
+        limit = _clamp_int(arguments.get("limit", 10), default=10, max_val=1000)
+        try:
+            from omega.bridge import regex_search
+
+            result = regex_search(
+                pattern=query_text,
+                limit=limit,
+                event_type=arguments.get("event_type"),
+                project=arguments.get("project"),
+                case_sensitive=arguments.get("case_sensitive", False),
+            )
+            return mcp_response(result)
+        except ValueError as e:
+            return mcp_error(str(e))
+        except Exception as e:
+            logger.error("omega_query (regex) failed: %s", e, exc_info=True)
+            return mcp_error("Regex search failed")
+
     # Semantic mode (default)
     limit = _clamp_int(arguments.get("limit", 10), default=10, max_val=1000)
     event_type = arguments.get("event_type")

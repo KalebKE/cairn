@@ -801,6 +801,82 @@ class SearchMixin:
         ).fetchall()
         return [self._row_to_result(row) for row in rows]
 
+    def regex_search(
+        self,
+        pattern: str,
+        case_sensitive: bool = False,
+        event_type: Optional[str] = None,
+        limit: int = 10,
+        project_path: str = "",
+        scope: str = "project",
+        entity_id: Optional[str] = None,
+        max_scan_rows: int = 20000,
+    ) -> List[MemoryResult]:
+        """Regex search over memory content, newest first.
+
+        Python-side ``re`` filtering over a recency-ordered SQL scan rather
+        than a REGEXP UDF: the pattern compiles exactly once, ``re.error``
+        is raised as ValueError before any row is read, and the scan is
+        bounded by ``max_scan_rows``. At the 50k-row store cap a full scan
+        is tens of milliseconds. Content is sliced to 8000 chars per row to
+        bound backtracking on pathological rows.
+
+        Raises ValueError on empty/oversize/invalid/catastrophic patterns.
+        """
+        import re as _re
+
+        if not pattern or not pattern.strip():
+            raise ValueError("Invalid regex: empty pattern")
+        if len(pattern) > 256:
+            raise ValueError("Invalid regex: pattern longer than 256 chars")
+        # Heuristic catastrophic-backtracking guard: a quantified group
+        # immediately followed by another quantifier, e.g. (a+)+ or (\w*)*.
+        if _re.search(r"\([^()]*[+*][^()]*\)\s*[+*{]", pattern):
+            raise ValueError(
+                "Invalid regex: nested quantifiers (catastrophic backtracking risk)"
+            )
+        try:
+            rx = _re.compile(pattern, 0 if case_sensitive else _re.IGNORECASE)
+        except _re.error as e:
+            raise ValueError(f"Invalid regex: {e}") from None
+
+        conditions = [_ACTIVE_STATUS_SQL]
+        params: List[Any] = []
+        if event_type:
+            conditions.append("event_type = ?")
+            params.append(event_type)
+        if project_path and scope == "project":
+            conditions.append("(project IS NULL OR project = '' OR project = ?)")
+            params.append(project_path)
+        if entity_id:
+            conditions.append("(entity_id = ? OR entity_id IS NULL)")
+            params.append(entity_id)
+
+        cursor = self._conn.execute(
+            f"""SELECT node_id, content, metadata, created_at,
+                       access_count, last_accessed, ttl_seconds
+                FROM memories WHERE {" AND ".join(conditions)}
+                ORDER BY created_at DESC""",
+            params,
+        )
+        matches: List[MemoryResult] = []
+        scanned = 0
+        while scanned < max_scan_rows and len(matches) < limit:
+            rows = cursor.fetchmany(500)
+            if not rows:
+                break
+            for row in rows:
+                scanned += 1
+                if scanned > max_scan_rows:
+                    break
+                if rx.search((row[1] or "")[:8000]):
+                    result = self._row_to_result(row)
+                    result.relevance = 1.0
+                    matches.append(result)
+                    if len(matches) >= limit:
+                        break
+        return matches
+
     def get_session_context(self, session_id: str, limit: int = 50, include_recent: bool = True) -> List[MemoryResult]:
         """Get context for a session."""
         results = {}

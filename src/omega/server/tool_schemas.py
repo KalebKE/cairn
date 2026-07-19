@@ -62,15 +62,15 @@ TOOL_SCHEMAS = [
     },
     {
         "name": "omega_query",
-        "description": "Search memories. Modes: 'semantic' (default) for meaning-based search, 'phrase' for exact substring match, 'timeline' for recent memories grouped by day, 'browse' for listing by type/session/recent.",
+        "description": "Search memories. Modes: 'semantic' (default) for meaning-based search, 'phrase' for exact substring match, 'regex' for regular-expression match, 'timeline' for recent memories grouped by day, 'browse' for listing by type/session/recent.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "Search query (or exact phrase when mode='phrase'). Not required for mode='timeline' or mode='browse'."},
+                "query": {"type": "string", "description": "Search query (exact phrase when mode='phrase', regex pattern when mode='regex'). Not required for mode='timeline' or mode='browse'."},
                 "mode": {
                     "type": "string",
-                    "enum": ["semantic", "phrase", "timeline", "browse", "trace", "unified"],
-                    "description": "Search mode: 'semantic' (default), 'phrase' for exact match, 'timeline' for recent memories by day, 'browse' for listing, 'trace' for session tool call timeline, 'unified' for cross-searching memories + knowledge documents",
+                    "enum": ["semantic", "phrase", "regex", "timeline", "browse", "trace", "unified"],
+                    "description": "Search mode: 'semantic' (default), 'phrase' for exact match, 'regex' for regular-expression match (newest first), 'timeline' for recent memories by day, 'browse' for listing, 'trace' for session tool call timeline, 'unified' for cross-searching memories + knowledge documents",
                 },
                 "limit": {"type": "integer", "default": 10},
                 "event_type": {"type": "string", "description": "Filter by event type (also used as type filter in semantic mode for scoped search)"},
@@ -82,7 +82,7 @@ TOOL_SCHEMAS = [
                 "temporal_range": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 2, "description": "[start_iso, end_iso] date range filter"},
                 "entity_id": {"type": "string", "description": "Filter to entity. Omit for all."},
                 "agent_type": {"type": "string", "description": "Filter to agent type. Omit for all."},
-                "case_sensitive": {"type": "boolean", "description": "Case-sensitive (only for mode='phrase', default false)", "default": False},
+                "case_sensitive": {"type": "boolean", "description": "Case-sensitive (only for mode='phrase' or mode='regex', default false)", "default": False},
                 "days": {"type": "integer", "description": "Days to look back (only for mode='timeline', default 7)", "default": 7},
                 "limit_per_day": {"type": "integer", "description": "Max per day (only for mode='timeline', default 10)", "default": 10},
                 "browse_by": {

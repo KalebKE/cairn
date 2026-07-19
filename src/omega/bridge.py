@@ -4556,6 +4556,49 @@ def phrase_search(
         return f"# Phrase Search Error\n\n**Error:** {str(e)}\n"
 
 
+def regex_search(
+    pattern: str,
+    limit: int = 10,
+    event_type: Optional[str] = None,
+    project: Optional[str] = None,
+    case_sensitive: bool = False,
+) -> str:
+    """Regex search over memory content (newest first).
+
+    Returns formatted markdown. ValueError (bad pattern) propagates so the
+    handler can surface the message verbatim.
+    """
+    db = _get_store()
+    results = db.regex_search(
+        pattern=pattern,
+        limit=limit,
+        event_type=event_type,
+        case_sensitive=case_sensitive,
+        project_path=project or "",
+    )
+
+    output = f"# Regex Search Results ({len(results)})\n\n"
+    output += f"**Pattern:** `{pattern}`\n"
+    if event_type:
+        output += f"**Event Type:** {event_type}\n"
+    output += "\n"
+
+    if results:
+        for i, node in enumerate(results[:limit], 1):
+            ntype = (node.metadata or {}).get("event_type", "memory")
+            preview = node.content[:200] + "..." if len(node.content) > 200 else node.content
+            output += f"## {i}. [{ntype}] `{node.id}`\n"
+            output += f"{preview}\n"
+            tags = (node.metadata or {}).get("tags", [])
+            if tags:
+                output += f"*Tags: {', '.join(str(t) for t in tags[:5])}*\n"
+            output += f"*Created: {node.created_at.isoformat()[:16]}*\n\n"
+    else:
+        output += "*No matching memories found.*\n"
+
+    return output
+
+
 # ---------------------------------------------------------------------------
 # Public API -- Stats
 # ---------------------------------------------------------------------------
