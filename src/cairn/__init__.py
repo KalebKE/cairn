@@ -12,6 +12,10 @@ install with: ``pip install cairn[server]``
 
 __version__ = "1.5.5"
 
+# Back-compat: honor pre-rename OMEGA_* env vars before any module reads config.
+from cairn import _compat as _compat  # noqa: E402
+_compat.apply_env_fallback()
+
 from cairn.sqlite_store import SQLiteStore
 from cairn.bridge import (
     remember,

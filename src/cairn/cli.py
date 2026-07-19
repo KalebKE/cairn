@@ -1498,6 +1498,22 @@ def cmd_consolidate(args):
     print(f"  Nodes after:       {node_count_after}")
 
 
+def cmd_migrate_home(args):
+    """Migrate the legacy ~/.omega data dir to ~/.cairn (omega.db -> cairn.db,
+    markers, config, backups, and the ONNX model cache). Non-destructive: the
+    legacy dir is left in place and an existing cairn.db is never overwritten."""
+    from cairn._compat import migrate_home, needs_home_migration
+    if not needs_home_migration():
+        if (CAIRN_DIR / "cairn.db").exists():
+            print(f"Cairn store already present at {CAIRN_DIR / 'cairn.db'} — nothing to migrate.")
+        else:
+            print("No legacy ~/.omega store found — nothing to migrate.")
+        return
+    print("Migrating ~/.omega -> ~/.cairn ...")
+    migrate_home(verbose=True)
+    print("Done. Verify with `cairn status`, then remove ~/.omega when satisfied.")
+
+
 def cmd_migrate_db(args):
     """Migrate from JSON graphs + JSONL to SQLite backend."""
     force = getattr(args, "force", False)
@@ -3039,6 +3055,7 @@ def main():
     doctor_parser.add_argument("--json", action="store_true", help="Output as JSON (also: CAIRN_JSON=1)")
 
     subparsers.add_parser("migrate", help="Copy MAGMA data to Cairn (non-destructive)")
+    subparsers.add_parser("migrate-home", help="Migrate legacy ~/.omega data dir to ~/.cairn (non-destructive)")
     migrate_db_parser = subparsers.add_parser("migrate-db", help="Migrate JSON graphs to SQLite backend")
     migrate_db_parser.add_argument("--force", action="store_true", help="Overwrite existing SQLite database")
     subparsers.add_parser("reingest", help="Load store.jsonl entries into graph system")
@@ -3210,6 +3227,7 @@ def main():
         "status": cmd_status,
         "doctor": cmd_doctor,
         "migrate": cmd_migrate,
+        "migrate-home": cmd_migrate_home,
         "migrate-db": cmd_migrate_db,
         "reingest": cmd_reingest,
         "consolidate": cmd_consolidate,

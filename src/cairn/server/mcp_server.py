@@ -735,6 +735,16 @@ async def main():
     _configure_logging()
     logger.info("Starting Cairn MCP server...")
 
+    # One-time legacy data migration (~/.omega -> ~/.cairn) before the store
+    # opens. No-op once migrated or when CAIRN_HOME is set. Never destructive.
+    try:
+        from cairn._compat import migrate_home, needs_home_migration
+        if needs_home_migration():
+            logger.warning("Legacy ~/.omega store found — migrating to ~/.cairn...")
+            migrate_home()
+    except Exception as e:
+        logger.warning("Home migration check failed (non-fatal): %s", e)
+
     # --- Startup memory baseline ---
     _startup_rss = _get_current_rss_bytes()
     logger.warning(
