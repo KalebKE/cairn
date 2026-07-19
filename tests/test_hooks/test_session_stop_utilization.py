@@ -5,7 +5,7 @@ import pytest
 def test_utilization_report_flags_missing_tools():
     """When agent never called cairn_reflect or cairn_decision_query,
     the report should flag them as unused."""
-    from hooks.session_stop import _build_utilization_report
+    from cairn.hooks.session_stop import _build_utilization_report
 
     # Simulate a session that called some tools but skipped critical ones
     tool_calls = [
@@ -21,7 +21,7 @@ def test_utilization_report_flags_missing_tools():
 
 def test_utilization_report_perfect_score():
     """When all critical tools were called, score is 100."""
-    from hooks.session_stop import _build_utilization_report
+    from cairn.hooks.session_stop import _build_utilization_report
 
     tool_calls = [
         "cairn_welcome", "cairn_protocol", "cairn_query", "cairn_store",
@@ -36,7 +36,7 @@ def test_utilization_report_perfect_score():
 
 def test_utilization_report_empty_session():
     """An empty session should flag all critical tools."""
-    from hooks.session_stop import _build_utilization_report
+    from cairn.hooks.session_stop import _build_utilization_report
 
     report = _build_utilization_report([])
     assert report["score"] == 0

@@ -241,7 +241,7 @@ class TestActivityReport:
         sys.path.insert(0, hooks_dir)
         try:
             import importlib
-            import session_stop
+            from cairn.hooks import session_stop
             importlib.reload(session_stop)
             captured = StringIO()
             with patch("sys.stdout", captured):
@@ -291,7 +291,7 @@ class TestSurfacingCounter:
         sys.path.insert(0, hooks_dir)
         try:
             import importlib
-            import session_stop
+            from cairn.hooks import session_stop
             importlib.reload(session_stop)
             # Patch Path.home() so the function finds our tmp_cairn_dir
             with patch.object(Path, "home", return_value=tmp_cairn_dir.parent):
