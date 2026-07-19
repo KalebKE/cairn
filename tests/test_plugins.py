@@ -80,35 +80,18 @@ class TestPluginCapabilities:
 
         assert get_capabilities() == {"pro_tools"}
 
-    @patch("importlib.metadata.entry_points")
-    def test_fake_license_module_does_not_unlock_memory_cap(self, mock_ep, monkeypatch):
-        """Core ignores cairn_platform.license.is_pro() for cap unlocks."""
+    def test_max_nodes_honors_env_with_sane_default(self, monkeypatch):
+        """The write cap is CAIRN_MAX_NODES (default 50000) — no tier gating."""
         from cairn.sqlite_store import _base
 
-        cairn_platform = types.ModuleType("cairn_platform")
-        license_mod = types.ModuleType("cairn_platform.license")
-        license_mod.is_pro = lambda: True
-        monkeypatch.setitem(sys.modules, "cairn_platform", cairn_platform)
-        monkeypatch.setitem(sys.modules, "cairn_platform.license", license_mod)
-        monkeypatch.setenv("CAIRN_MAX_NODES", "99999")
-        mock_ep.return_value = []
+        monkeypatch.delenv("CAIRN_MAX_NODES", raising=False)
+        assert _base._get_effective_max_nodes() == _base._DEFAULT_MAX_NODES
 
-        assert _base._get_effective_max_nodes() == _base._CORE_HARD_LIMIT
-
-    @patch("importlib.metadata.entry_points")
-    def test_capability_plugin_unlocks_memory_cap_env(self, mock_ep, monkeypatch):
-        from cairn.sqlite_store import _base
-
-        class CapPlugin(CairnPlugin):
-            CAPABILITIES = {"unlimited_memory"}
-
-        ep = MagicMock()
-        ep.name = "cap_plugin"
-        ep.load.return_value = CapPlugin
-        mock_ep.return_value = [ep]
         monkeypatch.setenv("CAIRN_MAX_NODES", "12345")
-
         assert _base._get_effective_max_nodes() == 12345
+
+        monkeypatch.setenv("CAIRN_MAX_NODES", "not-an-int")
+        assert _base._get_effective_max_nodes() == _base._DEFAULT_MAX_NODES
 
     @patch("importlib.metadata.entry_points")
     def test_invalid_plugin_skipped(self, mock_ep):

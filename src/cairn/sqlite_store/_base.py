@@ -24,37 +24,15 @@ from ._types import (
 logger = logging.getLogger("cairn.sqlite_store")
 
 
-# Free-tier capacity gates. Module-level so a runtime monkey-patch of a
-# SQLiteStore instance attribute cannot raise the cap; the property on
-# SQLiteStoreBase always re-reads these unless an explicit override field
-# is set (tests only).
-#
-# Extension path: when an installed plugin advertises the ``unlimited_memory``
-# capability, CAIRN_MAX_NODES is honored (default 50000). Core does not trust
-# a local license function to unlock this behavior.
-#
-# Free path: the env var is IGNORED. The hard write cap is _CORE_HARD_LIMIT
-# (5000). Per-instance grandfathering on the property lifts the ceiling to
-# the current count for installs that already exceed 5K, so existing Free
-# users do not suddenly hit a write wall after upgrading cairn.
-_CORE_HARD_LIMIT = 5000
+_DEFAULT_MAX_NODES = 50000
 
 
 def _get_effective_max_nodes() -> int:
-    """Hard write cap for this process.
-
-    Extension: ``CAIRN_MAX_NODES`` env (default 50000). Free:
-    ``_CORE_HARD_LIMIT``; the env var is ignored so a free user cannot set
-    ``CAIRN_MAX_NODES=99999`` to bypass the cap.
-    """
+    """Hard write cap for this process (default 50000, override CAIRN_MAX_NODES)."""
     try:
-        from cairn.plugins import has_capability
-
-        if has_capability("unlimited_memory"):
-            return int(os.environ.get("CAIRN_MAX_NODES", "50000"))
-    except Exception as e:
-        logger.debug("Capability check failed in _get_effective_max_nodes: %s", e)
-    return _CORE_HARD_LIMIT
+        return int(os.environ.get("CAIRN_MAX_NODES", str(_DEFAULT_MAX_NODES)))
+    except ValueError:
+        return _DEFAULT_MAX_NODES
 
 
 class SQLiteStoreBase:
@@ -273,24 +251,11 @@ class SQLiteStoreBase:
 
     @property
     def _MAX_NODES(self) -> int:
-        """Effective hard write cap. Re-reads extension capabilities per access.
-
-        Extension: ``CAIRN_MAX_NODES`` env (default 50000).
-        Free: ``_CORE_HARD_LIMIT`` (5000); the env var is ignored so a free
-        user cannot set ``CAIRN_MAX_NODES=99999`` to bypass the cap.
-
-        Grandfathering for Free installs that already exceed the Free cap
-        is applied at the capacity-check site in ``_store.py`` (see
-        ``_apply_grandfather`` and the store() write path). It lives there
-        instead of inside this property so the existing capacity-check
-        COUNT(*) query can be reused — running two sequential COUNT(*)
-        queries inside a single store() call upset older SQLite libraries
-        (Ubuntu CI 3.40-class) by leaving a prepared statement in
-        progress between them.
+        """Effective hard write cap (``CAIRN_MAX_NODES`` env, default 50000).
 
         Test override: set ``self._max_nodes_override = <int>`` on the
-        instance to force a specific cap value (bypasses the Pro check).
-        Production callers should not set this attribute.
+        instance to force a specific cap value. Production callers should not
+        set this attribute.
         """
         override = getattr(self, "_max_nodes_override", None)
         if override is not None:
@@ -298,22 +263,9 @@ class SQLiteStoreBase:
         return _get_effective_max_nodes()
 
     def _apply_grandfather(self, base_max: int, count: int) -> int:
-        """Return the effective per-instance cap, raising the Free ceiling
-        for installs that already exceed _CORE_HARD_LIMIT. Caches the
-        result on the instance so subsequent writes don't keep growing
-        the ceiling — the intent is "your existing memories stay
-        writable, but you do not get new growth headroom on Free."
-        Pro callers (base_max != _CORE_HARD_LIMIT) get base_max
-        unchanged. ``count`` is passed in by the caller's already-needed
-        capacity-check query so this method does no I/O.
-        """
-        if base_max != _CORE_HARD_LIMIT:
-            return base_max
-        grand = getattr(self, "_grandfather_max", None)
-        if grand is None:
-            grand = max(base_max, count)
-            self._grandfather_max = grand
-        return grand
+        """No-op retained for call-site compatibility. There is no longer a
+        tiered cap to grandfather — the cap is CAIRN_MAX_NODES for everyone."""
+        return base_max
 
     def __init__(self, db_path=None, decompose_queries: bool = True):
         cairn_home = Path(os.environ.get("CAIRN_HOME", str(Path.home() / ".cairn")))
