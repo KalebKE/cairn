@@ -11,5 +11,11 @@
   ],
   "PostToolUse": [
     {"script": "fast_hook.py surface_memories", "timeout": 5000, "matcher": "Edit|Write|NotebookEdit|Bash|Read"}
+  ],
+  "PreCompact": [
+    {"script": "fast_hook.py pre_compact_capture", "timeout": 5000, "matcher": ""}
+  ],
+  "SessionEnd": [
+    {"script": "fast_hook.py session_end", "timeout": 5000, "matcher": ""}
   ]
 }

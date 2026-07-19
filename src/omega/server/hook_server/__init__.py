@@ -22,8 +22,10 @@ Design goals (driven by the historical failure mode — see ~/.omega/LESSONS.md)
   (the old server logged every 15s watchdog ping as ``unknown``, growing
   hooks.log unbounded).
 
-Only ``surface_memories`` is handled; every other hook name returns an empty
-no-op response so wiring an unexpected hook can never do harm.
+Three hooks are handled: ``surface_memories`` (synchronous block render),
+``pre_compact_capture`` and ``session_end`` (fire-and-forget background
+capture).  Every other hook name returns an empty no-op response so wiring an
+unexpected hook can never do harm.
 """
 from __future__ import annotations
 
@@ -316,9 +318,13 @@ _COMPACT_SYSTEM_PROMPT = (
 )
 
 
-def _do_compact_capture(payload: Dict[str, Any]) -> None:
+def _do_compact_capture(payload: Dict[str, Any], source: str = "pre-compact") -> None:
     """Background worker: digest the transcript tail and store it. All
-    failures are logged and swallowed — capture is best-effort by design."""
+    failures are logged and swallowed — capture is best-effort by design.
+
+    *source* tags the stored digest ("pre-compact" or "session-end") so
+    residual duplicates between the two capture points stay diagnosable.
+    """
     try:
         tail = _transcript_tail(payload.get("transcript_path") or "")
         if len(tail) < 500:
@@ -339,7 +345,7 @@ def _do_compact_capture(payload: Dict[str, Any]) -> None:
             metadata={
                 "event_type": "session_summary",
                 "project": payload.get("project") or payload.get("cwd") or "",
-                "tags": ["pre-compact", "session-capture"],
+                "tags": [source, "session-capture"],
                 "compact_trigger": payload.get("trigger", ""),
             },
             session_id=payload.get("session_id") or None,
@@ -349,8 +355,36 @@ def _do_compact_capture(payload: Dict[str, Any]) -> None:
         logger.debug("pre_compact capture failed: %s", e)
 
 
+def _do_session_end(payload: Dict[str, Any]) -> None:
+    """Session-end worker: distill the session's trajectory into a reusable
+    skill_template (quality-gated inside distill_trajectory) and store a
+    final session digest. Fail-open — a session ending must never block."""
+    session_id = payload.get("session_id") or ""
+    if session_id:
+        try:
+            import omega.bridge as _bridge
+            _bridge.distill_trajectory(session_id)
+        except Exception as e:
+            logger.debug("session_end distill failed: %s", e)
+    try:
+        _do_compact_capture(payload, source="session-end")
+    except Exception as e:
+        logger.debug("session_end digest failed: %s", e)
+
+
 async def _dispatch(hook: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     """Route one hook to its handler."""
+    if hook == "session_end":
+        # Fire-and-forget, same shape as pre_compact_capture below.
+        try:
+            loop = asyncio.get_running_loop()
+            from omega.server.mcp_server import _SQLITE_EXECUTOR
+            fut = loop.run_in_executor(_SQLITE_EXECUTOR, _do_session_end, payload)
+            _bg_futures.add(fut)
+            fut.add_done_callback(_bg_futures.discard)
+        except Exception as e:
+            logger.debug("session_end dispatch failed: %s", e)
+        return {"output": "", "exit_code": 0}
     if hook == "pre_compact_capture":
         # Fire-and-forget: compaction is blocked on this hook returning, so
         # the digest+store runs in the executor and we answer immediately.

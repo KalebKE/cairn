@@ -483,6 +483,86 @@ def test_stop_unlinks_own_socket(monkeypatch):
     asyncio.run(body())
 
 
+# ---------------------------------------------------------------------------
+# session_end: fire-and-forget worker that distills the session trajectory
+# into a reusable skill_template and stores a final session digest.
+# ---------------------------------------------------------------------------
+
+def test_dispatch_session_end_schedules_worker(monkeypatch):
+    called = {}
+    monkeypatch.setattr(H, "_do_session_end", lambda payload: called.update(payload))
+
+    async def body():
+        resp = await H._dispatch("session_end", {"session_id": "s1"})
+        assert resp == {"output": "", "exit_code": 0}
+        if H._bg_futures:
+            await asyncio.gather(*list(H._bg_futures))
+
+    asyncio.run(body())
+    assert called.get("session_id") == "s1", "session_end must schedule _do_session_end"
+
+
+def test_session_end_worker_calls_distill(monkeypatch):
+    import omega.bridge as bridge
+    seen = {}
+    monkeypatch.setattr(bridge, "distill_trajectory", lambda sid: seen.setdefault("sid", sid))
+    monkeypatch.setattr(H, "_do_compact_capture", lambda payload, source="pre-compact": None)
+    H._do_session_end({"session_id": "abc", "transcript_path": "/nonexistent"})
+    assert seen["sid"] == "abc"
+
+
+def test_session_end_missing_session_id_fail_open(monkeypatch):
+    import omega.bridge as bridge
+    monkeypatch.setattr(
+        bridge, "distill_trajectory",
+        lambda sid: (_ for _ in ()).throw(AssertionError("must not distill without session_id")),
+    )
+    monkeypatch.setattr(H, "_do_compact_capture", lambda payload, source="pre-compact": None)
+    H._do_session_end({"transcript_path": ""})  # must not raise
+
+
+def test_session_end_stores_digest_with_session_end_tag(tmp_path, monkeypatch):
+    import omega.bridge as bridge
+    import omega.llm as llm
+
+    transcript = tmp_path / "t.jsonl"
+    lines = []
+    for i in range(30):
+        lines.append(json.dumps({
+            "type": "user",
+            "message": {"content": f"prompt {i}: please fix the flaky rollup test in omega"},
+        }))
+        lines.append(json.dumps({
+            "type": "assistant",
+            "message": {"content": [{"type": "text", "text": f"reply {i}: adjusted the marker rollback logic"}]},
+        }))
+    transcript.write_text("\n".join(lines))
+
+    stored = {}
+
+    class _FakeStore:
+        def store(self, content, metadata=None, session_id=None, **kw):
+            stored.update({"content": content, "metadata": metadata, "session_id": session_id})
+            return "node-x"
+
+    monkeypatch.setattr(llm, "llm_complete", lambda *a, **kw: "digest text")
+    monkeypatch.setattr(bridge, "_get_store", lambda: _FakeStore())
+    monkeypatch.setattr(bridge, "distill_trajectory", lambda sid: None)
+
+    H._do_session_end({
+        "session_id": "s9", "transcript_path": str(transcript), "project": "/p",
+    })
+    assert stored["content"] == "digest text"
+    assert "session-end" in stored["metadata"]["tags"]
+    assert stored["session_id"] == "s9"
+
+
+def test_dispatch_unknown_hook_still_noop():
+    async def body():
+        return await H._dispatch("some_future_hook", {})
+    assert asyncio.run(body()) == {"output": "", "exit_code": 0}
+
+
 def test_start_returns_same_server_when_healthy(monkeypatch):
     monkeypatch.setattr(H, "SOCK_PATH", _TEST_SOCK)
 
