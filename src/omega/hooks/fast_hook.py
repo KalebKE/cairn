@@ -14,7 +14,15 @@ import socket
 import sys
 import time
 
-SOCK_PATH = os.path.expanduser("~/.omega/hook.sock")
+# Windows uses TCP loopback; Unix uses domain socket
+if sys.platform == "win32":
+    SOCK_PATH = None
+    HOOK_HOST = "127.0.0.1"
+    HOOK_PORT = 19876
+else:
+    SOCK_PATH = os.path.expanduser("~/.omega/hook.sock")
+    HOOK_HOST = None
+    HOOK_PORT = None
 
 # Map hook names to their original script modules for fallback
 _FALLBACK_SCRIPTS = {
@@ -37,6 +45,10 @@ _FALLBACK_SCRIPTS = {
     "pre_alignment_gate": "pre_alignment_gate",
     "trace_capture": "trace_capture",
 }
+# Note: pre_irreversible_advisor is intentionally absent — it's daemon-only
+# (advisory, never blocks) with no standalone fallback script.
+# Note: pre_insight_surface is intentionally absent — it's daemon-only
+# (hook_server/insights.py) with no standalone fallback script.
 
 # Hooks that require longer timeouts (e.g., git network operations)
 _SLOW_HOOKS = {"pre_push_guard"}
@@ -55,15 +67,58 @@ _BLOCKING_HOOKS = {
 _BEST_EFFORT_HOOKS = {
     "assistant_capture",
     "coord_session_stop",
-    "coord_heartbeat",       # heartbeat must reach Supabase even without daemon
-    "coord_session_start",   # belt-and-suspenders: omega_welcome also registers,
-                             # but fallback covers agents that skip omega_welcome
     "trace_capture",         # captures content that would otherwise be lost
+    # coord_session_start and coord_heartbeat intentionally excluded:
+    # Their fallback paths import heavy OMEGA modules + hit SQLite, causing
+    # 36-260s startup delays when 8-10 sessions race (fallback stampede).
+    # The daemon handles these when it comes up; skipping fallback is safe.
 }
 
 # Retry settings for startup race (hook fires before MCP server opens socket)
-_CONNECT_RETRIES = 4
-_CONNECT_RETRY_DELAY = 0.5  # seconds between retries
+# Kept low: retries only help during the narrow window where MCP server is
+# actively starting.  A stale socket (daemon crashed/exited) is detected and
+# cleaned up immediately — no retries needed for that case.
+_CONNECT_RETRIES = 2
+_CONNECT_RETRY_DELAY = 0.15  # seconds between retries
+
+
+def _is_socket_stale(sock_path):
+    """Check if a Unix domain socket is stale (no listener).
+
+    A stale socket means the daemon that created it has exited without
+    cleaning up.  We detect this via a non-blocking connect: if the OS
+    immediately returns ECONNREFUSED, no process is listening.  In that
+    case we remove the socket file so subsequent calls get a fast
+    FileNotFoundError instead of wasting time on retries.
+
+    Returns True if the socket was stale (and removed), False otherwise.
+    """
+    if sys.platform == "win32" or not sock_path:
+        return False
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.setblocking(False)
+        try:
+            s.connect(sock_path)
+        except BlockingIOError:
+            # Connection in progress — daemon might be alive, not stale
+            return False
+        except ConnectionRefusedError:
+            # No listener — stale socket
+            try:
+                os.unlink(sock_path)
+            except OSError:
+                pass
+            return True
+        except FileNotFoundError:
+            return True  # Already gone
+        except OSError:
+            return False  # Unknown state, don't remove
+        finally:
+            s.close()
+    except Exception:
+        return False
+    return False
 
 
 def _detect_client() -> str:
@@ -89,9 +144,14 @@ def delegate(hook_names, payload, timeout=5.0):
     Accepts a single hook name (str) or multiple (list) for batching.
     Batch requests use {"hooks": [...]} and return {"results": [...]}.
     """
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.settimeout(timeout)
-    s.connect(SOCK_PATH)
+    if sys.platform == "win32":
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        s.connect((HOOK_HOST, HOOK_PORT))
+    else:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        s.connect(SOCK_PATH)
     try:
         if isinstance(hook_names, list):
             request = json.dumps({"hooks": hook_names, **payload}).encode("utf-8")
@@ -176,14 +236,6 @@ def _log_timing(hook_name, elapsed_ms, mode):
         from pathlib import Path
         log_path = Path.home() / ".omega" / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        # Bound growth: rotate at 5 MB (keep one previous generation). The
-        # daemon-side 15s heartbeat that once bloated this to 35 MB is gone,
-        # but per-edit lines still accumulate over time.
-        try:
-            if log_path.exists() and log_path.stat().st_size > 5 * 1024 * 1024:
-                log_path.replace(log_path.parent / "hooks.log.1")
-        except OSError:
-            pass
         timestamp = datetime.now().isoformat(timespec="seconds")
         data = f"[{timestamp}] fast_hook/{hook_name}: OK ({elapsed_ms:.0f}ms, {mode})\n"
         fd = os.open(str(log_path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
@@ -204,6 +256,7 @@ def _parse_payload():
         "session_id": os.environ.get("SESSION_ID", ""),
         "project": os.environ.get("PROJECT_DIR", os.getcwd()),
         "client": _detect_client(),
+        "caller_pid": os.getppid(),
     }
 
     # Claude Code sends hook data as JSON on stdin for ALL hook types.
@@ -248,20 +301,25 @@ def main():
     if _SLOW_HOOKS.intersection(hook_names):
         timeout = 20.0
 
-    # Try daemon connection with retries (handles startup race where
-    # SessionStart hook fires before MCP server opens the socket).
-    result = None
-    for attempt in range(_CONNECT_RETRIES + 1):
-        try:
-            result = delegate(hook_names if is_batch else hook_names[0], payload, timeout=timeout)
-            break
-        except socket.timeout:
-            break  # Daemon exists but slow — don't retry, fall through
-        except FileNotFoundError:
-            break  # Socket file missing — daemon not started, skip retries
-        except (ConnectionRefusedError, OSError):
-            if attempt < _CONNECT_RETRIES:
-                time.sleep(_CONNECT_RETRY_DELAY)
+    # Fast-path: if socket is stale (daemon exited without cleanup),
+    # remove it immediately and skip to fallback — no retries needed.
+    if SOCK_PATH and _is_socket_stale(SOCK_PATH):
+        result = None
+    else:
+        # Try daemon connection with retries (handles startup race where
+        # SessionStart hook fires before MCP server opens the socket).
+        result = None
+        for attempt in range(_CONNECT_RETRIES + 1):
+            try:
+                result = delegate(hook_names if is_batch else hook_names[0], payload, timeout=timeout)
+                break
+            except socket.timeout:
+                break  # Daemon exists but slow — don't retry, fall through
+            except FileNotFoundError:
+                break  # Socket file missing — daemon not started, skip retries
+            except (ConnectionRefusedError, OSError):
+                if attempt < _CONNECT_RETRIES:
+                    time.sleep(_CONNECT_RETRY_DELAY)
 
     elapsed_ms = (time.monotonic() - t0) * 1000
 
