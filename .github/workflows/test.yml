@@ -9,9 +9,11 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest]
         python-version: ["3.11", "3.12", "3.13"]
 
     steps:
@@ -49,4 +51,12 @@ jobs:
         run: ruff check src/
 
       - name: Test
-        run: pytest tests/ -x --tb=short
+        # No -x: run the whole suite so one failure doesn't mask others.
+        # Coverage is reported (not gated yet) to establish a baseline.
+        run: pytest tests/ --tb=short --cov=cairn --cov-report=term-missing
+
+      - name: Test (randomized order)
+        # Surfaces order-dependencies / leaky global state (e.g. the bridge
+        # store singleton). Non-blocking until the fixtures are hardened.
+        continue-on-error: true
+        run: pytest tests/ -p randomly --tb=line -q
