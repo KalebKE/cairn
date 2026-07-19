@@ -391,3 +391,108 @@ def test_cfg_is_cached_until_config_mtime_changes(tmp_path, monkeypatch):
     os.utime(cfg_file, (cfg_file.stat().st_atime, cfg_file.stat().st_mtime + 10))
     assert H._cfg()["limit"] == 9, "mtime change must invalidate the cache"
     assert reads["n"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Socket lifecycle: rebind after external unlink, inode-guarded stop.
+#
+# Reproduces the wedged-daemon incident: another session's stop_hook_server
+# unlinks ~/.omega/hook.sock; the surviving process's watchdog calls
+# start_hook_server(), which returns the cached _server without re-binding,
+# so the daemon loops "re-creating..." forever while clients get
+# FileNotFoundError.
+# ---------------------------------------------------------------------------
+
+def _noop_roundtrip():
+    """Assert a live listener at H.SOCK_PATH without touching the store."""
+    r = _client(H.SOCK_PATH, {"hook": "noop_lifecycle_probe"})
+    assert r == {"output": "", "exit_code": 0}
+
+
+def test_start_rebinds_after_external_unlink(monkeypatch):
+    monkeypatch.setattr(H, "SOCK_PATH", _TEST_SOCK)
+    asyncio.run(_rebind_body())
+
+
+async def _rebind_body():
+    H._server = None
+    await H.start_hook_server()
+    try:
+        assert _TEST_SOCK.exists()
+        _TEST_SOCK.unlink()  # simulate a sibling session's shutdown
+        await H.start_hook_server()
+        assert _TEST_SOCK.exists(), "start_hook_server must re-bind when the socket path is gone"
+        await asyncio.to_thread(_noop_roundtrip)
+    finally:
+        await H.stop_hook_server()
+
+
+def test_watchdog_iteration_restores_socket(monkeypatch):
+    """The extracted watchdog iteration must restore a working socket."""
+    monkeypatch.setattr(H, "SOCK_PATH", _TEST_SOCK)
+    asyncio.run(_watchdog_body())
+
+
+async def _watchdog_body():
+    from omega.server import mcp_server as M
+    H._server = None
+    await H.start_hook_server()
+    try:
+        _TEST_SOCK.unlink()
+        await M._socket_watchdog_once()
+        assert _TEST_SOCK.exists()
+        await asyncio.to_thread(_noop_roundtrip)
+    finally:
+        await H.stop_hook_server()
+
+
+def test_stop_does_not_unlink_foreign_socket(monkeypatch):
+    """If a newer daemon has taken over the socket path, a stale process's
+    stop_hook_server must NOT delete the successor's socket."""
+    monkeypatch.setattr(H, "SOCK_PATH", _TEST_SOCK)
+    asyncio.run(_foreign_stop_body())
+
+
+async def _foreign_stop_body():
+    H._server = None
+    await H.start_hook_server()
+    _TEST_SOCK.unlink()
+
+    # A successor daemon binds a fresh socket at the same path (new inode).
+    foreign = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    foreign.bind(str(_TEST_SOCK))
+    try:
+        await H.stop_hook_server()
+        assert _TEST_SOCK.exists(), "stop_hook_server deleted a socket it does not own"
+    finally:
+        foreign.close()
+        if _TEST_SOCK.exists():
+            _TEST_SOCK.unlink()
+
+
+def test_stop_unlinks_own_socket(monkeypatch):
+    monkeypatch.setattr(H, "SOCK_PATH", _TEST_SOCK)
+
+    async def body():
+        H._server = None
+        await H.start_hook_server()
+        assert _TEST_SOCK.exists()
+        await H.stop_hook_server()
+        assert not _TEST_SOCK.exists()
+
+    asyncio.run(body())
+
+
+def test_start_returns_same_server_when_healthy(monkeypatch):
+    monkeypatch.setattr(H, "SOCK_PATH", _TEST_SOCK)
+
+    async def body():
+        H._server = None
+        s1 = await H.start_hook_server()
+        try:
+            s2 = await H.start_hook_server()
+            assert s1 is s2, "healthy idempotent start must not re-bind"
+        finally:
+            await H.stop_hook_server()
+
+    asyncio.run(body())

@@ -94,6 +94,12 @@ _MAX_DEBOUNCE_ENTRIES = 512
 # The asyncio server handle (set by start_hook_server, cleared by stop).
 _server: "asyncio.AbstractServer | None" = None
 
+# (st_dev, st_ino) of the socket file THIS process bound. stop_hook_server
+# only unlinks the path when it still points at our inode — a successor
+# daemon that re-bound the same path owns a different inode and must not
+# have its socket deleted by a stale process's shutdown.
+_bound_inode: "tuple[int, int] | None" = None
+
 # _cfg cache: (config_path, mtime, resolved_dict). The surface hook fires on
 # every edit; re-reading + re-parsing config.json each time is wasted I/O.
 _cfg_cache: "tuple[Path, float, Dict[str, Any]] | None" = None
@@ -407,10 +413,22 @@ async def _handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) ->
 
 
 async def start_hook_server() -> "asyncio.AbstractServer | None":
-    """Create (or return the existing) Unix-socket hook server."""
-    global _server
+    """Create (or return the existing, healthy) Unix-socket hook server.
+
+    Self-healing: if the socket path was unlinked externally (a sibling
+    session's shutdown), the cached server is listening on an orphaned
+    inode that no client can reach — close it and bind a fresh socket.
+    """
+    global _server, _bound_inode
     if _server is not None:
-        return _server
+        if SOCK_PATH.exists():
+            return _server  # healthy — idempotent no-op
+        old, _server = _server, None
+        old.close()
+        try:
+            await old.wait_closed()
+        except Exception:
+            pass
     try:
         if SOCK_PATH.exists():
             SOCK_PATH.unlink()
@@ -422,6 +440,11 @@ async def start_hook_server() -> "asyncio.AbstractServer | None":
         SOCK_PATH.chmod(0o600)
     except OSError:
         pass
+    try:
+        st = SOCK_PATH.stat()
+        _bound_inode = (st.st_dev, st.st_ino)
+    except OSError:
+        _bound_inode = None
     logger.info("OMEGA hook server listening at %s", SOCK_PATH)
     return _server
 
@@ -432,7 +455,7 @@ async def stop_hook_server(_legacy_server: object = None) -> None:
     Accepts (and ignores) one positional argument: mcp_server.py's shutdown
     paths historically pass the server handle returned by start_hook_server.
     """
-    global _server
+    global _server, _bound_inode
     if _server is not None:
         _server.close()
         try:
@@ -442,6 +465,9 @@ async def stop_hook_server(_legacy_server: object = None) -> None:
         _server = None
     try:
         if SOCK_PATH.exists():
-            SOCK_PATH.unlink()
+            st = SOCK_PATH.stat()
+            if _bound_inode is None or (st.st_dev, st.st_ino) == _bound_inode:
+                SOCK_PATH.unlink()
     except OSError:
         pass
+    _bound_inode = None

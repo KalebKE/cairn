@@ -343,36 +343,54 @@ async def _idle_watchdog():
             os._exit(0)
 
 
-async def _socket_watchdog():
-    """Re-create the hook socket if deleted or stale (unresponsive)."""
-    try:
-        from omega.server.hook_server import SOCK_PATH, start_hook_server
-    except ImportError:
-        logger.debug("hook_server not available, socket watchdog disabled")
-        return
+async def _socket_watchdog_once():
+    """One watchdog iteration: re-create the hook socket if deleted or stale.
 
-    while True:
-        await asyncio.sleep(15)
-        if not SOCK_PATH:
-            continue
-        if not SOCK_PATH.exists():
+    Accesses hook_server attributes via the module so tests (and runtime
+    reconfiguration) that patch hook_server.SOCK_PATH are honored. Never
+    raises — a failed iteration must not kill the watchdog loop.
+    """
+    try:
+        from omega.server import hook_server as hs
+    except ImportError:
+        return
+    try:
+        sock_path = hs.SOCK_PATH
+        if not sock_path:
+            return
+        if not sock_path.exists():
             logger.warning("Hook socket deleted, re-creating...")
-            await start_hook_server()
+            await hs.start_hook_server()
         else:
             # Validate socket is actually ours and responsive
             try:
                 r, w = await asyncio.wait_for(
-                    asyncio.open_unix_connection(path=str(SOCK_PATH)), timeout=2.0
+                    asyncio.open_unix_connection(path=str(sock_path)), timeout=2.0
                 )
                 w.close()
                 await w.wait_closed()
             except (OSError, asyncio.TimeoutError):
                 logger.warning("Hook socket unresponsive, re-creating...")
                 try:
-                    SOCK_PATH.unlink()
+                    sock_path.unlink()
                 except OSError:
                     pass
-                await start_hook_server()
+                await hs.start_hook_server()
+    except Exception as e:
+        logger.warning("Socket watchdog iteration failed: %s", e)
+
+
+async def _socket_watchdog():
+    """Re-create the hook socket if deleted or stale (unresponsive)."""
+    try:
+        from omega.server import hook_server  # noqa: F401 — availability probe
+    except ImportError:
+        logger.debug("hook_server not available, socket watchdog disabled")
+        return
+
+    while True:
+        await asyncio.sleep(15)
+        await _socket_watchdog_once()
 
 
 def _configure_logging():
