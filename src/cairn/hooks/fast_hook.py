@@ -31,18 +31,11 @@ _FALLBACK_SCRIPTS = {
     "surface_memories": "surface_memories",
     "auto_capture": "auto_capture",
     "assistant_capture": "assistant_capture",
-    "coord_session_start": "coord_session_start",
-    "coord_session_stop": "coord_session_stop",
-    "coord_heartbeat": "coord_heartbeat",
-    "auto_claim_file": "auto_claim_file",
     "pre_add_guard": "pre_add_guard",
     "pre_file_guard": "pre_file_guard",
-    "pre_task_guard": "pre_task_guard",
     "pre_push_guard": "pre_push_guard",
     "pre_deploy_guard": "pre_deploy_guard",
     "pre_commit_guard": "pre_commit_guard",
-    "pre_protocol_gate": "pre_protocol_gate",
-    "pre_alignment_gate": "pre_alignment_gate",
     "trace_capture": "trace_capture",
 }
 # Note: pre_irreversible_advisor is intentionally absent — it's daemon-only
@@ -57,21 +50,15 @@ _SLOW_HOOKS = {"pre_push_guard"}
 # These are pre-action guards that can block dangerous operations (exit code 2).
 # All other hooks are informational and safe to skip if daemon is unavailable.
 _BLOCKING_HOOKS = {
-    "pre_add_guard", "pre_file_guard", "pre_task_guard", "pre_push_guard",
-    "pre_deploy_guard", "pre_commit_guard", "pre_alignment_gate",
-    "pre_protocol_gate",
+    "pre_add_guard", "pre_file_guard", "pre_push_guard",
+    "pre_deploy_guard", "pre_commit_guard",
 }
 
 # Best-effort hooks run in fallback mode but never block the session.
 # These capture high-value content that would otherwise be silently dropped.
 _BEST_EFFORT_HOOKS = {
     "assistant_capture",
-    "coord_session_stop",
     "trace_capture",         # captures content that would otherwise be lost
-    # coord_session_start and coord_heartbeat intentionally excluded:
-    # Their fallback paths import heavy Cairn modules + hit SQLite, causing
-    # 36-260s startup delays when 8-10 sessions race (fallback stampede).
-    # The daemon handles these when it comes up; skipping fallback is safe.
 }
 
 # Retry settings for startup race (hook fires before MCP server opens socket)
