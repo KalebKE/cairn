@@ -1,14 +1,14 @@
 cff-version: 1.2.0
-message: "If you use OMEGA in your research, please cite it as below."
-title: "OMEGA: Persistent Memory for AI Coding Agents"
+message: "If you use Cairn in your research, please cite it as below."
+title: "Cairn: Persistent Memory for AI Coding Agents"
 type: software
 authors:
-  - name: "OMEGA Memory Maintainers"
-repository-code: "https://github.com/omega-memory/omega-memory"
-url: "https://omegamax.co"
+  - name: "Tracqi Technology"
+repository-code: "https://github.com/TracqiTechnology/cairn"
+url: "https://tracqi.com"
 license: Apache-2.0
-version: "0.6.0"
-date-released: "2026-02-14"
+version: "1.5.5"
+date-released: "2026-07-19"
 keywords:
   - mcp
   - memory
@@ -18,7 +18,7 @@ keywords:
   - claude-code
   - persistent-memory
 abstract: >-
-  OMEGA is a local-first memory system for AI coding agents built on the
+  Cairn is a local-first memory system for AI coding agents built on the
   Model Context Protocol (MCP). It provides persistent semantic memory,
-  intelligent forgetting, cross-session learning, and multi-agent coordination.
-  #1 on the LongMemEval benchmark (95.4%, 466/500).
+  intelligent forgetting, and cross-session learning. Cairn is a
+  substantially modified derivative of the OMEGA project, Apache-2.0.

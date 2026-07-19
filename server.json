@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.omega-memory/omega-memory",
-  "title": "OMEGA Memory",
+  "name": "io.github.tracqitechnology/cairn",
+  "title": "Cairn",
   "description": "Persistent semantic memory for AI coding agents. Local-first, 25 MCP tools. No cloud.",
   "repository": {
-    "url": "https://github.com/omega-memory/omega-memory",
+    "url": "https://github.com/TracqiTechnology/cairn",
     "source": "github"
   },
   "version": "1.4.6",
   "packages": [
     {
       "registryType": "pypi",
-      "identifier": "omega-memory",
+      "identifier": "cairn",
       "version": "1.4.6",
       "transport": {
         "type": "stdio"

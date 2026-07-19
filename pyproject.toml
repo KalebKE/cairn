@@ -1,12 +1,12 @@
 [project]
-name = "omega-memory"
+name = "cairn"
 version = "1.5.5"
 description = "Cross-model memory for AI agents. Local-first, works with Claude, GPT, Gemini, Cursor, Claw Code, and any MCP client"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 authors = [
-    {name = "OMEGA Memory Maintainers", email = "hello@omega-memory.dev"},
+    {name = "Tracqi Technology", email = "kaleb@tracqi.com"},
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -29,32 +29,32 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/omega-memory/omega"
-Repository = "https://github.com/omega-memory/omega"
-Documentation = "https://omega-memory.github.io/omega/"
-Changelog = "https://github.com/omega-memory/omega/blob/main/CHANGELOG.md"
-Issues = "https://github.com/omega-memory/omega/issues"
+Homepage = "https://github.com/TracqiTechnology/cairn"
+Repository = "https://github.com/TracqiTechnology/cairn"
+Documentation = "https://tracqitechnology.github.io/cairn/"
+Changelog = "https://github.com/TracqiTechnology/cairn/blob/main/CHANGELOG.md"
+Issues = "https://github.com/TracqiTechnology/cairn/issues"
 
 [project.optional-dependencies]
 server = ["mcp>=1.0.0", "starlette>=0.36.0", "uvicorn>=0.27.0"]
 encrypt = ["cryptography>=41.0.0", "keyring>=25.0.0"]
 full = [
-    "omega-memory[server]",
-    "omega-memory[encrypt]",
+    "cairn[server]",
+    "cairn[encrypt]",
 ]
 benchmark = ["openai>=1.0.0", "sentence-transformers>=2.2.0"]
 docs = ["mkdocs-material>=9.0.0"]
 dev = ["pytest", "pytest-asyncio", "pytest-cov", "ruff", "commitizen>=4.1", "mypy>=1.8.0"]
 
 [project.scripts]
-omega = "omega.cli:main"
+cairn = "cairn.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/omega"]
+packages = ["src/cairn"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -89,7 +89,7 @@ version = "1.0.0"
 tag_format = "v$version"
 version_files = [
     "pyproject.toml:version",
-    "src/omega/__init__.py:__version__",
+    "src/cairn/__init__.py:__version__",
 ]
 changelog_start_rev = "v0.3.0"
 update_changelog_on_bump = true

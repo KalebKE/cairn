@@ -3,23 +3,23 @@
   "entity": {
     "type": "organisation",
     "role": "owner",
-    "name": "OMEGA Memory Maintainers",
-    "email": "hello@omega-memory.dev",
-    "description": "Maintainers stewarding OMEGA, an open-source persistent memory system for AI agents. Apache 2.0 licensed, local-first, privacy-respecting.",
+    "name": "Tracqi Technology",
+    "email": "kaleb@tracqi.com",
+    "description": "Tracqi Technology maintains Cairn, a local-first persistent memory system for AI agents. Apache 2.0 licensed, privacy-respecting.",
     "webpageUrl": {
-      "url": "https://omegamax.co"
+      "url": "https://tracqi.com"
     }
   },
   "projects": [
     {
-      "guid": "omega-memory",
-      "name": "OMEGA Memory",
-      "description": "Open-source, local-first persistent memory and coordination system for AI agents. Built as an MCP server. Scores 95.4% on LongMemEval (#1 on the public leaderboard).",
+      "guid": "cairn",
+      "name": "Cairn",
+      "description": "Local-first persistent memory system for AI agents, built as an MCP server. A substantially modified derivative of the OMEGA project.",
       "webpageUrl": {
-        "url": "https://omegamax.co"
+        "url": "https://tracqi.com"
       },
       "repositoryUrl": {
-        "url": "https://github.com/omega-memory/omega-memory"
+        "url": "https://github.com/TracqiTechnology/cairn"
       },
       "licenses": [
         "spdx:Apache-2.0"
@@ -31,34 +31,12 @@
         "agents",
         "python",
         "local-first",
-        "privacy",
-        "open-source"
+        "privacy"
       ]
     }
   ],
   "funding": {
     "channels": [],
-    "plans": [
-      {
-        "guid": "one-time",
-        "status": "active",
-        "name": "One-time donation",
-        "description": "Support OMEGA development with a one-time contribution of any amount.",
-        "amount": 0,
-        "currency": "USD",
-        "frequency": "one-time",
-        "channels": []
-      },
-      {
-        "guid": "monthly",
-        "status": "active",
-        "name": "Monthly supporter",
-        "description": "Recurring monthly support for ongoing OMEGA development.",
-        "amount": 0,
-        "currency": "USD",
-        "frequency": "monthly",
-        "channels": []
-      }
-    ]
+    "plans": []
   }
 }
