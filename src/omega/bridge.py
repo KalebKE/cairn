@@ -3627,6 +3627,71 @@ def find_similar_memories(memory_id: str, limit: int = 5) -> str:
     return output
 
 
+def get_memory(memory_id: str, include_related: bool = True) -> Dict[str, Any]:
+    """Fetch one memory by full id or unique id prefix (>=4 chars; the
+    surfaced-prefix contract is >=8). The hydration half of the
+    pointers-not-payloads loop: surfacing blocks and context packets emit
+    truncated ids, this resolves them to full untruncated content.
+
+    Returns one of:
+      {"ambiguous": [candidate_ids]}   — prefix matched several memories
+      {"error": "..."}                 — nothing matched
+      {full memory dict}               — unique hit (includes status and,
+                                          unlike search paths, is returned
+                                          even for archived/superseded rows)
+    """
+    db = _get_store()
+    node, candidates = db.get_node_by_prefix((memory_id or "").strip())
+    if candidates:
+        return {"ambiguous": candidates}
+    if node is None:
+        return {"error": f"Memory '{memory_id}' not found"}
+
+    meta = dict(node.metadata or {})
+    with db._lock:
+        row = db._conn.execute(
+            """SELECT event_type, session_id, project, entity_id, status
+               FROM memories WHERE node_id = ?""",
+            (node.id,),
+        ).fetchone()
+    event_type, session_id, project, entity_id, status = row if row else (None,) * 5
+
+    result: Dict[str, Any] = {
+        "id": node.id,
+        "content": node.content,
+        "event_type": event_type or meta.get("event_type", "memory"),
+        "tags": meta.get("tags", []),
+        "metadata": meta,
+        "status": status or "active",
+        "project": project or "",
+        "entity_id": entity_id or "",
+        "session_id": session_id or "",
+        "created_at": node.created_at,
+        "last_accessed": node.last_accessed,
+        "access_count": node.access_count,
+        "ttl": _human_ttl(node.ttl_seconds),
+    }
+
+    if include_related:
+        with db._lock:
+            edge_rows = db._conn.execute(
+                """SELECT source_id, target_id, edge_type, weight FROM edges
+                   WHERE source_id = ? OR target_id = ?
+                   ORDER BY weight DESC LIMIT 20""",
+                (node.id, node.id),
+            ).fetchall()
+        result["edges"] = [
+            {
+                "direction": "out" if src == node.id else "in",
+                "other_id": tgt if src == node.id else src,
+                "edge_type": etype,
+                "weight": weight,
+            }
+            for src, tgt, etype, weight in edge_rows
+        ]
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Public API -- Timeline
 # ---------------------------------------------------------------------------

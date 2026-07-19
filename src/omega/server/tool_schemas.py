@@ -178,12 +178,13 @@ TOOL_SCHEMAS = [
     },
     {
         "name": "omega_memory",
-        "description": "Manage a specific memory by ID: edit its content, delete it, mark it as superseded, mark it as helpful/unhelpful/outdated, find similar memories, traverse relationship edges, link two memories, or list flagged memories for review. Use when acting on an individual memory rather than searching broadly.",
+        "description": "Manage a specific memory by ID: fetch its full untruncated content (action='get' — resolves the truncated id prefixes shown in [MEMORY] surfacing blocks and context packets), edit its content, delete it, mark it as superseded, mark it as helpful/unhelpful/outdated, find similar memories, traverse relationship edges, link two memories, or list flagged memories for review. Use when acting on an individual memory rather than searching broadly.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "action": {"type": "string", "enum": ["edit", "delete", "feedback", "similar", "traverse", "link", "flagged", "check_contradictions", "supersede"], "description": "Operation to perform"},
-                "memory_id": {"type": "string", "description": "Memory node ID (required for most actions, not required for 'flagged' or 'check_contradictions')"},
+                "action": {"type": "string", "enum": ["get", "edit", "delete", "feedback", "similar", "traverse", "link", "flagged", "check_contradictions", "supersede"], "description": "Operation to perform"},
+                "memory_id": {"type": "string", "description": "Memory node ID (required for most actions, not required for 'flagged' or 'check_contradictions'). action='get' also accepts a unique id prefix of >=8 chars, as printed by surfacing blocks and context packets"},
+                "include_related": {"type": "boolean", "default": True, "description": "Include a 1-hop edge summary (only for action='get')"},
                 "new_content": {"type": "string", "description": "New content (for action='edit') or content to check (for action='check_contradictions')"},
                 "rating": {"type": "string", "description": "helpful, unhelpful, or outdated (only for action='feedback')"},
                 "reason": {"type": "string", "description": "Optional explanation (for action='feedback' or action='supersede')"},

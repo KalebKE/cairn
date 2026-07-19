@@ -297,3 +297,125 @@ class TestOmegaMemoryUnknown:
         result = await handle_omega_memory({"action": "bogus"})
         assert result.get("isError")
         assert "Unknown" in result["content"][0]["text"]
+
+
+# ---------------------------------------------------------------------------
+# omega_memory action=get — fetch-by-id hydration (full or prefix id).
+# Completes the pointers-not-payloads loop: surfacing blocks and context
+# packets print 8/12-char id prefixes; get resolves them to full content.
+# ---------------------------------------------------------------------------
+
+
+class TestGetNodeByPrefix:
+    """Store-level prefix resolver."""
+
+    def test_exact_id(self, store):
+        nid = store.store("Prefix resolver memory", metadata={"event_type": "decision"})
+        node, candidates = store.get_node_by_prefix(nid)
+        assert node is not None and node.id == nid
+        assert candidates == []
+
+    def test_unique_prefix(self, store):
+        nid = store.store("Unique prefix memory", metadata={"event_type": "decision"})
+        node, candidates = store.get_node_by_prefix(nid[:8])
+        assert node is not None and node.id == nid
+        assert candidates == []
+
+    def test_ambiguous_prefix_lists_candidates(self, store):
+        id1 = store.store("Ambiguous memory one about rollup markers",
+                          metadata={"event_type": "decision"})
+        id2 = store.store("Ambiguous memory two about socket watchdogs",
+                          metadata={"event_type": "decision"})
+        with store._lock:
+            store._conn.execute("UPDATE memories SET node_id = ? WHERE node_id = ?",
+                                ("collidee-aaaa-1111", id1))
+            store._conn.execute("UPDATE memories SET node_id = ? WHERE node_id = ?",
+                                ("collidee-aaaa-2222", id2))
+            store._commit()
+        node, candidates = store.get_node_by_prefix("collidee-")
+        assert node is None
+        assert set(candidates) == {"collidee-aaaa-1111", "collidee-aaaa-2222"}
+
+    def test_missing_id(self, store):
+        assert store.get_node_by_prefix("deadbeefcafe") == (None, [])
+
+    def test_short_prefix_rejected(self, store):
+        nid = store.store("Short prefix memory", metadata={"event_type": "decision"})
+        assert store.get_node_by_prefix(nid[:3]) == (None, [])
+
+    def test_access_bumped_only_on_unique_hit(self, store):
+        nid = store.store("Access bump memory", metadata={"event_type": "decision"})
+        before = store.get_node(nid, track_access=False).access_count
+        store.get_node_by_prefix(nid[:10])
+        after = store.get_node(nid, track_access=False).access_count
+        assert after == before + 1
+        store.get_node_by_prefix("deadbeefcafe")  # miss: no bump anywhere
+        assert store.get_node(nid, track_access=False).access_count == after
+
+
+class TestOmegaMemoryGet:
+    @pytest.mark.asyncio
+    async def test_get_exact_id(self, mock_get_store):
+        store = mock_get_store
+        long_content = "Decision: keep the flock marker semantics. " * 20
+        nid = store.store(long_content, metadata={"event_type": "decision",
+                                                  "tags": ["architecture"]})
+        result = await handle_omega_memory({"action": "get", "memory_id": nid})
+        assert not result.get("isError")
+        text = result["content"][0]["text"]
+        assert long_content.strip() in text, "content must be returned untruncated"
+        assert "decision" in text
+
+    @pytest.mark.asyncio
+    async def test_get_unique_prefix(self, mock_get_store):
+        store = mock_get_store
+        nid = store.store("Prefix-resolved get", metadata={"event_type": "lesson_learned"})
+        result = await handle_omega_memory({"action": "get", "memory_id": nid[:8]})
+        assert not result.get("isError")
+        assert nid in result["content"][0]["text"]
+
+    @pytest.mark.asyncio
+    async def test_get_ambiguous_prefix_errors_with_candidates(self, mock_get_store):
+        store = mock_get_store
+        id1 = store.store("First collider content", metadata={"event_type": "decision"})
+        id2 = store.store("Second collider content", metadata={"event_type": "decision"})
+        with store._lock:
+            store._conn.execute("UPDATE memories SET node_id = ? WHERE node_id = ?",
+                                ("clash000-aaaa", id1))
+            store._conn.execute("UPDATE memories SET node_id = ? WHERE node_id = ?",
+                                ("clash000-bbbb", id2))
+            store._commit()
+        result = await handle_omega_memory({"action": "get", "memory_id": "clash000"})
+        assert result.get("isError")
+        text = result["content"][0]["text"]
+        assert "clash000-aaaa" in text and "clash000-bbbb" in text
+
+    @pytest.mark.asyncio
+    async def test_get_missing_id(self, mock_get_store):
+        result = await handle_omega_memory({"action": "get", "memory_id": "deadbeefcafe"})
+        assert result.get("isError")
+        assert "not found" in result["content"][0]["text"].lower()
+
+    @pytest.mark.asyncio
+    async def test_get_requires_memory_id(self, mock_get_store):
+        result = await handle_omega_memory({"action": "get"})
+        assert result.get("isError")
+
+    @pytest.mark.asyncio
+    async def test_get_includes_edges(self, mock_get_store):
+        store = mock_get_store
+        id1 = store.store("Edge source memory", metadata={"event_type": "decision"})
+        id2 = store.store("Edge target memory", metadata={"event_type": "decision"})
+        store.add_edge(id1, id2, edge_type="related", weight=0.9)
+
+        import json as _json
+
+        result = await handle_omega_memory({"action": "get", "memory_id": id1})
+        assert not result.get("isError")
+        payload = _json.loads(result["content"][0]["text"])
+        assert any(e["other_id"] == id2 for e in payload["edges"])
+
+        bare = await handle_omega_memory({
+            "action": "get", "memory_id": id1, "include_related": False,
+        })
+        assert "edges" not in _json.loads(bare["content"][0]["text"])

@@ -398,6 +398,43 @@ class StoreMixin:
 
             return self._row_to_result(row)
 
+    def get_node_by_prefix(
+        self, node_prefix: str, track_access: bool = True
+    ) -> "tuple[Optional[MemoryResult], List[str]]":
+        """Resolve a full node id OR a unique id prefix to a node.
+
+        Surfacing blocks and context packets print truncated id prefixes
+        (8 and 12 chars); this is the hydration path that resolves them.
+
+        Returns ``(node, [])`` on a unique hit, ``(None, [])`` when nothing
+        matches (or the prefix is shorter than 4 chars), and
+        ``(None, candidate_ids)`` (capped at 10) when the prefix is
+        ambiguous. Access tracking happens only on the unique hit, via
+        :meth:`get_node`.
+        """
+        node_prefix = (node_prefix or "").strip()
+        if len(node_prefix) < 4:
+            return None, []
+
+        # Exact match wins outright — delegate so access tracking stays in
+        # one place.
+        node = self.get_node(node_prefix, track_access=track_access)
+        if node is not None:
+            return node, []
+
+        escaped = (node_prefix.replace("\\", "\\\\")
+                   .replace("%", "\\%").replace("_", "\\_"))
+        with self._lock:
+            rows = self._exec(
+                "SELECT node_id FROM memories WHERE node_id LIKE ? ESCAPE '\\' LIMIT 11",
+                (escaped + "%",),
+            ).fetchall()
+        if not rows:
+            return None, []
+        if len(rows) == 1:
+            return self.get_node(rows[0][0], track_access=track_access), []
+        return None, [r[0] for r in rows[:10]]
+
     def delete_node(self, node_id: str) -> bool:
         """Delete a node and its edges."""
         self._invalidate_query_cache()

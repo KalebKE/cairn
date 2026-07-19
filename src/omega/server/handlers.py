@@ -7,6 +7,7 @@ MCP-compatible response dicts.
 
 __all__ = ["HANDLERS"]
 
+import json
 import logging
 import os
 import time
@@ -1243,6 +1244,34 @@ async def handle_omega_consolidate(arguments: dict) -> dict:
 # ============================================================================
 
 
+async def handle_omega_get_memory(arguments: dict) -> dict:
+    """Fetch one memory by full id or unique prefix — full untruncated content."""
+    memory_id = arguments.get("memory_id", "").strip()
+    if not memory_id:
+        return mcp_error("memory_id is required")
+    if len(memory_id) < 4:
+        return mcp_error("memory_id prefix too short — use at least 8 characters")
+
+    include_related = arguments.get("include_related", True)
+
+    try:
+        from omega.bridge import get_memory
+
+        result = get_memory(memory_id=memory_id, include_related=bool(include_related))
+        if "ambiguous" in result:
+            ids = ", ".join(result["ambiguous"])
+            return mcp_error(
+                f"Ambiguous prefix '{memory_id}' matches {len(result['ambiguous'])} "
+                f"memories: {ids} — use a longer prefix"
+            )
+        if "error" in result:
+            return mcp_error(result["error"])
+        return mcp_response(json.dumps(result, indent=2, default=str))
+    except Exception as e:
+        logger.error("omega_get failed: %s", e, exc_info=True)
+        return mcp_error("Get memory failed")
+
+
 async def handle_omega_similar(arguments: dict) -> dict:
     """Find memories similar to a given memory."""
     memory_id = arguments.get("memory_id", "").strip()
@@ -2096,7 +2125,9 @@ async def handle_omega_memory(arguments: dict) -> dict:
     """Route omega_memory actions to existing handlers."""
     action = arguments.get("action", "").strip()
 
-    if action == "edit":
+    if action == "get":
+        return await handle_omega_get_memory(arguments)
+    elif action == "edit":
         return await handle_omega_edit_memory(arguments)
     elif action == "delete":
         return await handle_omega_delete_memory(arguments)
@@ -2115,7 +2146,7 @@ async def handle_omega_memory(arguments: dict) -> dict:
     elif action == "supersede":
         return await handle_omega_supersede_memory(arguments)
     else:
-        return mcp_error(f"Unknown omega_memory action: {action}. Use: edit, delete, feedback, similar, traverse, link, flagged, check_contradictions, supersede")
+        return mcp_error(f"Unknown omega_memory action: {action}. Use: get, edit, delete, feedback, similar, traverse, link, flagged, check_contradictions, supersede")
 
 
 # ============================================================================
