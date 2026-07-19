@@ -96,6 +96,89 @@ class TestRRFFusion:
 
 
 # ============================================================================
+# Entity-match channel (in-repo replacement for omega_platform entity
+# expansion): query tokens vs metadata tags/fact terms/project/entity_id,
+# fused as a fourth RRF channel at modest weight.
+# ============================================================================
+
+
+class TestEntityChannel:
+    def test_token_extraction_skips_stopwords_and_short(self, store):
+        # Stopword-only / short-token queries yield no tokens: channel skipped.
+        assert store._entity_term_search("the and for it", 10, {}) == []
+        assert store._entity_term_search("a b c", 10, {}) == []
+
+    def test_tag_match_ranks_above_noise(self, store):
+        target = store.store(
+            content="Decision: SqliteStore migrations use additive columns only",
+            metadata={"event_type": "decision", "tags": ["sqlitestore", "db-migration"]},
+            skip_inference=True,
+        )
+        store.store(
+            content="Unrelated note about kitchen renovation plans",
+            metadata={"event_type": "memory"},
+            skip_inference=True,
+        )
+        ranked = store._entity_term_search("sqlitestore migration strategy", 10, {})
+        assert ranked and ranked[0][0] == target
+
+    def test_channel_hydrates_all_results(self, store):
+        target = store.store(
+            content="Entity hydration check content",
+            metadata={"event_type": "decision", "tags": ["hydrationtag"]},
+            skip_inference=True,
+        )
+        seen = {}
+        store._entity_term_search("hydrationtag lookup", 10, seen)
+        assert target in seen
+
+    def test_entity_channel_excludes_archived(self, store):
+        nid = store.store(
+            content="Archived entity content",
+            metadata={"event_type": "task_completion", "tags": ["archivedtag"]},
+            skip_inference=True,
+        )
+        with store._lock:
+            store._conn.execute(
+                "UPDATE memories SET status = 'archived' WHERE node_id = ?", (nid,))
+            store._commit()
+        ranked = store._entity_term_search("archivedtag lookup", 10, {})
+        assert nid not in {n for n, _ in ranked}
+
+    def test_project_column_match_contributes(self, store):
+        nid = store.store(
+            content="Force server API contract memory",
+            metadata={"event_type": "decision", "project": "/p/force-server"},
+            skip_inference=True,
+        )
+        ranked = store._entity_term_search("force-server contract", 10, {})
+        assert nid in {n for n, _ in ranked}
+
+    def test_entity_only_hit_loses_to_dual_channel_match(self, store):
+        # Dual vec+text match on the query topic:
+        dual = store.store(
+            content="Kalman filter tuning: process noise dominates convergence",
+            metadata={"event_type": "lesson_learned"},
+            skip_inference=True,
+        )
+        # Content-irrelevant row whose only signal is a matching tag:
+        tag_only = store.store(
+            content="Weekly grocery run and errands checklist",
+            metadata={"event_type": "task_completion", "tags": ["kalman"]},
+            skip_inference=True,
+        )
+        results = store.query("kalman filter tuning convergence", limit=5)
+        ids = [r.id for r in results]
+        if dual in ids and tag_only in ids:
+            assert ids.index(dual) < ids.index(tag_only)
+        else:
+            assert dual in ids
+
+    def test_expand_entity_scope_removed(self, store):
+        assert not hasattr(store, "_expand_entity_scope")
+
+
+# ============================================================================
 # P2: Cross-Encoder Reranking
 # ============================================================================
 

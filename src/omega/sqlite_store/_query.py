@@ -243,6 +243,7 @@ class QueryMixin:
         vec_ranked: List[Tuple[str, float]] = []
         text_ranked: List[Tuple[str, float]] = []
         temporal_ranked: List[Tuple[str, float]] = []
+        entity_ranked: List[Tuple[str, float]] = []
 
         # Seed with hot cache results (#2) — bypass RRF, merge later
         for hr in hot_results:
@@ -314,10 +315,20 @@ class QueryMixin:
                 all_results, vec_ranked, text_ranked, raw_vec_sims,
             )
 
+        # Phase 2.6: Entity-match channel (tags/fact terms/project/entity_id).
+        # After the strong-signal shortcut so slam-dunk exits don't pay for
+        # it; the shortcut intentionally bypasses fusion entirely.
+        try:
+            entity_ranked.extend(
+                self._entity_term_search(query_text, limit, all_results)
+            )
+        except Exception as e:
+            logger.debug("Entity term channel failed: %s", e)
+
         # Phase 3: RRF score fusion + metadata scoring + word/tag overlap
         self._query_phase_fusion(
             query_text, all_results, node_scores,
-            vec_ranked, text_ranked, temporal_ranked,
+            vec_ranked, text_ranked, temporal_ranked, entity_ranked,
             pw_vec, pw_text, pw_word, pw_ctx, perspective,
         )
 
@@ -335,9 +346,6 @@ class QueryMixin:
             context_file, context_tags, temporal_range,
             temporal_boost_only, pw_ctx, entity_id, agent_type,
         )
-
-        # Phase 5.5: Entity graph expansion
-        self._expand_entity_scope(entity_id, all_results, node_scores, limit)
 
         # Phase 6: Graph expansion + cross-encoder reranking
         self._query_phase_rerank(
@@ -499,6 +507,88 @@ class QueryMixin:
             except Exception as e:
                 logger.debug("Temporal retrieval channel failed: %s", e)
 
+    # Entity-match channel weight in RRF fusion — modest vs vec/text so a
+    # tag/project hit reinforces but never dominates dual-channel matches.
+    _ENTITY_CHANNEL_WEIGHT = 0.8
+
+    _ENTITY_STOPWORDS = frozenset({
+        "the", "and", "for", "with", "that", "this", "from", "what", "how",
+        "why", "when", "where", "who", "which", "was", "were", "are", "has",
+        "have", "had", "not", "but", "all", "any", "can", "could", "should",
+        "would", "will", "into", "onto", "about", "over", "under", "then",
+        "than", "them", "they", "their", "there", "here", "our", "your",
+        "its", "it's", "did", "does", "doing", "done", "use", "used", "using",
+    })
+
+    def _entity_term_search(
+        self, query_text: str, limit: int,
+        all_results: Dict[str, "MemoryResult"],
+    ) -> List[Tuple[str, float]]:
+        """Structured-field match channel: query tokens against metadata tags
+        (which include extracted fact terms), the project column, and
+        entity_id. Pure SQL + string ops — no LLM, no embedding — so it is
+        safe under ambient surfacing latency budgets. Hydrates unseen rows
+        into *all_results* like the other channel phases.
+
+        Returns [(node_id, score)] ranked by hit count; empty list when the
+        query yields no candidate entity tokens (channel skipped).
+        Replaces the dead omega_platform entity-graph expansion.
+        """
+        import re as _re
+
+        tokens = []
+        for tok in _re.split(r"[^\w./-]+", query_text.lower()):
+            tok = tok.strip("./-")
+            if len(tok) >= 3 and tok not in self._ENTITY_STOPWORDS:
+                tokens.append(tok)
+            if len(tokens) >= 8:
+                break
+        if not tokens:
+            return []
+
+        # One scan, per-token hit count. Quoted-token LIKE anchors matches to
+        # JSON string boundaries in metadata (tags are lowercased at
+        # extraction); project/entity_id get exact-ish column matches.
+        # COALESCE every nullable column: `1 + NULL` is NULL in SQLite, so a
+        # single NULL term would zero out the whole hits sum.
+        hit_exprs = []
+        params: List[Any] = []
+        for tok in tokens:
+            esc = tok.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            hit_exprs.append("(COALESCE(metadata, '') LIKE ? ESCAPE '\\')")
+            params.append(f'%"{esc}"%')
+        hit_exprs.append("(COALESCE(project, '') LIKE '%' || ? || '%')")
+        params.append(tokens[0])
+        hit_exprs.append("(COALESCE(entity_id, '') = ?)")
+        params.append(tokens[0])
+
+        sql = f"""
+            SELECT node_id, content, metadata, created_at,
+                   access_count, last_accessed, ttl_seconds, hits
+            FROM (SELECT node_id, content, metadata, created_at,
+                         access_count, last_accessed, ttl_seconds,
+                         ({" + ".join(hit_exprs)}) AS hits
+                  FROM memories
+                  WHERE (status IS NULL OR status NOT IN ('superseded', 'archived')))
+            WHERE hits > 0
+            ORDER BY hits DESC, created_at DESC
+            LIMIT ?
+        """
+        params.append(limit * 3)
+        try:
+            rows = self._conn.execute(sql, params).fetchall()
+        except Exception as e:
+            logger.debug("Entity term channel failed: %s", e)
+            return []
+
+        ranked: List[Tuple[str, float]] = []
+        for row in rows:
+            score = min(1.0, row[7] / len(tokens))
+            ranked.append((row[0], score))
+            if row[0] not in all_results:
+                all_results[row[0]] = self._row_to_result(row[:7])
+        return ranked
+
     _EXPANSION_WEIGHT_DISCOUNT = 0.8  # Expanded variants are weighted down vs original
 
     def _query_phase_expand(
@@ -637,6 +727,7 @@ class QueryMixin:
         vec_ranked: List[Tuple[str, float]],
         text_ranked: List[Tuple[str, float]],
         temporal_ranked: List[Tuple[str, float]],
+        entity_ranked: List[Tuple[str, float]],
         pw_vec: float,
         pw_text: float,
         pw_word: float,
@@ -650,6 +741,9 @@ class QueryMixin:
         if temporal_ranked:
             rrf_channels.append(temporal_ranked)
             rrf_weights.append(1.2)  # Temporal channel weight
+        if entity_ranked:
+            rrf_channels.append(entity_ranked)
+            rrf_weights.append(self._ENTITY_CHANNEL_WEIGHT)
 
         rrf_scores = self._rrf_fuse(rrf_channels, weights=rrf_weights)
 
@@ -946,66 +1040,6 @@ class QueryMixin:
             _filtered = {k: v for k, v in node_scores.items() if k in filtered_ids}
             node_scores.clear()
             node_scores.update(_filtered)
-
-    def _expand_entity_scope(
-        self,
-        entity_id: Optional[str],
-        all_results: Dict[str, "MemoryResult"],
-        node_scores: Dict[str, float],
-        limit: int,
-    ) -> None:
-        """Phase 5.5: Expand query scope to include memories from related entities.
-
-        If entity_id is set and entity relationships exist, queries memories
-        from related entities and adds them as lower-weighted candidates.
-        """
-        if not entity_id:
-            return
-
-        try:
-            from omega_platform.entity.engine import EntityManager
-            mgr = EntityManager(db_path=self.db_path)
-            related_ids = mgr.get_related_entity_ids(entity_id, max_hops=1)
-            if not related_ids:
-                return
-
-            # Query memories from related entities
-            existing_ids = set(all_results.keys())
-            placeholders_rel = ",".join("?" * len(related_ids))
-            if existing_ids:
-                placeholders_ex = ",".join("?" * len(existing_ids))
-                rows = self._conn.execute(
-                    f"""SELECT node_id, content, metadata, created_at,
-                               access_count, last_accessed, ttl_seconds
-                        FROM memories
-                        WHERE entity_id IN ({placeholders_rel})
-                        AND node_id NOT IN ({placeholders_ex})
-                        ORDER BY created_at DESC
-                        LIMIT ?""",
-                    (*related_ids, *existing_ids, limit),
-                ).fetchall()
-            else:
-                rows = self._conn.execute(
-                    f"""SELECT node_id, content, metadata, created_at,
-                               access_count, last_accessed, ttl_seconds
-                        FROM memories
-                        WHERE entity_id IN ({placeholders_rel})
-                        ORDER BY created_at DESC
-                        LIMIT ?""",
-                    (*related_ids, limit),
-                ).fetchall()
-
-            for row in rows:
-                result = self._row_to_result(row)
-                if result.id not in all_results:
-                    all_results[result.id] = result
-                    avg_score = sum(node_scores.values()) / len(node_scores) if node_scores else 0.5
-                    node_scores[result.id] = avg_score * 0.3
-
-        except ImportError:
-            pass
-        except Exception as e:
-            logger.debug("Entity graph expansion failed: %s", e)
 
     def _query_phase_rerank(
         self,
