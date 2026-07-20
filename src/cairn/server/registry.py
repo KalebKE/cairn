@@ -1,0 +1,599 @@
+"""Cairn MCP tool registry — the single source of truth.
+
+Every core tool is one :class:`ToolSpec` entry in :data:`TOOLS`, binding a
+name to its handler, its optional input schema, and its condensed-mode role.
+All the views the server needs are *derived* from ``TOOLS`` rather than
+hand-maintained in parallel:
+
+- ``TOOL_SCHEMAS``      — exposed composite schemas (order preserved)
+- ``HANDLERS``         — name → handler (with alias/arg-transform wrappers)
+- ``STANDALONE_TOOLS`` — tools kept direct in condensed mode
+- ``CONDENSED_TOOL_SCHEMAS`` / ``get_condensed_schemas`` — condensed set
+
+The harness-agnostic context tools and any discovered plugins are merged on
+top of these by ``handlers`` / ``mcp_server`` respectively — they are not part
+of this table by design (env-gated wire contract, external ABI).
+
+Import discipline: this module imports the ``handlers`` module (one
+direction). ``handlers`` never imports ``registry`` at load time — it exposes
+``HANDLERS`` lazily via ``__getattr__`` — so there is no import cycle.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional
+
+from cairn.server import handlers as _h
+
+
+@dataclass(frozen=True)
+class ToolSpec:
+    """One MCP tool: a name bound to a handler, schema, and condensed role."""
+
+    name: str
+    handler: Callable                       # async handler(args) -> dict
+    schema: Optional[dict] = None           # inputSchema dict; None => not exposed in TOOL_SCHEMAS
+    standalone: bool = False                # stays direct in condensed mode
+    meta: bool = False                      # cairn_tools / cairn_call (condensed set, not TOOL_SCHEMAS)
+    transform: Optional[Callable] = None    # arg-transform applied before the handler (aliases)
+
+
+# ---------------------------------------------------------------------------
+# Schema data (moved verbatim from tool_schemas.py)
+# ---------------------------------------------------------------------------
+
+_CORE_SCHEMAS = [
+    {
+        "name": "cairn_store",
+        "description": "Store a memory with optional type and metadata. Use when the user says 'remember this' or for programmatic capture (decisions, lessons, errors). Defaults to type 'memory' if event_type is omitted.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "content": {"type": "string", "description": "Memory content (also accepts 'text' as alias)"},
+                "text": {"type": "string", "description": "Alias for content"},
+                "event_type": {
+                    "type": "string",
+                    "description": "Type: memory (default), session_summary, task_completion, error_pattern, lesson_learned, decision, user_preference, constraint, advisor_insight",
+                },
+                "metadata": {"type": "object", "description": "Additional metadata"},
+                "session_id": {"type": "string"},
+                "project": {"type": "string"},
+                "priority": {
+                    "type": "integer",
+                    "description": "Memory priority 1-5 (5=highest). Auto-set from event type if omitted.",
+                    "minimum": 1,
+                    "maximum": 5,
+                },
+                "entity_id": {
+                    "type": "string",
+                    "description": "Scope this memory to an entity (e.g., 'acme'). Omit for unscoped.",
+                },
+                "agent_type": {
+                    "type": "string",
+                    "description": "Agent type for sub-agent memory scoping (e.g., 'code-reviewer', 'test-runner').",
+                },
+                "derived_from": {
+                    "type": "string",
+                    "description": "Node ID of the parent memory this was derived from. Creates a 'derived_from' edge for lineage tracking.",
+                },
+                "source_uri": {
+                    "type": "string",
+                    "description": "External source reference (e.g., Slack URL, Google Doc ID, git commit SHA, X post URL). Enables provenance tracking.",
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["active", "superseded", "speculative", "archived"],
+                    "description": "Memory lifecycle status. Default 'active'. Use 'speculative' for unverified claims, 'archived' for intentionally preserved but inactive.",
+                },
+                "items": {"type": "array", "items": {"type": "object"}, "description": "Batch mode: list of {content, event_type, metadata} dicts. When provided, stores all items. Other top-level params ignored."},
+            },
+            "required": ["content"],
+        },
+    },
+    {
+        "name": "cairn_query",
+        "description": "Search memories. Modes: 'semantic' (default) for meaning-based search, 'phrase' for exact substring match, 'regex' for regular-expression match, 'timeline' for recent memories grouped by day, 'browse' for listing by type/session/recent.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query (exact phrase when mode='phrase', regex pattern when mode='regex'). Not required for mode='timeline' or mode='browse'."},
+                "mode": {
+                    "type": "string",
+                    "enum": ["semantic", "phrase", "regex", "timeline", "browse", "trace", "unified"],
+                    "description": "Search mode: 'semantic' (default), 'phrase' for exact match, 'regex' for regular-expression match (newest first), 'timeline' for recent memories by day, 'browse' for listing, 'trace' for session tool call timeline, 'unified' for cross-searching memories + knowledge documents",
+                },
+                "limit": {"type": "integer", "default": 10},
+                "event_type": {"type": "string", "description": "Filter by event type (also used as type filter in semantic mode for scoped search)"},
+                "project": {"type": "string"},
+                "session_id": {"type": "string"},
+                "context_file": {"type": "string", "description": "Current file being edited (boosts results)"},
+                "context_tags": {"type": "array", "items": {"type": "string"}, "description": "Context tags for boosting"},
+                "filter_tags": {"type": "array", "items": {"type": "string"}, "description": "Hard filter: ALL tags must match (AND logic)"},
+                "temporal_range": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 2, "description": "[start_iso, end_iso] date range filter"},
+                "entity_id": {"type": "string", "description": "Filter to entity. Omit for all."},
+                "agent_type": {"type": "string", "description": "Filter to agent type. Omit for all."},
+                "case_sensitive": {"type": "boolean", "description": "Case-sensitive (only for mode='phrase' or mode='regex', default false)", "default": False},
+                "days": {"type": "integer", "description": "Days to look back (only for mode='timeline', default 7)", "default": 7},
+                "limit_per_day": {"type": "integer", "description": "Max per day (only for mode='timeline', default 10)", "default": 10},
+                "browse_by": {
+                    "type": "string",
+                    "enum": ["type", "session", "recent"],
+                    "description": "Browse dimension (only for mode='browse'): 'type' lists by event_type, 'session' lists by session_id, 'recent' lists most recent memories",
+                },
+                "context": {
+                    "type": "string",
+                    "enum": ["general", "error_debug", "file_edit", "planning", "review"],
+                    "description": "Retrieval context for tuned scoring. 'error_debug' boosts error patterns, 'planning' boosts decisions, 'review' boosts lessons, 'file_edit' boosts file-related memories.",
+                },
+                "perspective": {
+                    "type": "string",
+                    "enum": ["implementation", "critique", "verification"],
+                    "description": "Behavioral diversity lens. Biases retrieval toward different memory types: 'implementation' boosts errors/lessons/code, 'critique' boosts constraints/preferences/contradictions, 'verification' boosts decisions/benchmarks/evaluations. Auto-set from session role in multi-agent mode.",
+                },
+                "strength_min": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "description": "Minimum strength score (0.0-1.0). Filters out weak/decayed memories.",
+                },
+                "memory_type": {
+                    "type": "string",
+                    "enum": ["episodic", "semantic", "procedural"],
+                    "description": "Filter by memory type: 'episodic' (session events), 'semantic' (facts/decisions), 'procedural' (lessons/rules).",
+                },
+                "include_contradicted": {
+                    "type": "boolean",
+                    "description": "If true, return only memories that have been contradicted by newer memories. Useful for data quality auditing.",
+                },
+                "valid_at": {
+                    "type": "string",
+                    "description": "ISO datetime. Return only memories that were valid at this point in time. Enables temporal queries like 'what did we know before session X?'",
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["active", "superseded", "speculative", "archived"],
+                    "description": "Filter by memory lifecycle status. Default: returns all statuses. Use 'active' to exclude superseded/archived.",
+                },
+            },
+        },
+    },
+    {
+        "name": "cairn_welcome",
+        "description": "Session startup briefing. Call at the beginning of every session to load recent context, active reminders, and user profile. Returns what the agent needs to continue where the last session left off.",
+        "inputSchema": {"type": "object", "properties": {"session_id": {"type": "string"}, "project": {"type": "string"}}},
+    },
+    {
+        "name": "cairn_protocol",
+        "description": "Retrieve your operating rules and behavioral guidelines for this session. Returns context-sensitive instructions covering memory usage, coordination, reminders, and workflow. In multi-agent mode, includes a session role (primary/challenger/verifier) for behavioral diversity. Call after cairn_welcome at session start, or on-demand for a specific section.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "section": {"type": "string", "description": "Section: 'memory', 'coordination', 'coordination_gate', 'teamwork', 'context', 'reminders', 'diagnostics', 'entity', 'heuristics', 'git', 'what_next'. Groups: 'solo', 'multi_agent', 'full', 'minimal'."},
+                "project": {"type": "string", "description": "Project path for context-sensitive rules."},
+                "session_id": {"type": "string", "description": "Session ID for role assignment in multi-agent mode."},
+            },
+        },
+    },
+    {
+        "name": "cairn_checkpoint",
+        "description": "Save a task checkpoint: captures current plan, progress, files touched, decisions, and key context. Enables seamless session continuity.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "task_title": {"type": "string", "description": "Brief title of the current task"},
+                "plan": {"type": "string", "description": "Current plan or goals"},
+                "progress": {"type": "string", "description": "What's been completed, in progress, remaining"},
+                "files_touched": {"type": "object", "description": "Map of file paths to change summaries", "additionalProperties": {"type": "string"}},
+                "decisions": {"type": "array", "items": {"type": "string"}, "description": "Key technical decisions"},
+                "key_context": {"type": "string", "description": "Critical context for continuation"},
+                "next_steps": {"type": "string", "description": "What to do next"},
+                "session_id": {"type": "string"},
+                "project": {"type": "string"},
+            },
+            "required": ["task_title", "progress"],
+        },
+    },
+    {
+        "name": "cairn_resume_task",
+        "description": "Resume a previously checkpointed task. Retrieves the latest checkpoint with full plan, progress, files, decisions, and next steps.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "task_title": {"type": "string", "description": "Title of the task to resume (semantic search)"},
+                "project": {"type": "string", "description": "Project path to filter checkpoints"},
+                "verbosity": {"type": "string", "enum": ["full", "summary", "minimal"], "description": "full=everything, summary=plan+progress+next, minimal=next steps only"},
+                "limit": {"type": "integer", "description": "Number of checkpoints to retrieve (default 1)"},
+            },
+        },
+    },
+    {
+        "name": "cairn_memory",
+        "description": "Manage a specific memory by ID: fetch its full untruncated content (action='get' — resolves the truncated id prefixes shown in [MEMORY] surfacing blocks and context packets), edit its content, delete it, mark it as superseded, mark it as helpful/unhelpful/outdated, find similar memories, traverse relationship edges, link two memories, or list flagged memories for review. Use when acting on an individual memory rather than searching broadly.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["get", "edit", "delete", "feedback", "similar", "traverse", "link", "flagged", "check_contradictions", "supersede"], "description": "Operation to perform"},
+                "memory_id": {"type": "string", "description": "Memory node ID (required for most actions, not required for 'flagged' or 'check_contradictions'). action='get' also accepts a unique id prefix of >=8 chars, as printed by surfacing blocks and context packets"},
+                "include_related": {"type": "boolean", "default": True, "description": "Include a 1-hop edge summary (only for action='get')"},
+                "new_content": {"type": "string", "description": "New content (for action='edit') or content to check (for action='check_contradictions')"},
+                "rating": {"type": "string", "description": "helpful, unhelpful, or outdated (only for action='feedback')"},
+                "reason": {"type": "string", "description": "Optional explanation (for action='feedback' or action='supersede')"},
+                "limit": {"type": "integer", "description": "Max results (default 5)", "default": 5},
+                "max_hops": {"type": "integer", "description": "Traversal depth 1-5 (default 2, only for action='traverse')", "default": 2},
+                "min_weight": {"type": "number", "description": "Min edge weight 0.0-1.0 (default 0.0, only for action='traverse')", "default": 0.0},
+                "edge_types": {"type": "array", "items": {"type": "string"}, "description": "Filter by edge type: related, contradicts, supersedes, evolves (only for action='traverse')"},
+                "target_id": {"type": "string", "description": "Target memory ID (for action='link' or action='supersede')"},
+                "edge_type": {"type": "string", "enum": ["related", "contradicts", "supersedes", "evolves"], "description": "Edge type (only for action='link', default 'related')"},
+                "weight": {"type": "number", "description": "Edge weight 0.0-1.0 (only for action='link', default 1.0)"},
+            },
+            "required": ["action"],
+        },
+    },
+    {
+        "name": "cairn_profile",
+        "description": "Read or update the user's persistent profile (name, preferences, working style) or list all stored preferences. The profile persists across sessions and informs agent behavior. Default action is 'read'.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["read", "update", "list_preferences"], "description": "read (default), update, or list_preferences", "default": "read"},
+                "update": {"type": "object", "description": "Profile fields to merge (only for action='update')"},
+            },
+        },
+    },
+    {
+        "name": "cairn_remind",
+        "description": "Manage time-based reminders: set new reminders, list active ones, or dismiss by ID.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["set", "list", "dismiss"], "description": "set (default), list, or dismiss", "default": "set"},
+                "text": {"type": "string", "description": "What to be reminded about (for action='set')"},
+                "duration": {"type": "string", "description": "When to remind, e.g. '1h', '30m', '2d' (for action='set')"},
+                "context": {"type": "string", "description": "Optional context (for action='set')"},
+                "session_id": {"type": "string"},
+                "project": {"type": "string"},
+                "status": {"type": "string", "enum": ["pending", "fired", "dismissed", "all"], "description": "Filter (for action='list')"},
+                "reminder_id": {"type": "string", "description": "Reminder ID (for action='dismiss')"},
+                "entity_id": {"type": "string", "description": "Scope reminders to entity (for action='list'). Omit for all."},
+            },
+        },
+    },
+    {
+        "name": "cairn_maintain",
+        "description": "System housekeeping and constraint management. Use 'health' to check database size and integrity, 'consolidate' to prune stale memories, 'compact' to merge near-duplicates, 'discover_connections' to actively find and link related memories (generates cross-type insights), 'backup'/'restore' for data safety, 'clear_session' to purge a session's data, 'synthesize_insights' to generate system insights, 'backfill_embeddings' to fill missing vectors, 'job_status' to poll a previously submitted async job, 'list_constraints'/'check_constraint'/'save_constraints' to manage file constraint rules. Long-running actions (consolidate, compact, backup, restore, discover_connections, synthesize_insights, backfill_embeddings) return a job_id immediately and run in the background to avoid client RPC timeouts; poll with action='job_status'. Pass wait=true to block instead.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["health", "consolidate", "compact", "discover_connections", "backup", "restore", "clear_session", "synthesize_insights", "backfill_embeddings", "job_status", "list_constraints", "check_constraint", "save_constraints"], "description": "Maintenance operation"},
+                "warn_mb": {"type": "number", "description": "Warning threshold MB (health, default 350)", "default": 350},
+                "critical_mb": {"type": "number", "description": "Critical threshold MB (health, default 800)", "default": 800},
+                "max_nodes": {"type": "integer", "description": "Max expected nodes (health, default 10000)", "default": 10000},
+                "prune_days": {"type": "integer", "description": "Prune zero-access older than N days (consolidate, default 14)", "default": 14},
+                "max_summaries": {"type": "integer", "description": "Max session summaries (consolidate, default 50)", "default": 50},
+                "event_type": {"type": "string", "description": "Type to compact (compact, default lesson_learned)", "default": "lesson_learned"},
+                "similarity_threshold": {"type": "number", "description": "Jaccard similarity 0.0-1.0 (compact, default 0.6)", "default": 0.6},
+                "min_cluster_size": {"type": "integer", "description": "Min cluster size (compact, default 3)", "default": 3},
+                "dry_run": {"type": "boolean", "description": "Preview only (compact/discover_connections, default false)", "default": False},
+                "lookback_hours": {"type": "integer", "description": "Hours to look back for discover_connections (default 24)", "default": 24},
+                "filepath": {"type": "string", "description": "File path (backup/restore)"},
+                "clear_existing": {"type": "boolean", "description": "Clear before restore (default true)", "default": True},
+                "session_id": {"type": "string", "description": "Session to purge (clear_session)"},
+                "file_path": {"type": "string", "description": "File path to check (only for action='check_constraint')"},
+                "rules": {"type": "array", "items": {"type": "object"}, "description": "Constraint rules to save (only for action='save_constraints'). Each: {pattern, constraint, severity}"},
+                "batch_size": {"type": "integer", "description": "Batch size (only for action='backfill_embeddings', default 50)", "default": 50},
+                "wait": {"type": "boolean", "description": "If true, block until the action finishes and return the full result. If false (default for long-running actions), return a job_id immediately and run in the background.", "default": False},
+                "job_id": {"type": "string", "description": "Job id returned by a prior async submission (only for action='job_status')"},
+            },
+            "required": ["action"],
+        },
+    },
+    {
+        "name": "cairn_stats",
+        "description": "View analytics: memory breakdown by type, per-session statistics, weekly digest, forgetting audit log, deduplication stats, access rate trends, milestones, unified diagnostic report, and tool utilization monitoring.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["types", "sessions", "digest", "forgetting_log", "dedup", "milestones", "access_rate", "diagnostic", "graph_stats", "utilization"],
+                    "description": "Which stats/insights to retrieve. 'diagnostic' returns a unified health/value report. 'utilization' shows tool usage vs defined tools.",
+                },
+                "days": {"type": "integer", "description": "Days for digest (default 7)", "default": 7},
+                "limit": {"type": "integer", "description": "Max entries for forgetting_log (default 50)", "default": 50},
+                "reason": {"type": "string", "description": "Filter forgetting_log by reason"},
+            },
+            "required": ["action"],
+        },
+    },
+    {
+        "name": "cairn_reflect",
+        "description": "Analyze memory quality and knowledge evolution. 'contradictions' finds conflicting memories on a topic, 'evolution' traces how understanding changed over time, 'stale' surfaces old never-accessed memories for review.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["contradictions", "evolution", "stale"],
+                    "description": "Analysis to perform",
+                },
+                "topic": {
+                    "type": "string",
+                    "description": "Topic to analyze (required for contradictions/evolution)",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max memories to analyze (default 20 for contradictions/evolution, 30 for stale)",
+                    "default": 20,
+                },
+                "days": {
+                    "type": "integer",
+                    "description": "Look-back window for stale action (default 30)",
+                    "default": 30,
+                },
+                "min_age_days": {
+                    "type": "integer",
+                    "description": "Minimum age in days to be considered stale (default 14)",
+                    "default": 14,
+                },
+                "entity_id": {
+                    "type": "string",
+                    "description": "Scope to entity. Omit for all.",
+                },
+            },
+            "required": ["action"],
+        },
+    },
+    {
+        "name": "cairn_consult_gpt",
+        "description": "Consult GPT for a second opinion on hard problems. Use when stuck (10+ min or 3+ failed approaches), facing irreversible architecture decisions, debugging dead ends, cross-validating fragile solutions, or bridging domain expertise gaps. Do NOT use for simple tasks, speed-sensitive work, or when tests already pass.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "The question or problem to consult GPT about.",
+                },
+                "context": {
+                    "type": "string",
+                    "description": "Supporting context: code snippets, error messages, constraints. Kept separate from prompt for clarity.",
+                },
+                "system": {
+                    "type": "string",
+                    "description": "Override the system prompt for domain-specific framing (default: generic second-opinion prompt).",
+                },
+                "temperature": {
+                    "type": "number",
+                    "description": "Sampling temperature: 0.0-0.3 for factual, 0.5-0.7 for design, 0.7-1.0 for brainstorming (default: 0.7).",
+                    "minimum": 0.0,
+                    "maximum": 2.0,
+                },
+                "max_tokens": {
+                    "type": "integer",
+                    "description": "Max response tokens (default: 4096, max: 16384).",
+                    "minimum": 1,
+                    "maximum": 16384,
+                },
+            },
+            "required": ["prompt"],
+        },
+    },
+    {
+        "name": "cairn_consult_claude",
+        "description": "Consult Claude for a second opinion on hard problems (for non-Anthropic agents). Use when stuck (10+ min or 3+ failed approaches), facing irreversible architecture decisions, debugging dead ends, cross-validating fragile solutions, or bridging domain expertise gaps. Do NOT use for simple tasks, speed-sensitive work, or when tests already pass.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "The question or problem to consult Claude about.",
+                },
+                "context": {
+                    "type": "string",
+                    "description": "Supporting context: code snippets, error messages, constraints. Kept separate from prompt for clarity.",
+                },
+                "system": {
+                    "type": "string",
+                    "description": "Override the system prompt for domain-specific framing (default: generic second-opinion prompt).",
+                },
+                "temperature": {
+                    "type": "number",
+                    "description": "Sampling temperature: 0.0-0.3 for factual, 0.5-0.7 for design, 0.7-1.0 for brainstorming (default: 0.7).",
+                    "minimum": 0.0,
+                    "maximum": 2.0,
+                },
+                "max_tokens": {
+                    "type": "integer",
+                    "description": "Max response tokens (default: 4096, max: 16384).",
+                    "minimum": 1,
+                    "maximum": 16384,
+                },
+            },
+            "required": ["prompt"],
+        },
+    },
+    {
+        "name": "cairn_review",
+        "description": "Review a code diff with multi-agent specialist panel. Uses Cairn memory for codebase context, team conventions, and past incident awareness. Returns findings sorted by severity with confidence scores.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "diff": {
+                    "type": "string",
+                    "description": "Unified diff text to review (from git diff, PR, or raw text)",
+                },
+                "repo": {
+                    "type": "string",
+                    "description": "Repository name for context lookup",
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["strict", "normal", "verbose"],
+                    "description": "Filtering mode: strict (critical+major only), normal (default, >=70% confidence), verbose (all findings)",
+                    "default": "normal",
+                },
+                "agents": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Agent types to run: correctness, security, performance, consistency, blast_radius. Default: all.",
+                },
+                "summarize_only": {
+                    "type": "boolean",
+                    "description": "If true, return only a fast deterministic summary (no LLM review). Good for quick risk assessment.",
+                    "default": False,
+                },
+                "session_id": {"type": "string"},
+                "entity_id": {"type": "string"},
+            },
+            "required": ["diff"],
+        },
+    },
+]
+
+
+CONDENSED_TOOL_SCHEMAS = [
+    {
+        "name": "cairn_tools",
+        "description": "List available Cairn tools or get the full schema for a specific tool. Call with no args to see all tool names and descriptions. Call with tool='name' to get its full input schema so you know what arguments to pass to cairn_call.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "tool": {
+                    "type": "string",
+                    "description": "Tool name to get full schema for. Omit to list all tools.",
+                },
+            },
+        },
+    },
+    {
+        "name": "cairn_call",
+        "description": "Execute any Cairn tool by name. Use cairn_tools() first to discover available tools and their parameters. Example: cairn_call(tool='cairn_query', args={'query': 'auth decisions', 'mode': 'semantic'})",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "tool": {
+                    "type": "string",
+                    "description": "Tool name to execute, e.g. 'cairn_query', 'cairn_checkpoint', 'cairn_memory'",
+                },
+                "args": {
+                    "type": "object",
+                    "description": "Arguments to pass to the tool. Use cairn_tools(tool='name') to see accepted parameters.",
+                },
+            },
+            "required": ["tool"],
+        },
+    },
+]
+
+
+_SCHEMA_BY_NAME: Dict[str, dict] = {s["name"]: s for s in _CORE_SCHEMAS}
+_META_BY_NAME: Dict[str, dict] = {s["name"]: s for s in CONDENSED_TOOL_SCHEMAS}
+
+
+# ---------------------------------------------------------------------------
+# Arg transforms for the two backward-compat aliases
+# ---------------------------------------------------------------------------
+
+def _remember_transform(args: dict) -> dict:
+    """cairn_remember → cairn_store defaulting event_type to user_preference."""
+    return {**args, "event_type": args.get("event_type", "user_preference")}
+
+
+def _phrase_transform(args: dict) -> dict:
+    """cairn_phrase_search → cairn_query remapping phrase→query, mode=phrase."""
+    return {**args, "query": args.get("phrase", args.get("query", "")), "mode": "phrase"}
+
+
+def _exposed(name: str, handler: Callable, *, standalone: bool = False) -> ToolSpec:
+    return ToolSpec(name, handler, schema=_SCHEMA_BY_NAME[name], standalone=standalone)
+
+
+def _granular(name: str, handler: Callable, *, transform: Optional[Callable] = None) -> ToolSpec:
+    return ToolSpec(name, handler, transform=transform)
+
+
+# ---------------------------------------------------------------------------
+# The registry — one entry per tool name that appears in HANDLERS
+# ---------------------------------------------------------------------------
+
+TOOLS: List[ToolSpec] = [
+    # === 15 exposed action-discriminated composites (order == TOOL_SCHEMAS) ===
+    _exposed("cairn_store", _h.handle_cairn_store, standalone=True),
+    _exposed("cairn_query", _h.handle_cairn_query),
+    _exposed("cairn_welcome", _h.handle_cairn_welcome, standalone=True),
+    _exposed("cairn_protocol", _h.handle_cairn_protocol, standalone=True),
+    _exposed("cairn_checkpoint", _h.handle_cairn_checkpoint),
+    _exposed("cairn_resume_task", _h.handle_cairn_resume_task),
+    _exposed("cairn_memory", _h.handle_cairn_memory),
+    _exposed("cairn_profile", _h.handle_cairn_profile),
+    _exposed("cairn_remind", _h.handle_cairn_remind_composite),
+    _exposed("cairn_maintain", _h.handle_cairn_maintain),
+    _exposed("cairn_stats", _h.handle_cairn_stats),
+    _exposed("cairn_reflect", _h.handle_cairn_reflect),
+    _exposed("cairn_consult_gpt", _h.handle_cairn_consult_gpt),
+    _exposed("cairn_consult_claude", _h.handle_cairn_consult_claude),
+    _exposed("cairn_review", _h.handle_cairn_review),
+    # === Condensed-mode meta-tools (schema in condensed set, not TOOL_SCHEMAS) ===
+    ToolSpec("cairn_tools", _h.handle_cairn_tools, schema=_META_BY_NAME["cairn_tools"], meta=True),
+    ToolSpec("cairn_call", _h.handle_cairn_call, schema=_META_BY_NAME["cairn_call"], meta=True),
+    # === Backward-compat aliases + granular handlers (reachable via cairn_call) ===
+    _granular("cairn_briefing", _h.handle_cairn_briefing),          # merged into welcome+protocol
+    _granular("cairn_habits", _h.handle_cairn_habits),              # removed feature — explanatory error
+    _granular("cairn_remember", _h.handle_cairn_store, transform=_remember_transform),
+    _granular("cairn_save_profile", _h.handle_cairn_profile),       # alias of cairn_profile
+    _granular("cairn_phrase_search", _h.handle_cairn_query, transform=_phrase_transform),
+    _granular("cairn_delete_memory", _h.handle_cairn_delete_memory),
+    _granular("cairn_edit_memory", _h.handle_cairn_edit_memory),
+    _granular("cairn_list_preferences", _h.handle_cairn_list_preferences),
+    _granular("cairn_health", _h.handle_cairn_health),
+    _granular("cairn_backup", _h.handle_cairn_backup),
+    _granular("cairn_feedback", _h.handle_cairn_feedback),
+    _granular("cairn_clear_session", _h.handle_cairn_clear_session),
+    _granular("cairn_similar", _h.handle_cairn_similar),
+    _granular("cairn_timeline", _h.handle_cairn_timeline),
+    _granular("cairn_consolidate", _h.handle_cairn_consolidate),
+    _granular("cairn_traverse", _h.handle_cairn_traverse),
+    _granular("cairn_compact", _h.handle_cairn_compact),
+    _granular("cairn_forgetting_log", _h.handle_cairn_forgetting_log),
+    _granular("cairn_type_stats", _h.handle_cairn_type_stats),
+    _granular("cairn_session_stats", _h.handle_cairn_session_stats),
+    _granular("cairn_weekly_digest", _h.handle_cairn_weekly_digest),
+    _granular("cairn_remind_list", _h.handle_cairn_remind_list),
+    _granular("cairn_remind_dismiss", _h.handle_cairn_remind_dismiss),
+]
+
+
+# ---------------------------------------------------------------------------
+# Derived views — do not hand-maintain; add a ToolSpec above instead
+# ---------------------------------------------------------------------------
+
+def _resolve(spec: ToolSpec) -> Callable:
+    """Return the callable for HANDLERS, wrapping arg-transform aliases."""
+    if spec.transform is None:
+        return spec.handler
+    base, tf = spec.handler, spec.transform
+    return lambda args: base(tf(args))
+
+
+# Exposed composite schemas, in declaration order (meta tools excluded).
+TOOL_SCHEMAS: List[dict] = [t.schema for t in TOOLS if t.schema is not None and not t.meta]
+
+# name -> handler for every tool (composites, meta-tools, aliases, granular).
+HANDLERS: Dict[str, Any] = {t.name: _resolve(t) for t in TOOLS}
+
+# Tools that remain directly exposed even in condensed mode.
+STANDALONE_TOOLS: List[str] = [t.name for t in TOOLS if t.standalone]
+
+
+def get_condensed_schemas(all_schemas: List[dict]) -> List[dict]:
+    """Return the condensed tool set: standalone essentials + meta-tools.
+
+    In condensed mode only high-frequency tools are exposed directly; all
+    others are reachable via the cairn_call / cairn_tools meta-tools.
+    """
+    standalone = [s for s in all_schemas if s["name"] in STANDALONE_TOOLS]
+    return standalone + CONDENSED_TOOL_SCHEMAS
+
+
+# Populate the handlers module's dispatch table for cairn_call. Context
+# handlers are added by handlers.py itself; plugins by mcp_server.
+_h._ALL_HANDLERS.update(HANDLERS)

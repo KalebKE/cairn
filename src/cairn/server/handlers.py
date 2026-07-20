@@ -5,7 +5,8 @@ Each handler delegates to cairn.bridge for actual operations and returns
 MCP-compatible response dicts.
 """
 
-__all__ = ["HANDLERS"]
+# HANDLERS is provided lazily via module __getattr__ (see bottom of file); it is
+# derived from the ToolSpec table in cairn.server.registry.
 
 import json
 import logging
@@ -2968,59 +2969,31 @@ async def handle_cairn_call(args: Dict[str, Any]) -> dict:
 # Handler Registry
 # ============================================================================
 
-HANDLERS: Dict[str, Any] = {
-    # === 15 consolidated tools (cairn_lessons removed — auto-surfaced via hooks) ===
-    "cairn_store": handle_cairn_store,
-    "cairn_query": handle_cairn_query,
-    "cairn_welcome": handle_cairn_welcome,
-    "cairn_protocol": handle_cairn_protocol,
-    "cairn_checkpoint": handle_cairn_checkpoint,
-    "cairn_resume_task": handle_cairn_resume_task,
-    "cairn_memory": handle_cairn_memory,
-    "cairn_profile": handle_cairn_profile,
-    "cairn_remind": handle_cairn_remind_composite,
-    "cairn_maintain": handle_cairn_maintain,
-    "cairn_stats": handle_cairn_stats,
-    "cairn_reflect": handle_cairn_reflect,
-    "cairn_consult_gpt": handle_cairn_consult_gpt,
-    "cairn_consult_claude": handle_cairn_consult_claude,
-    "cairn_review": handle_cairn_review,
-    # === Backward compatibility aliases (old tool names -> new handlers) ===
-    "cairn_briefing": handle_cairn_briefing,  # merged into welcome+protocol
-    "cairn_habits": handle_cairn_habits,  # removed feature — returns explanatory error
-    "cairn_remember": lambda args: handle_cairn_store(
-        {**args, "event_type": args.get("event_type", "user_preference")}
-    ),
-    "cairn_save_profile": handle_cairn_profile,
-    "cairn_phrase_search": lambda args: handle_cairn_query(
-        {**args, "query": args.get("phrase", args.get("query", "")), "mode": "phrase"}
-    ),
-    "cairn_delete_memory": handle_cairn_delete_memory,
-    "cairn_edit_memory": handle_cairn_edit_memory,
-    "cairn_list_preferences": handle_cairn_list_preferences,
-    "cairn_health": handle_cairn_health,
-    "cairn_backup": handle_cairn_backup,
-    "cairn_feedback": handle_cairn_feedback,
-    "cairn_clear_session": handle_cairn_clear_session,
-    "cairn_similar": handle_cairn_similar,
-    "cairn_timeline": handle_cairn_timeline,
-    "cairn_consolidate": handle_cairn_consolidate,
-    "cairn_traverse": handle_cairn_traverse,
-    "cairn_compact": handle_cairn_compact,
-    "cairn_forgetting_log": handle_cairn_forgetting_log,
-    "cairn_type_stats": handle_cairn_type_stats,
-    "cairn_session_stats": handle_cairn_session_stats,
-    "cairn_weekly_digest": handle_cairn_weekly_digest,
-    "cairn_remind_list": handle_cairn_remind_list,
-    "cairn_remind_dismiss": handle_cairn_remind_dismiss,
-    # === Condensed mode meta-tools ===
-    "cairn_tools": handle_cairn_tools,
-    "cairn_call": handle_cairn_call,
-}
+# The name -> handler map is now DERIVED from the single ToolSpec table in
+# cairn.server.registry (which imports this module for the handler callables).
+# To avoid an import cycle, this module never imports registry at load time;
+# `HANDLERS` is resolved lazily on first attribute access via __getattr__.
 
 # Harness-agnostic structured-context wire contract -- see context_handlers.py.
+# Registered into the cairn_call dispatch table here; the composite/alias
+# handlers are registered by registry.py when it builds HANDLERS.
 from cairn.server.context_handlers import CONTEXT_HANDLERS  # noqa: E402
-HANDLERS.update(CONTEXT_HANDLERS)
+_ALL_HANDLERS.update(CONTEXT_HANDLERS)
 
-# Wire _ALL_HANDLERS so cairn_call can dispatch to any handler.
-_ALL_HANDLERS.update(HANDLERS)
+_HANDLERS_CACHE: dict | None = None
+
+
+def __getattr__(name: str):
+    """Lazily expose the derived HANDLERS map (registry core + context tools).
+
+    Deferring the registry import to attribute-access time keeps handlers.py
+    free of any registry reference during module load, so the two modules load
+    in either order without a cycle.
+    """
+    global _HANDLERS_CACHE
+    if name == "HANDLERS":
+        if _HANDLERS_CACHE is None:
+            from cairn.server.registry import HANDLERS as _core
+            _HANDLERS_CACHE = {**_core, **CONTEXT_HANDLERS}
+        return _HANDLERS_CACHE
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
