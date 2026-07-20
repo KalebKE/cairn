@@ -35,6 +35,264 @@ logger = logging.getLogger("cairn.bridge.core")
 # ---------------------------------------------------------------------------
 
 
+def _try_content_dedup(
+    store: Any, content: str, event_type: str, session_id: Optional[str],
+    similar_results: Optional[list], dedup_threshold: Optional[float],
+) -> Optional[str]:
+    """Phase 1: reuse a near-identical existing memory (Jaccard > threshold).
+
+    Bumps the existing node's access count and returns a "Deduped" message,
+    or None to continue with capture. Decisions/lessons/completions dedup
+    cross-session; everything else only within the same session.
+    """
+    if dedup_threshold is None or not similar_results:
+        return None
+    _CROSS_SESSION_DEDUP_TYPES = {
+        AutoCaptureEventType.DECISION,
+        AutoCaptureEventType.LESSON_LEARNED,
+        AutoCaptureEventType.TASK_COMPLETION,
+        AutoCaptureEventType.ADVISOR_INSIGHT,
+    }
+    try:
+        for existing in similar_results:
+            if (existing.metadata or {}).get("event_type", "") != event_type:
+                continue
+            if session_id and event_type not in _CROSS_SESSION_DEDUP_TYPES:
+                existing_session = (existing.metadata or {}).get("session_id", "")
+                if existing_session and existing_session != session_id:
+                    continue
+            if event_type == AutoCaptureEventType.ERROR_PATTERN:
+                sim = _bridge._jaccard(_normalize_for_dedup(content), _normalize_for_dedup(existing.content))
+            else:
+                sim = _bridge._jaccard(content.lower(), existing.content.lower())
+            if sim > dedup_threshold:
+                store.update_node(existing.id, access_count=(existing.access_count or 0) + 1)
+                store.stats.setdefault("content_dedup_skips", 0)
+                store.stats["content_dedup_skips"] += 1
+                _schedule_auto_relate(store, existing.id)
+                logger.debug(f"Content dedup: skipped {event_type} (jaccard={sim:.2f}), reusing {existing.id[:12]}")
+                return f"Deduped → {existing.id}"
+    except Exception as e:
+        logger.debug(f"Content dedup check skipped: {e}")
+    return None
+
+
+def _try_error_burst(
+    store: Any, content: str, event_type: str, session_id: Optional[str],
+    similar_results: Optional[list],
+) -> Optional[str]:
+    """Phase 1.5: suppress a non-novel error repeated 3+ times in a session.
+
+    Returns a "Blocked (error burst)" message when the content overlaps
+    (Jaccard >= 0.40) with recent session errors, else None.
+    """
+    if event_type != AutoCaptureEventType.ERROR_PATTERN or not session_id:
+        return None
+    try:
+        burst_candidates = similar_results or []
+        session_errors = [
+            r for r in burst_candidates
+            if (r.metadata or {}).get("event_type") == AutoCaptureEventType.ERROR_PATTERN
+            and (r.metadata or {}).get("session_id") == session_id
+        ]
+        if len(session_errors) >= 3:
+            is_novel = all(_bridge._jaccard(content.lower(), e.content.lower()) < 0.40 for e in session_errors)
+            if not is_novel:
+                store.stats.setdefault("error_burst_skips", 0)
+                store.stats["error_burst_skips"] += 1
+                return "Blocked (error burst — duplicate)"
+    except Exception as e:
+        logger.debug(f"Error burst check skipped: {e}")
+    return None
+
+
+def _try_evolve_memory(
+    store: Any, content: str, event_type: str, session_id: Optional[str],
+    similar_results: Optional[list], dedup_threshold: Optional[float],
+) -> Optional[str]:
+    """Phase 2: fold novel sentences into a similar existing memory.
+
+    For content in the evolution band (EVOLUTION_THRESHOLD <= sim < dedup),
+    reconfirms (bumps access) when nothing is new, otherwise appends the
+    novel sentences as an "[Updated]" addition. Returns an "Evolved" /
+    "Reconfirmed" message, or None to continue with a fresh capture.
+    """
+    if event_type not in EVOLUTION_TYPES or not similar_results:
+        return None
+    try:
+        for existing in similar_results[:3]:
+            if (existing.metadata or {}).get("event_type", "") != event_type:
+                continue
+            sim = _bridge._jaccard(content.lower(), existing.content.lower())
+            if EVOLUTION_THRESHOLD <= sim < (dedup_threshold or 0.95):
+                old_words = {w.lower() for w in existing.content.split() if len(w) > 3}
+                new_info = {w.lower() for w in content.split() if len(w) > 3} - old_words
+                if len(new_info) == 0:
+                    # Near-exact reconfirmation — bump access count to strengthen memory
+                    store.update_node(existing.id, access_count=(existing.access_count or 0) + 1)
+                    store.stats.setdefault("reconfirmation_bumps", 0)
+                    store.stats["reconfirmation_bumps"] += 1
+                    return f"Reconfirmed {existing.id} (access bumped)"
+                # Allow evolution with even 1 new word (was 3 — caused dead zone).
+                # The sentence-level filter below still requires >= 2 new words per sentence.
+                evolved = existing.content.rstrip()
+                if not evolved.endswith("."):
+                    evolved += "."
+
+                new_sentences = []
+                # Split on sentence boundaries, preserving abbreviations
+                # like "Dr.", "e.g.", "i.e.", version numbers "v2.0".
+                for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z])", content):
+                    sentence = sentence.strip()
+                    if not sentence or len(sentence) < 10:
+                        continue
+                    s_words = {w.lower() for w in sentence.split() if len(w) > 3}
+                    if s_words and len(s_words - old_words) >= 2:
+                        new_sentences.append(sentence)
+
+                if new_sentences:
+                    addition = " ".join(new_sentences[:2])
+                    new_content = f"{evolved} [Updated] {addition}"
+                    emeta = dict(existing.metadata or {})
+                    evo_count = emeta.get("evolution_count", 0) + 1
+                    emeta["evolution_count"] = evo_count
+                    emeta["last_evolved"] = datetime.now(timezone.utc).isoformat()
+                    emeta["evolved_from_sessions"] = list(
+                        set(emeta.get("evolved_from_sessions", []) + ([session_id] if session_id else []))
+                    )[:10]
+
+                    store.update_node(
+                        existing.id,
+                        content=new_content,
+                        metadata=emeta,
+                        access_count=(existing.access_count or 0) + 1,
+                    )
+                    store.stats.setdefault("memory_evolutions", 0)
+                    store.stats["memory_evolutions"] += 1
+                    _schedule_auto_relate(store, existing.id)
+                    logger.info(f"Memory evolved: {existing.id[:12]} (evolution #{evo_count}, jaccard={sim:.2f})")
+                    return f"Evolved {existing.id} (#{evo_count})"
+                break  # Only try the top match
+    except Exception as e:
+        logger.debug(f"Memory evolution check skipped: {e}")
+    return None
+
+
+def _auto_supersede_reminders(
+    store: Any, node_id: str, content: str, event_type: str
+) -> int:
+    """Phase 4.5: dismiss pending reminders a new decision/completion resolves.
+
+    Two passes find stale reminders — embedding similarity (>= 0.40) and 3+
+    keyword overlap — then marks each superseded + dismissed and logs a
+    forgetting event. Returns the number superseded (0 for non-completion
+    event types). Callers append the count to their output line.
+    """
+    _COMPLETION_TYPES = {"decision", "task_completion"}
+    if event_type not in _COMPLETION_TYPES:
+        return 0
+    try:
+        superseded_count = 0
+        superseded_ids: set = set()
+        content_words = {w.lower() for w in content.split() if len(w) > 3}
+
+        # --- Pass 1: Embedding similarity (threshold lowered to 0.40) ---
+        embedding = store.get_embedding(node_id)
+        if embedding:
+            similar = store.find_similar(embedding, limit=10)
+            for r in similar:
+                if r.id == node_id:
+                    continue
+                r_type = (r.metadata or {}).get("event_type")
+                if r_type not in ("reminder", "checkpoint"):
+                    continue
+                if (r.metadata or {}).get("superseded"):
+                    continue
+                if r.relevance < 0.40:
+                    continue
+                superseded_ids.add(r.id)
+
+        # --- Pass 2: Keyword matching (3+ word overlap, like task auto-resolve) ---
+        with store._lock:
+            pending_rows = store._conn.execute(
+                "SELECT node_id, content FROM memories "
+                "WHERE event_type = 'reminder' "
+                "AND json_extract(metadata, '$.reminder_status') = 'pending'"
+            ).fetchall()
+        for r_id, r_content in pending_rows:
+            if r_id in superseded_ids:
+                continue
+            r_words = {w.lower() for w in (r_content or "").split() if len(w) > 3}
+            matches = sum(1 for w in r_words if w in content_words)
+            if matches >= 3:
+                superseded_ids.add(r_id)
+
+        # --- Apply: mark superseded AND set reminder_status = dismissed ---
+        for s_id in superseded_ids:
+            r_row = store.get(s_id)
+            if not r_row:
+                continue
+            r_meta = dict(r_row.metadata or {})
+            r_meta["superseded"] = True
+            r_meta["superseded_by"] = node_id
+            r_meta["reminder_status"] = "dismissed"
+            r_meta["dismissed_at"] = datetime.now(timezone.utc).isoformat()
+            r_meta["dismissed_reason"] = "auto_superseded"
+            store.update_node(s_id, metadata=r_meta)
+            r_type = r_meta.get("event_type", "reminder")
+            store._log_forgetting_external(
+                s_id, r_row.content, r_type,
+                "auto_superseded", {"superseded_by": node_id},
+            )
+            superseded_count += 1
+        if superseded_count:
+            logger.info(f"Auto-superseded {superseded_count} reminders for {node_id}")
+        return superseded_count
+    except Exception as e:
+        logger.debug(f"Auto-supersede failed for {node_id}: {e}")
+        return 0
+
+
+def _capture_block_reason(
+    content: str, event_type: str, source: str, is_hook: bool
+) -> Optional[str]:
+    """Return a block message if this capture is system noise, else None.
+
+    Hooks and direct API calls have different filtering rules: startswith
+    blocklists apply to every source; the contains-blocklist, the min-length
+    gate, and the infrastructure/zero-token filters apply only to
+    hook-sourced content so agents can still store legitimate prose that
+    happens to mention "error".
+    """
+    # startswith patterns are position-specific, safe for all sources.
+    for pattern in _BLOCKLIST_STARTSWITH:
+        if content.startswith(pattern):
+            return "**Memory Blocked** (system noise)"
+    # contains patterns only apply to hooks; exempt preference/fact types —
+    # users legitimately store prefs that contain blocklisted substrings.
+    _exempt = {AutoCaptureEventType.USER_PREFERENCE, AutoCaptureEventType.USER_FACT}
+    if is_hook and event_type not in _exempt:
+        for pattern in _BLOCKLIST_CONTAINS:
+            if pattern in content:
+                return "**Memory Blocked** (system noise)"
+    if is_hook and len(content) < _MIN_CONTENT_LENGTH and event_type != AutoCaptureEventType.USER_PREFERENCE:
+        return "**Memory Blocked** (too short)"
+    if is_hook and event_type in _INFRASTRUCTURE_EVENT_TYPES:
+        return "**Memory Blocked** (infrastructure noise)"
+    if is_hook and event_type == "task_completion" and "tokens=0" in content:
+        return "**Memory Blocked** (zero-token outcome)"
+    # JSON-blob decisions — raw tool output stored as "decisions".
+    # Exempt coord_dual_write: its [domain] prefix is not JSON.
+    if event_type == "decision" and source != "coord_dual_write":
+        _body = content
+        for _pfx in ("Decision: ", "Plan/decision captured: ", "Fact: "):
+            if _body.startswith(_pfx):
+                _body = _body[len(_pfx):]
+        if _body.lstrip().startswith(("{", "[", '"filePath', '"type"')):
+            return "**Memory Blocked** (JSON blob, not a decision)"
+    return None
+
+
 def auto_capture(
     content: str,
     event_type: str,
@@ -61,42 +319,9 @@ def auto_capture(
     _source = (metadata or {}).get("source", "")
     _is_hook = _source.startswith("auto_") or _source.endswith("_hook")
 
-    # Block system noise early — startswith patterns are position-specific, safe for all sources.
-    for pattern in _BLOCKLIST_STARTSWITH:
-        if content.startswith(pattern):
-            return "**Memory Blocked** (system noise)"
-    # Contains patterns only apply to hook-sourced content to avoid false positives
-    # on direct API calls (e.g. storing a lesson that mentions "error":).
-    # Also skip for preference/fact types — users legitimately store prefs containing "error".
-    _BLOCKLIST_EXEMPT_TYPES = {AutoCaptureEventType.USER_PREFERENCE, AutoCaptureEventType.USER_FACT}
-    if _is_hook and event_type not in _BLOCKLIST_EXEMPT_TYPES:
-        for pattern in _BLOCKLIST_CONTAINS:
-            if pattern in content:
-                return "**Memory Blocked** (system noise)"
-
-    # Min-length gate — only for auto-captured content from hooks, not direct API calls.
-    if _is_hook and len(content) < _MIN_CONTENT_LENGTH and event_type != AutoCaptureEventType.USER_PREFERENCE:
-        return "**Memory Blocked** (too short)"
-
-    # Block infrastructure event types that generate noise and inflate never-accessed count
-    if _is_hook and event_type in _INFRASTRUCTURE_EVENT_TYPES:
-        return "**Memory Blocked** (infrastructure noise)"
-
-    # Block zero-value outcome records (tokens=0 partial sessions)
-    if _is_hook and event_type == "task_completion" and "tokens=0" in content:
-        return "**Memory Blocked** (zero-token outcome)"
-
-    # Block JSON-blob decisions — raw tool output stored as "decisions"
-    # Exempt coord_dual_write: its [domain] prefix is not JSON
-    if event_type == "decision" and _source != "coord_dual_write":
-        # Strip known prefixes to check the actual body
-        _body = content
-        for _pfx in ("Decision: ", "Plan/decision captured: ", "Fact: "):
-            if _body.startswith(_pfx):
-                _body = _body[len(_pfx):]
-        _body_stripped = _body.lstrip()
-        if _body_stripped.startswith(("{", "[", '"filePath', '"type"')):
-            return "**Memory Blocked** (JSON blob, not a decision)"
+    _block = _capture_block_reason(content, event_type, _source, _is_hook)
+    if _block:
+        return _block
 
     store = _bridge._get_store()
     meta = dict(metadata or {})
@@ -177,123 +402,20 @@ def auto_capture(
         except Exception as e:
             logger.debug(f"Similar-content query failed: {e}")
 
-    # Phase 1: Content-level dedup
-    if dedup_threshold is not None and _similar_results:
-        try:
-            for existing in _similar_results:
-                if (existing.metadata or {}).get("event_type", "") != event_type:
-                    continue
-                # Session filter for dedup: only dedup within same session
-                # Exception: decisions, lessons, and task completions dedup cross-session
-                # (same architectural choice, lesson, or completion restated across sessions)
-                _CROSS_SESSION_DEDUP_TYPES = {
-                    AutoCaptureEventType.DECISION,
-                    AutoCaptureEventType.LESSON_LEARNED,
-                    AutoCaptureEventType.TASK_COMPLETION,
-                    AutoCaptureEventType.ADVISOR_INSIGHT,
-                }
-                if session_id and event_type not in _CROSS_SESSION_DEDUP_TYPES:
-                    existing_session = (existing.metadata or {}).get("session_id", "")
-                    if existing_session and existing_session != session_id:
-                        continue
-                if event_type == AutoCaptureEventType.ERROR_PATTERN:
-                    sim = _bridge._jaccard(_normalize_for_dedup(content), _normalize_for_dedup(existing.content))
-                else:
-                    sim = _bridge._jaccard(content.lower(), existing.content.lower())
-                if sim > dedup_threshold:
-                    store.update_node(existing.id, access_count=(existing.access_count or 0) + 1)
-                    store.stats.setdefault("content_dedup_skips", 0)
-                    store.stats["content_dedup_skips"] += 1
-                    _schedule_auto_relate(store, existing.id)
-                    logger.debug(f"Content dedup: skipped {event_type} (jaccard={sim:.2f}), reusing {existing.id[:12]}")
-                    return f"Deduped → {existing.id}"
-        except Exception as e:
-            logger.debug(f"Content dedup check skipped: {e}")
+    # Phase 1: content-level dedup — reuse a near-identical existing memory.
+    _dedup = _try_content_dedup(store, content, event_type, session_id, _similar_results, dedup_threshold)
+    if _dedup:
+        return _dedup
 
-    # Phase 1.5: Error burst detection
-    if event_type == AutoCaptureEventType.ERROR_PATTERN and session_id:
-        try:
-            # Use similar results if available, otherwise minimal query
-            burst_candidates = _similar_results or []
-            session_errors = [
-                r
-                for r in burst_candidates
-                if (r.metadata or {}).get("event_type") == AutoCaptureEventType.ERROR_PATTERN
-                and (r.metadata or {}).get("session_id") == session_id
-            ]
-            if len(session_errors) >= 3:
-                # Only capture if truly novel (Jaccard < 0.40 with all recent errors)
-                is_novel = all(_bridge._jaccard(content.lower(), e.content.lower()) < 0.40 for e in session_errors)
-                if not is_novel:
-                    store.stats.setdefault("error_burst_skips", 0)
-                    store.stats["error_burst_skips"] += 1
-                    return "Blocked (error burst — duplicate)"
-        except Exception as e:
-            logger.debug(f"Error burst check skipped: {e}")
+    # Phase 1.5: error-burst suppression — drop repeated errors within a session.
+    _burst = _try_error_burst(store, content, event_type, session_id, _similar_results)
+    if _burst:
+        return _burst
 
-    # Phase 2: Memory evolution (Zettelkasten-inspired)
-    if event_type in EVOLUTION_TYPES and _similar_results:
-        try:
-            for existing in _similar_results[:3]:
-                if (existing.metadata or {}).get("event_type", "") != event_type:
-                    continue
-                sim = _bridge._jaccard(content.lower(), existing.content.lower())
-                if EVOLUTION_THRESHOLD <= sim < (dedup_threshold or 0.95):
-                    old_words = {w.lower() for w in existing.content.split() if len(w) > 3}
-                    new_info = {w.lower() for w in content.split() if len(w) > 3} - old_words
-                    if len(new_info) == 0:
-                        # Near-exact reconfirmation — bump access count to strengthen memory
-                        store.update_node(
-                            existing.id,
-                            access_count=(existing.access_count or 0) + 1,
-                        )
-                        store.stats.setdefault("reconfirmation_bumps", 0)
-                        store.stats["reconfirmation_bumps"] += 1
-                        return f"Reconfirmed {existing.id} (access bumped)"
-                    # Allow evolution with even 1 new word (was 3 — caused dead zone)
-                    # The sentence-level filter below still requires >= 2 new words per sentence
-
-                    evolved = existing.content.rstrip()
-                    if not evolved.endswith("."):
-                        evolved += "."
-
-                    new_sentences = []
-                    # Split on sentence boundaries, preserving abbreviations
-                    # like "Dr.", "e.g.", "i.e.", version numbers "v2.0"
-                    for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z])", content):
-                        sentence = sentence.strip()
-                        if not sentence or len(sentence) < 10:
-                            continue
-                        s_words = {w.lower() for w in sentence.split() if len(w) > 3}
-                        if s_words and len(s_words - old_words) >= 2:
-                            new_sentences.append(sentence)
-
-                    if new_sentences:
-                        addition = " ".join(new_sentences[:2])
-                        new_content = f"{evolved} [Updated] {addition}"
-                        emeta = dict(existing.metadata or {})
-                        evo_count = emeta.get("evolution_count", 0) + 1
-                        emeta["evolution_count"] = evo_count
-                        emeta["last_evolved"] = datetime.now(timezone.utc).isoformat()
-                        emeta["evolved_from_sessions"] = list(
-                            set(emeta.get("evolved_from_sessions", []) + ([session_id] if session_id else []))
-                        )[:10]
-
-                        store.update_node(
-                            existing.id,
-                            content=new_content,
-                            metadata=emeta,
-                            access_count=(existing.access_count or 0) + 1,
-                        )
-
-                        store.stats.setdefault("memory_evolutions", 0)
-                        store.stats["memory_evolutions"] += 1
-                        _schedule_auto_relate(store, existing.id)
-                        logger.info(f"Memory evolved: {existing.id[:12]} (evolution #{evo_count}, jaccard={sim:.2f})")
-                        return f"Evolved {existing.id} (#{evo_count})"
-                    break  # Only try the top match
-        except Exception as e:
-            logger.debug(f"Memory evolution check skipped: {e}")
+    # Phase 2: memory evolution (Zettelkasten-inspired) — fold new info into an existing note.
+    _evolved = _try_evolve_memory(store, content, event_type, session_id, _similar_results, dedup_threshold)
+    if _evolved:
+        return _evolved
 
     # ------------------------------------------------------------------
     # Phase 2.5: Conflict detection — find contradictions with existing
@@ -466,70 +588,10 @@ def auto_capture(
     except Exception as e:
         logger.debug(f"Atomic fact splitting failed for {node_id[:12]}: {e}")
 
-    # ------------------------------------------------------------------
-    # Phase 4.5: Auto-supersede stale reminders
-    # ------------------------------------------------------------------
-    _COMPLETION_TYPES = {"decision", "task_completion"}
-    if event_type in _COMPLETION_TYPES:
-        try:
-            superseded_count = 0
-            superseded_ids: set = set()
-            content_words = {w.lower() for w in content.split() if len(w) > 3}
-
-            # --- Pass 1: Embedding similarity (threshold lowered to 0.40) ---
-            embedding = store.get_embedding(node_id)
-            if embedding:
-                similar = store.find_similar(embedding, limit=10)
-                for r in similar:
-                    if r.id == node_id:
-                        continue
-                    r_type = (r.metadata or {}).get("event_type")
-                    if r_type not in ("reminder", "checkpoint"):
-                        continue
-                    if (r.metadata or {}).get("superseded"):
-                        continue
-                    if r.relevance < 0.40:
-                        continue
-                    superseded_ids.add(r.id)
-
-            # --- Pass 2: Keyword matching (3+ word overlap, like task auto-resolve) ---
-            with store._lock:
-                pending_rows = store._conn.execute(
-                    "SELECT node_id, content FROM memories "
-                    "WHERE event_type = 'reminder' "
-                    "AND json_extract(metadata, '$.reminder_status') = 'pending'"
-                ).fetchall()
-            for r_id, r_content in pending_rows:
-                if r_id in superseded_ids:
-                    continue
-                r_words = {w.lower() for w in (r_content or "").split() if len(w) > 3}
-                matches = sum(1 for w in r_words if w in content_words)
-                if matches >= 3:
-                    superseded_ids.add(r_id)
-
-            # --- Apply: mark superseded AND set reminder_status = dismissed ---
-            for s_id in superseded_ids:
-                r_row = store.get(s_id)
-                if not r_row:
-                    continue
-                r_meta = dict(r_row.metadata or {})
-                r_meta["superseded"] = True
-                r_meta["superseded_by"] = node_id
-                r_meta["reminder_status"] = "dismissed"
-                r_meta["dismissed_at"] = datetime.now(timezone.utc).isoformat()
-                r_meta["dismissed_reason"] = "auto_superseded"
-                store.update_node(s_id, metadata=r_meta)
-                r_type = r_meta.get("event_type", "reminder")
-                store._log_forgetting_external(
-                    s_id, r_row.content, r_type,
-                    "auto_superseded", {"superseded_by": node_id},
-                )
-                superseded_count += 1
-            if superseded_count:
-                output += f" | superseded {superseded_count} reminder(s)"
-                logger.info(f"Auto-superseded {superseded_count} reminders for {node_id}")
-        except Exception as e:
-            logger.debug(f"Auto-supersede failed for {node_id}: {e}")
+    # Phase 4.5: auto-supersede stale reminders when a decision/completion lands.
+    _superseded = _auto_supersede_reminders(store, node_id, content, event_type)
+    if _superseded:
+        output += f" | superseded {_superseded} reminder(s)"
 
     # ------------------------------------------------------------------
     # Phase 5: Implicit positive feedback — retrieval-then-store signal
