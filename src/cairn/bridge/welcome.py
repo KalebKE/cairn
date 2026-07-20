@@ -15,8 +15,8 @@ logger = logging.getLogger("cairn.bridge")
 
 # Welcome cache — keyed by (project or ""), stores (timestamp, result).
 # Avoids 10+ DB round-trips on every session start (daemon serves many sessions).
-_bridge._welcome_cache: Dict[str, tuple] = {}  # key -> (monotonic_ts, result_dict)
-_bridge._WELCOME_CACHE_TTL = 30.0  # seconds
+# _welcome_cache / _WELCOME_CACHE_TTL live in bridge/__init__ (reset_memory clears
+# the cache); referenced here via _bridge.* so both see the same dict.
 
 
 def welcome(session_id: Optional[str] = None, project: Optional[str] = None) -> Dict[str, Any]:
