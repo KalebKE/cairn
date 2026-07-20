@@ -118,19 +118,6 @@ def _check_push_divergence(command):
         behind_lines = behind_result.stdout.strip().split("\n")
         count = len(behind_lines)
 
-        # Log divergence event BEFORE exit (fix: was dead code after sys.exit)
-        try:
-            from cairn_platform.orchestrator.coordination import get_manager
-            mgr = get_manager()
-            mgr.log_git_event(
-                project=project,
-                event_type="push_divergence_warning",
-                branch=branch,
-                message=f"{count} upstream commit(s) detected before push",
-                session_id=session_id,
-            )
-        except (ImportError, Exception):
-            pass
 
         print(f"\n[GIT-GUARD] BLOCKED: origin/{branch} has {count} commit(s) not in HEAD:")
         for line in behind_lines[:5]:
@@ -220,34 +207,7 @@ def _parse_checkout_target(command):
 
 def _block_if_branch_claimed(session_id, project, branch):
     """Block if the branch is claimed by another agent."""
-    try:
-        from cairn_platform.orchestrator.coordination import get_manager
-        mgr = get_manager()
-        info = mgr.check_branch(project, branch)
-
-        if not info.get("claimed"):
-            return
-
-        if info.get("session_id") == session_id:
-            return  # Self-claim
-
-        owner = info.get("session_id", "unknown")[:20]
-        owner_task = info.get("task") or "unknown task"
-        print(
-            f"\n[BRANCH-GUARD] BLOCKED: branch '{branch}' is claimed by session {owner} ({owner_task}).\n"
-            f"  Options:\n"
-            f"    1. Wait for the other agent to finish\n"
-            f"    2. Ask other agent to call cairn_branch_release\n"
-            f"    3. Use a different feature branch"
-        )
-        sys.exit(2)
-
-    except ImportError:
-        pass  # Cairn not installed — fail-open
-    except SystemExit:
-        raise  # Re-raise sys.exit(2)
-    except Exception as e:
-        _log_hook_error("branch_guard", e)
+    return  # Branch-claim coordination was a Pro-only feature, removed.
 
 
 def _is_main_worktree(project):
@@ -284,36 +244,7 @@ def _block_if_directory_occupied(session_id, project, target_branch):
     if not current_branch or current_branch == target_branch:
         return  # Same branch or detached HEAD, no contention
 
-    try:
-        from cairn_platform.orchestrator.coordination import get_manager
-        mgr = get_manager()
-
-        info = mgr.check_branch(project, current_branch)
-        if not info.get("claimed"):
-            return  # Current branch not claimed, no contention
-
-        if info.get("session_id") == session_id:
-            return  # We own the claim — switching our own branch is fine
-
-        owner = info.get("session_id", "unknown")[:20]
-        owner_task = info.get("task") or "unknown task"
-        safe_target = target_branch.replace("/", "-")
-        print(
-            f"\n[WORKTREE-GUARD] BLOCKED: This working directory is occupied by another agent.\n"
-            f"  Branch '{current_branch}' is claimed by session {owner} ({owner_task}).\n"
-            f"  Switching branches in a shared directory causes lost work.\n"
-            f"\n  Use a worktree instead:\n"
-            f"    git worktree add .claude/worktrees/{safe_target} {target_branch}\n"
-            f"    cd .claude/worktrees/{safe_target}\n"
-        )
-        sys.exit(2)
-
-    except ImportError:
-        pass  # Cairn not installed — fail-open
-    except SystemExit:
-        raise  # Re-raise sys.exit(2)
-    except Exception as e:
-        _log_hook_error("worktree_guard", e)
+    return  # Branch-claim coordination was a Pro-only feature, removed.
 
 
 def _auto_claim_on_checkout(session_id, project, branch):
@@ -324,17 +255,7 @@ def _auto_claim_on_checkout(session_id, project, branch):
     """
     if not session_id or not branch or branch in ("main", "master", "HEAD"):
         return
-    try:
-        from cairn_platform.orchestrator.coordination import get_manager
-        mgr = get_manager()
-        mgr.claim_branch(
-            project=project, branch=branch,
-            session_id=session_id, task="checked out branch",
-        )
-    except ImportError:
-        pass
-    except Exception as e:
-        _log_hook_error("auto_claim_checkout", e)
+    return  # Branch-claim coordination was a Pro-only feature, removed.
 
 
 def _auto_claim_branch(command):
@@ -345,42 +266,12 @@ def _auto_claim_branch(command):
     project = os.environ.get("PROJECT_DIR", os.getcwd())
     if not project or not os.path.isdir(project):
         return
-    try:
-        branch = _get_current_branch(project)
-        if not branch or branch == "HEAD":
-            return
-        from cairn_platform.orchestrator.coordination import get_manager
-        mgr = get_manager()
-        mgr.claim_branch(project=project, branch=branch, session_id=session_id, task="pushing to remote")
-    except ImportError:
-        pass
-    except Exception as e:
-        _log_hook_error("auto_claim_branch", e)
+    return  # Branch-claim coordination was a Pro-only feature, removed.
 
 
 def _log_push_event(project, branch, session_id):
     """Log a push event to coordination."""
-    try:
-        from cairn_platform.orchestrator.coordination import get_manager
-        mgr = get_manager()
-
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True, text=True, timeout=5, cwd=project,
-        )
-        commit_hash = result.stdout.strip() if result.returncode == 0 else None
-
-        mgr.log_git_event(
-            project=project,
-            event_type="push",
-            commit_hash=commit_hash,
-            branch=branch,
-            session_id=session_id,
-        )
-    except ImportError:
-        pass
-    except Exception as e:
-        _log_hook_error("pre_push_guard_log", e)
+    return  # Git-event logging to coordination was a Pro-only feature, removed.
 
 
 if __name__ == "__main__":

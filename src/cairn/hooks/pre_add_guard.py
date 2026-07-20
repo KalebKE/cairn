@@ -170,7 +170,6 @@ def main():
         return
 
     session_id = os.environ.get("SESSION_ID", "")
-    project = os.environ.get("PROJECT_DIR", os.getcwd())
 
     # --- BLOCK broad staging unconditionally ---
     if _is_broad_add(command):
@@ -182,29 +181,6 @@ def main():
             "Stage specific files by name: git add <file1> <file2> ...",
         ]
 
-        # Try to suggest the agent's own claimed files
-        if session_id:
-            try:
-                from cairn_platform.orchestrator.coordination import get_manager
-                mgr = get_manager()
-                own_claims = mgr.get_session_claims(session_id)
-                own_files = own_claims.get("file_claims", [])
-                if own_files:
-                    # Convert absolute paths to relative
-                    rel_files = []
-                    for f in own_files:
-                        if project and f.startswith(project):
-                            rel_files.append(os.path.relpath(f, project))
-                        else:
-                            rel_files.append(f)
-                    lines.append("")
-                    lines.append(f"Your claimed files ({len(rel_files)}):")
-                    for rf in sorted(rel_files)[:20]:
-                        lines.append(f"  {rf}")
-                    if len(rel_files) > 20:
-                        lines.append(f"  +{len(rel_files) - 20} more")
-            except Exception:
-                pass
 
         print("\n".join(lines))
         exit(2)
@@ -217,77 +193,10 @@ def main():
     if not session_id:
         return  # No session tracking, can't check claims
 
-    try:
-        from cairn_platform.orchestrator.coordination import get_manager
-        mgr = get_manager()
+    # Per-file claim checking against peers was a Pro-only feature, removed
+    # here — the broad-staging block above is the only live guard.
+    return
 
-        own_claims = mgr.get_session_claims(session_id)
-        own_files = own_claims.get("file_claims", [])
-        if not own_files:
-            return  # No claims tracked, can't validate
-
-        sessions = mgr.list_sessions(auto_clean=True)
-        peers = [s for s in sessions if s.get("session_id") != session_id]
-        has_peers = len(peers) > 0
-
-        # Resolve add paths to check against claims
-        unclaimed = []
-        for path in add_paths:
-            # Expand globs/directories via git ls-files if it's a directory
-            import subprocess
-            try:
-                result = subprocess.run(
-                    ["git", "diff", "--name-only", "--", path],
-                    capture_output=True, text=True, timeout=5, cwd=project,
-                )
-                resolved_files = [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]
-            except Exception:
-                resolved_files = [path]
-
-            for rf in resolved_files:
-                abs_path = os.path.join(project, rf) if not os.path.isabs(rf) else rf
-                if abs_path not in own_files and rf not in own_files:
-                    unclaimed.append(rf)
-
-        if unclaimed:
-            if has_peers:
-                # BLOCK in multi-agent mode
-                lines = [
-                    f"[ADD-GUARD] BLOCKED: staging {len(unclaimed)} file(s) you didn't edit:",
-                ]
-                for f in unclaimed[:10]:
-                    lines.append(f"  {f}")
-                if len(unclaimed) > 10:
-                    lines.append(f"  +{len(unclaimed) - 10} more")
-                lines.append("")
-                lines.append("These files have pre-existing changes from another agent or prior session.")
-                lines.append("Stage only files you modified. Edit/Write auto-claims files for you.")
-
-                mgr.record_metric(
-                    "gate_blocked",
-                    session_id=session_id,
-                    metadata={"action": "add_unclaimed", "unclaimed_count": len(unclaimed)},
-                )
-                print("\n".join(lines))
-                exit(2)
-            else:
-                # WARN in solo mode
-                lines = [
-                    f"[ADD-GUARD] WARNING: staging {len(unclaimed)} file(s) not in your claim list:",
-                ]
-                for f in unclaimed[:10]:
-                    lines.append(f"  {f}")
-                if len(unclaimed) > 10:
-                    lines.append(f"  +{len(unclaimed) - 10} more")
-                lines.append("")
-                lines.append("Did you author these changes? If not, unstage with: git reset HEAD <file>")
-                print("\n".join(lines))
-                # Don't block in solo mode, just warn
-
-    except ImportError:
-        pass  # Coordination module not available
-    except Exception as e:
-        _log_hook_error("pre_add_guard", e)
 
 
 if __name__ == "__main__":

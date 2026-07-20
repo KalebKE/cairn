@@ -150,17 +150,8 @@ def _lookup_session_tasks(results: list) -> dict:
     session_ids = {r.get("session_id") for r in results if r.get("session_id")}
     if not session_ids:
         return {}
-    try:
-        from cairn_platform.orchestrator.coordination import get_manager
-        mgr = get_manager()
-        placeholders = ",".join("?" for _ in session_ids)
-        cursor = mgr._conn.execute(
-            f"SELECT session_id, task FROM coord_sessions WHERE session_id IN ({placeholders})",
-            list(session_ids),
-        )
-        return {row[0]: (row[1] or "")[:40] for row in cursor.fetchall() if row[1]}
-    except Exception:
-        return {}
+    # Session task lookup used the Pro-only coord_sessions table, removed.
+    return {}
 
 
 def _apply_confidence_boost(results: list) -> list:
@@ -488,44 +479,9 @@ def _track_git_commit(tool_input: str, tool_output: str, session_id: str, projec
     if "git commit" not in command:
         return
 
-    # Parse commit hash from output — git outputs lines like:
-    #   [main abc1234] Commit message here
-    match = re.search(r'\[[\w/.-]+\s+([0-9a-f]{7,12})\]', tool_output)
-    if not match:
-        return
-
-    commit_hash = match.group(1)
-
-    # Extract commit message from the same line
-    msg_match = re.search(r'\[[\w/.-]+\s+[0-9a-f]{7,12}\]\s+(.+)', tool_output)
-    message = msg_match.group(1).strip() if msg_match else ""
-
-    # Get current branch
-    import subprocess
-    try:
-        branch_result = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True, text=True, timeout=5, cwd=project,
-        )
-        branch = branch_result.stdout.strip() if branch_result.returncode == 0 else None
-    except Exception:
-        branch = None
-
-    try:
-        from cairn_platform.orchestrator.coordination import get_manager
-        mgr = get_manager()
-        mgr.log_git_event(
-            project=project,
-            event_type="commit",
-            commit_hash=commit_hash,
-            branch=branch,
-            message=message,
-            session_id=session_id,
-        )
-    except ImportError:
-        pass
-    except Exception as e:
-        _log_hook_error("track_git_commit", e)
+    # Post-commit coordination tracking was a Pro-only feature, removed —
+    # nothing to do once we know it was a git commit.
+    return
 
 
 def _check_protocol_reminder(session_id: str):

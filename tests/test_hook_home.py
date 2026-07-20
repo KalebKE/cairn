@@ -59,6 +59,20 @@ def test_no_hardcoded_cairn_home_in_hooks():
     assert not offenders, "hardcoded ~/.cairn (use _cairn_home()):\n" + "\n".join(offenders)
 
 
+def test_no_cairn_platform_imports_in_hooks():
+    """Static guard: the removed Pro coordination module must stay gone."""
+    import cairn.hooks as pkg
+
+    hooks_dir = Path(pkg.__file__).parent
+    offenders = [
+        f"{py.name}:{i}"
+        for py in sorted(hooks_dir.glob("*.py"))
+        for i, line in enumerate(py.read_text().splitlines(), 1)
+        if "cairn_platform" in line
+    ]
+    assert not offenders, "dead cairn_platform reference(s): " + ", ".join(offenders)
+
+
 def test_gate_marker_written_by_server_is_read_by_guard(monkeypatch, tmp_path):
     """Cross-process contract: writer (handlers) and reader (guard) agree on dir."""
     home = tmp_path / "h"

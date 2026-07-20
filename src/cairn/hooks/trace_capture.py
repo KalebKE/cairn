@@ -37,22 +37,9 @@ def main():
     if not session_id or not tool_name:
         return
 
-    try:
-        from cairn_platform.orchestrator.coordination import get_manager
-        mgr = get_manager()
-        tool_output = os.environ.get("TOOL_OUTPUT", "")
-        tool_input = os.environ.get("TOOL_INPUT", "")
-        mgr.log_audit(
-            session_id=session_id,
-            tool_name=tool_name,
-            arguments=None,
-            result_summary=tool_output[:200] if tool_output else None,
-            input_size=len(tool_input) if tool_input else 0,
-        )
-    except ImportError:
-        pass
-    except Exception as e:
-        _log_hook_error("trace_capture", e)
+    # Tool-audit logging (mgr.log_audit) was a Pro-only feature, removed in
+    # this build. Nothing to capture — no-op.
+    return
 
 
 def _log_timing(hook_name, elapsed_ms):

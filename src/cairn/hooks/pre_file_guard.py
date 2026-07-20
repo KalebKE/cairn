@@ -73,8 +73,6 @@ def main():
     if tool_name not in ("Edit", "Write", "NotebookEdit"):
         return
 
-    session_id = os.environ.get("SESSION_ID", "")
-
     try:
         input_data = json.loads(os.environ.get("TOOL_INPUT", "{}"))
     except (json.JSONDecodeError, TypeError):
@@ -84,40 +82,9 @@ def main():
     if not file_path:
         return
 
-    try:
-        from cairn_platform.orchestrator.coordination import get_manager
-        mgr = get_manager()
-        info = mgr.check_file(file_path)
-
-        if info.get("claimed"):
-            if session_id and info.get("session_id") == session_id:
-                # Self-claim — allow
-                return
-
-            # Claimed by different session — BLOCK
-            # Also blocks when no SESSION_ID (can't prove identity)
-            owner = info.get("session_id", "unknown")[:20]
-            owner_task = info.get("task") or "unknown task"
-            _block_claimed(file_path, owner, owner_task)
-
-        # Unclaimed — if we have a session_id, claim atomically to prevent TOCTOU race
-        if session_id:
-            result = mgr.claim_file(session_id, file_path, task="pre-edit guard claim")
-            if result.get("conflict"):
-                # Race lost — another agent claimed between check_file and claim_file
-                owner = result["claimed_by"][:20]
-                owner_task = result.get("task") or "unknown task"
-                _block_claimed(file_path, owner, owner_task)
-            # If claim failed for other reasons (session not registered, etc.), allow (fail-open)
-
-        # No session_id + unclaimed → allow (true single-agent, no claims exist)
-
-    except ImportError:
-        # Cairn not installed — fail-open
-        pass
-    except Exception as e:
-        # Any error — fail-open, never block when Cairn is unavailable
-        _log_hook_error("pre_file_guard", e)
+    # File-claim coordination (check_file/claim_file) was a Pro-only feature,
+    # removed in this build. Nothing to enforce — fail open.
+    return
 
 
 if __name__ == "__main__":

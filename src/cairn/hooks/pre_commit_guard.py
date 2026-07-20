@@ -68,10 +68,9 @@ def main():
     if not re.search(r"\bgit\s+commit\b", command):
         return
 
-    session_id = os.environ.get("SESSION_ID", "")
     project = os.environ.get("PROJECT_DIR", os.getcwd())
 
-    # --- Get staged files (needed by both scope check and peer check) ---
+    # --- Get staged files (for the scope check) ---
     import subprocess
 
     staged_files = []
@@ -137,98 +136,9 @@ def main():
                 print("\n".join(lines))
                 exit(2)
 
-    # --- Peer coordination check ---
-    try:
-        from cairn_platform.orchestrator.coordination import get_manager
+    # Peer/branch file-claim coordination was a Pro-only feature, removed in
+    # this build — the commit-scope check above is the only live guard.
 
-        mgr = get_manager()
-        sessions = mgr.list_sessions(auto_clean=True)
-        peers = [s for s in sessions if s.get("session_id") != session_id]
-
-        if not peers:
-            # Solo mode: still warn about unclaimed files
-            if staged_files and session_id:
-                try:
-                    own_claims = mgr.get_session_claims(session_id)
-                    own_files = own_claims.get("file_claims", [])
-                    if own_files:
-                        unclaimed_solo = []
-                        for sf in staged_files:
-                            full_path = os.path.join(project, sf)
-                            if full_path not in own_files and sf not in own_files:
-                                unclaimed_solo.append(sf)
-                        if unclaimed_solo:
-                            lines = [
-                                f"[COMMIT-SCOPE] WARNING: {len(unclaimed_solo)} staged file(s) not in your claim list:",
-                            ]
-                            for fname in unclaimed_solo[:10]:
-                                lines.append(f"  {fname}")
-                            if len(unclaimed_solo) > 10:
-                                lines.append(f"  +{len(unclaimed_solo) - 10} more")
-                            lines.append("")
-                            lines.append("Did you author these changes? If not, unstage with: git reset HEAD <file>")
-                            print("\n".join(lines))
-                except Exception:
-                    pass
-            return
-
-        # Check for peer-claimed file overlaps
-        overlapping = []
-        for peer in peers:
-            try:
-                claims = mgr.get_session_claims(peer["session_id"])
-                peer_files = claims.get("file_claims", [])
-                for sf in staged_files:
-                    full_path = os.path.join(project, sf)
-                    if full_path in peer_files or sf in peer_files:
-                        overlapping.append(
-                            (sf, peer["session_id"][:16])
-                        )
-            except Exception:
-                pass
-
-        # Check for files not in own claim list
-        unclaimed_by_self = []
-        try:
-            own_claims = mgr.get_session_claims(session_id)
-            own_files = own_claims.get("file_claims", [])
-            for sf in staged_files:
-                full_path = os.path.join(project, sf)
-                if full_path not in own_files and sf not in own_files:
-                    unclaimed_by_self.append(sf)
-        except Exception:
-            pass
-
-        # BLOCK if staging peer-claimed files
-        if overlapping:
-            lines = [f"[COMMIT-GUARD] BLOCKED: staging {len(overlapping)} file(s) claimed by other agent(s):"]
-            for fname, peer_sid in overlapping[:10]:
-                lines.append(f"  {fname} (claimed by {peer_sid})")
-            lines.append("")
-            lines.append("Unstage peer files with: git reset HEAD <file>")
-            lines.append("Or coordinate via cairn_send_message to request file release.")
-            print("\n".join(lines))
-            exit(2)
-
-        # Build info message
-        lines = [f"[COMMIT-COORD] {len(peers)} peer(s) active:"]
-        for p in peers:
-            p_task = (p.get("task") or "idle")[:50]
-            p_proj = os.path.basename(p.get("project", ""))
-            lines.append(f"  - {p['session_id'][:16]}: {p_task} [{p_proj}]")
-
-        if unclaimed_by_self:
-            lines.append(f"  ?? {len(unclaimed_by_self)} staged file(s) not in your claim list:")
-            for fname in unclaimed_by_self[:5]:
-                lines.append(f"     {os.path.basename(fname)}")
-            lines.append("  Consider: did you author these changes?")
-
-        print("\n".join(lines))
-
-    except ImportError:
-        pass  # Coordination module not available — fail open
-    except Exception as e:
-        _log_hook_error("pre_commit_guard", e)
 
 
 if __name__ == "__main__":
