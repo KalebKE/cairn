@@ -5,8 +5,9 @@ import math
 import os
 import re
 import time as _time
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 
 from ._types import (
@@ -37,6 +38,63 @@ STRONG_SIGNAL_GAP = float(os.environ.get("CAIRN_STRONG_SIGNAL_GAP", "0.15"))
 # Adaptive retry: when confidence < threshold, retry with relaxed params
 ADAPTIVE_RETRY_THRESHOLD = float(os.environ.get("CAIRN_ADAPTIVE_RETRY_THRESHOLD", "0.3"))
 ADAPTIVE_RETRY_RELAXATION = float(os.environ.get("CAIRN_ADAPTIVE_RETRY_RELAXATION", "0.6"))
+
+
+@dataclass
+class RetrievalContext:
+    """Per-query state for the retrieval pipeline.
+
+    Replaces threading 8 shared mutable containers + a dozen config values
+    through every ``_query_phase_*`` signature. Config fields are read-only
+    inputs; the container fields (all_results … query_emb) are the mutable
+    accumulators the phases populate in place. Each phase unpacks the fields
+    it needs at the top and otherwise operates on the same objects, so the
+    in-place mutation semantics (e.g. node_scores.clear()/update() in boost)
+    are preserved exactly.
+    """
+    # --- config (read-only inputs) ---
+    query_text: str
+    limit: int
+    session_id: Optional[str]
+    exclude_types: Optional[List[str]]
+    include_infrastructure: bool
+    project_path: str
+    scope: str
+    context_file: str
+    context_tags: Optional[List[str]]
+    temporal_range: Optional[tuple]
+    entity_id: Optional[str]
+    agent_type: Optional[str]
+    query_hint: Optional[str]
+    surfacing_context: Optional[SurfacingContext]
+    temporal_boost_only: bool
+    perspective: Optional[str]
+    valid_at: Optional[str]
+    query_intent: Any
+    skip_vec: bool
+    query_embedding: Optional[List[float]]
+    # weights (ALMA profile × intent × ctx-boost)
+    pw_vec: float
+    pw_text: float
+    pw_word: float
+    pw_ctx: float
+    pw_graph: float
+    # abstention thresholds (surfacing profile, relaxed on retry)
+    ctx_min_vec: float
+    ctx_min_text: float
+    ctx_min_composite: float
+    # cache / timing
+    cache_key: Any
+    now_mono: float
+    # --- mutable accumulators (populated in place by phases) ---
+    all_results: Dict[str, "MemoryResult"] = field(default_factory=dict)
+    node_scores: Dict[str, float] = field(default_factory=dict)
+    raw_vec_sims: Dict[str, float] = field(default_factory=dict)
+    vec_ranked: List[Tuple[str, float]] = field(default_factory=list)
+    text_ranked: List[Tuple[str, float]] = field(default_factory=list)
+    temporal_ranked: List[Tuple[str, float]] = field(default_factory=list)
+    entity_ranked: List[Tuple[str, float]] = field(default_factory=list)
+    query_emb: Optional[List[float]] = None
 
 
 class QueryMixin:
@@ -236,40 +294,40 @@ class QueryMixin:
         if skip_vec:
             self.stats["vec_skips"] = self.stats.get("vec_skips", 0) + 1
 
-        # --- Shared mutable state for retrieval phases ---
-        all_results: Dict[str, MemoryResult] = {}
-        node_scores: Dict[str, float] = {}
-        raw_vec_sims: Dict[str, float] = {}
-        vec_ranked: List[Tuple[str, float]] = []
-        text_ranked: List[Tuple[str, float]] = []
-        temporal_ranked: List[Tuple[str, float]] = []
-        entity_ranked: List[Tuple[str, float]] = []
+        # --- Build the per-query retrieval context (replaces threading 8
+        # shared containers + config through every phase signature) ---
+        ctx = RetrievalContext(
+            query_text=query_text, limit=limit, session_id=session_id,
+            exclude_types=exclude_types, include_infrastructure=include_infrastructure,
+            project_path=project_path, scope=scope, context_file=context_file,
+            context_tags=context_tags, temporal_range=temporal_range,
+            entity_id=entity_id, agent_type=agent_type, query_hint=query_hint,
+            surfacing_context=surfacing_context, temporal_boost_only=temporal_boost_only,
+            perspective=perspective, valid_at=valid_at, query_intent=query_intent,
+            skip_vec=skip_vec, query_embedding=query_embedding,
+            pw_vec=pw_vec, pw_text=pw_text, pw_word=pw_word, pw_ctx=pw_ctx, pw_graph=pw_graph,
+            ctx_min_vec=ctx_min_vec, ctx_min_text=ctx_min_text, ctx_min_composite=ctx_min_composite,
+            cache_key=_cache_key, now_mono=now_mono,
+        )
 
         # Seed with hot cache results (#2) — bypass RRF, merge later
         for hr in hot_results:
-            all_results[hr.id] = hr
-            node_scores[hr.id] = hr.relevance * 0.8
+            ctx.all_results[hr.id] = hr
+            ctx.node_scores[hr.id] = hr.relevance * 0.8
 
         # Phase 1: Vector similarity search
-        query_emb = self._query_phase_vec(
-            query_text, skip_vec, entity_id, limit,
-            all_results, vec_ranked, raw_vec_sims,
-            query_embedding=query_embedding,
-        )
+        ctx.query_emb = self._query_phase_vec(ctx)
 
         # Phase 2: FTS5 text search + temporal retrieval
-        self._query_phase_fts(
-            query_text, temporal_range, entity_id, limit,
-            all_results, text_ranked, temporal_ranked,
-        )
+        self._query_phase_fts(ctx)
 
         # Phase 2.5: Strong signal short-circuit (QMD-inspired)
         # When FTS5 finds a slam-dunk match, skip vector/reranker phases.
         if (
-            not skip_vec
-            and len(text_ranked) >= 2
-            and text_ranked[0][1] >= STRONG_SIGNAL_THRESHOLD
-            and (text_ranked[0][1] - text_ranked[1][1]) >= STRONG_SIGNAL_GAP
+            not ctx.skip_vec
+            and len(ctx.text_ranked) >= 2
+            and ctx.text_ranked[0][1] >= STRONG_SIGNAL_THRESHOLD
+            and (ctx.text_ranked[0][1] - ctx.text_ranked[1][1]) >= STRONG_SIGNAL_GAP
         ):
             self.stats["strong_signal_shortcuts"] = self.stats.get("strong_signal_shortcuts", 0) + 1
             # Knowledge-fit (fork): apply the same metadata scoring as the
@@ -277,28 +335,15 @@ class QueryMixin:
             # task_completion (weight 1.4) outrank a decision/lesson (2.0)
             # that would have won under fusion — the shortcut must not
             # bypass type weighting, feedback, priority, or decay.
-            for nid, score in text_ranked:
-                _node = all_results.get(nid)
+            for nid, score in ctx.text_ranked:
+                _node = ctx.all_results.get(nid)
                 if _node is not None:
                     score *= self._metadata_score_factor(_node)
-                node_scores[nid] = max(node_scores.get(nid, 0), score)
-            self._query_phase_filter(
-                all_results, node_scores,
-                exclude_types, include_infrastructure,
-                session_id, project_path, scope,
-                valid_at=valid_at,
-            )
+                ctx.node_scores[nid] = max(ctx.node_scores.get(nid, 0), score)
+            self._query_phase_filter(ctx)
             # Still run Phase 5 for agent_type filtering and contextual boosts
-            self._query_phase_boost(
-                query_text, query_emb, all_results, node_scores,
-                context_file, context_tags, temporal_range,
-                temporal_boost_only, pw_ctx, entity_id, agent_type,
-            )
-            _result, _conf = self._query_phase_assemble(
-                query_text, all_results, node_scores, raw_vec_sims,
-                limit, _cache_key, now_mono, session_id, query_hint,
-                ctx_min_vec, ctx_min_text, ctx_min_composite,
-            )
+            self._query_phase_boost(ctx)
+            _result, _conf = self._query_phase_assemble(ctx)
             # Strong-signal path: skip adaptive retry (already high confidence)
             self._record_timing("read", (_time.monotonic() - _t0_agency) * 1000)
             return _result
@@ -310,55 +355,32 @@ class QueryMixin:
         # an LLM round-trip (600ms-3s) there is the exact latency failure that
         # got hooks disabled historically. Explicit queries keep expansion.
         if expand_query and surfacing_context is None:
-            self._query_phase_expand(
-                query_text, query_intent, skip_vec, entity_id, limit,
-                all_results, vec_ranked, text_ranked, raw_vec_sims,
-            )
+            self._query_phase_expand(ctx)
 
         # Phase 2.6: Entity-match channel (tags/fact terms/project/entity_id).
         # After the strong-signal shortcut so slam-dunk exits don't pay for
         # it; the shortcut intentionally bypasses fusion entirely.
         try:
-            entity_ranked.extend(
-                self._entity_term_search(query_text, limit, all_results)
+            ctx.entity_ranked.extend(
+                self._entity_term_search(ctx.query_text, ctx.limit, ctx.all_results)
             )
         except Exception as e:
             logger.debug("Entity term channel failed: %s", e)
 
         # Phase 3: RRF score fusion + metadata scoring + word/tag overlap
-        self._query_phase_fusion(
-            query_text, all_results, node_scores,
-            vec_ranked, text_ranked, temporal_ranked, entity_ranked,
-            pw_vec, pw_text, pw_word, pw_ctx, perspective,
-        )
+        self._query_phase_fusion(ctx)
 
         # Phase 4: Filter expired, superseded, flagged, infrastructure, scoped
-        self._query_phase_filter(
-            all_results, node_scores,
-            exclude_types, include_infrastructure,
-            session_id, project_path, scope,
-            valid_at=valid_at,
-        )
+        self._query_phase_filter(ctx)
 
         # Phase 5: Contextual boosting + entity/agent filtering
-        self._query_phase_boost(
-            query_text, query_emb, all_results, node_scores,
-            context_file, context_tags, temporal_range,
-            temporal_boost_only, pw_ctx, entity_id, agent_type,
-        )
+        self._query_phase_boost(ctx)
 
         # Phase 6: Graph expansion + cross-encoder reranking
-        self._query_phase_rerank(
-            query_text, all_results, node_scores,
-            limit, pw_graph,
-        )
+        self._query_phase_rerank(ctx)
 
         # Phase 7: Assembly (sort, dedup, abstention, normalize, cache, track)
-        _result, _conf = self._query_phase_assemble(
-            query_text, all_results, node_scores, raw_vec_sims,
-            limit, _cache_key, now_mono, session_id, query_hint,
-            ctx_min_vec, ctx_min_text, ctx_min_composite,
-        )
+        _result, _conf = self._query_phase_assemble(ctx)
 
         # Phase 7.5: Adaptive retry — if confidence is low, retry with relaxed params.
         # Only retry when we got *some* results but they're low-quality.
@@ -404,18 +426,16 @@ class QueryMixin:
     # query() phase methods — extracted for readability
     # ------------------------------------------------------------------
 
-    def _query_phase_vec(
-        self,
-        query_text: str,
-        skip_vec: bool,
-        entity_id: Optional[str],
-        limit: int,
-        all_results: Dict[str, "MemoryResult"],
-        vec_ranked: List[Tuple[str, float]],
-        raw_vec_sims: Dict[str, float],
-        query_embedding: Optional[List[float]] = None,
-    ) -> Optional[List[float]]:
+    def _query_phase_vec(self, ctx: "RetrievalContext") -> Optional[List[float]]:
         """Phase 1: Vector similarity search with batch hydration."""
+        query_text = ctx.query_text
+        skip_vec = ctx.skip_vec
+        entity_id = ctx.entity_id
+        limit = ctx.limit
+        all_results = ctx.all_results
+        vec_ranked = ctx.vec_ranked
+        raw_vec_sims = ctx.raw_vec_sims
+        query_embedding = ctx.query_embedding
         query_emb: Optional[List[float]] = None
         if self._vec_available and not skip_vec:
             try:
@@ -466,17 +486,15 @@ class QueryMixin:
                 logger.debug(f"Vector search failed: {e}")
         return query_emb
 
-    def _query_phase_fts(
-        self,
-        query_text: str,
-        temporal_range: Optional[tuple],
-        entity_id: Optional[str],
-        limit: int,
-        all_results: Dict[str, "MemoryResult"],
-        text_ranked: List[Tuple[str, float]],
-        temporal_ranked: List[Tuple[str, float]],
-    ) -> None:
+    def _query_phase_fts(self, ctx: "RetrievalContext") -> None:
         """Phase 2: FTS5 text search + temporal retrieval channel."""
+        query_text = ctx.query_text
+        temporal_range = ctx.temporal_range
+        entity_id = ctx.entity_id
+        limit = ctx.limit
+        all_results = ctx.all_results
+        text_ranked = ctx.text_ranked
+        temporal_ranked = ctx.temporal_ranked
         text_mult = 4 if temporal_range else 3
         text_results = self._text_search(query_text, limit=limit * text_mult, entity_id=entity_id)
         for result in text_results:
@@ -591,24 +609,22 @@ class QueryMixin:
 
     _EXPANSION_WEIGHT_DISCOUNT = 0.8  # Expanded variants are weighted down vs original
 
-    def _query_phase_expand(
-        self,
-        query_text: str,
-        query_intent: Optional["QueryIntent"],
-        skip_vec: bool,
-        entity_id: Optional[str],
-        limit: int,
-        all_results: Dict[str, "MemoryResult"],
-        vec_ranked: List[Tuple[str, float]],
-        text_ranked: List[Tuple[str, float]],
-        raw_vec_sims: Dict[str, float],
-    ) -> None:
+    def _query_phase_expand(self, ctx: "RetrievalContext") -> None:
         """Phase 2.7: LLM-based query expansion (opt-in).
 
         Generates lexical and vector variants of the query via a fast LLM,
         then runs additional FTS5/vector searches for each variant. Results
         are merged into the existing ranked lists with a weight discount.
         """
+        query_text = ctx.query_text
+        query_intent = ctx.query_intent
+        skip_vec = ctx.skip_vec
+        entity_id = ctx.entity_id
+        limit = ctx.limit
+        all_results = ctx.all_results
+        vec_ranked = ctx.vec_ranked
+        text_ranked = ctx.text_ranked
+        raw_vec_sims = ctx.raw_vec_sims
         from cairn.query_expansion import is_expansion_enabled
 
         if not is_expansion_enabled():
@@ -720,21 +736,21 @@ class QueryMixin:
             logger.debug("Query expansion phase failed: %s", e)
 
     def _query_phase_fusion(
-        self,
-        query_text: str,
-        all_results: Dict[str, "MemoryResult"],
-        node_scores: Dict[str, float],
-        vec_ranked: List[Tuple[str, float]],
-        text_ranked: List[Tuple[str, float]],
-        temporal_ranked: List[Tuple[str, float]],
-        entity_ranked: List[Tuple[str, float]],
-        pw_vec: float,
-        pw_text: float,
-        pw_word: float,
-        pw_ctx: float,
-        perspective: Optional[str],
+        self, ctx: "RetrievalContext"
     ) -> None:
         """Phase 3: Reciprocal Rank Fusion + metadata scoring + word/preference boosts."""
+        query_text = ctx.query_text
+        all_results = ctx.all_results
+        node_scores = ctx.node_scores
+        vec_ranked = ctx.vec_ranked
+        text_ranked = ctx.text_ranked
+        temporal_ranked = ctx.temporal_ranked
+        entity_ranked = ctx.entity_ranked
+        pw_vec = ctx.pw_vec
+        pw_text = ctx.pw_text
+        pw_word = ctx.pw_word
+        pw_ctx = ctx.pw_ctx
+        perspective = ctx.perspective
         # RRF fusion
         rrf_channels = [vec_ranked, text_ranked]
         rrf_weights = [pw_vec, pw_text]
@@ -796,18 +812,16 @@ class QueryMixin:
                 if etype == "user_preference":
                     node_scores[nid] *= 1.5  # Extra boost for preference matches
 
-    def _query_phase_filter(
-        self,
-        all_results: Dict[str, "MemoryResult"],
-        node_scores: Dict[str, float],
-        exclude_types: Optional[List[str]],
-        include_infrastructure: bool,
-        session_id: Optional[str],
-        project_path: str,
-        scope: str,
-        valid_at: Optional[str] = None,
-    ) -> None:
+    def _query_phase_filter(self, ctx: "RetrievalContext") -> None:
         """Phase 4: Filter expired, superseded, flagged, infrastructure, and scoped results."""
+        all_results = ctx.all_results
+        node_scores = ctx.node_scores
+        exclude_types = ctx.exclude_types
+        include_infrastructure = ctx.include_infrastructure
+        session_id = ctx.session_id
+        project_path = ctx.project_path
+        scope = ctx.scope
+        valid_at = ctx.valid_at
         # Filter expired
         for nid in list(all_results.keys()):
             if all_results[nid].is_expired():
@@ -883,21 +897,19 @@ class QueryMixin:
                     del all_results[nid]
                     node_scores.pop(nid, None)
 
-    def _query_phase_boost(
-        self,
-        query_text: str,
-        query_emb: Optional[List[float]],
-        all_results: Dict[str, "MemoryResult"],
-        node_scores: Dict[str, float],
-        context_file: str,
-        context_tags: Optional[List[str]],
-        temporal_range: Optional[tuple],
-        temporal_boost_only: bool,
-        pw_ctx: float,
-        entity_id: Optional[str],
-        agent_type: Optional[str],
-    ) -> None:
+    def _query_phase_boost(self, ctx: "RetrievalContext") -> None:
         """Phase 5: Contextual re-ranking, cluster boost, temporal constraint, entity/agent filter."""
+        query_text = ctx.query_text
+        query_emb = ctx.query_emb
+        all_results = ctx.all_results
+        node_scores = ctx.node_scores
+        context_file = ctx.context_file
+        context_tags = ctx.context_tags
+        temporal_range = ctx.temporal_range
+        temporal_boost_only = ctx.temporal_boost_only
+        pw_ctx = ctx.pw_ctx
+        entity_id = ctx.entity_id
+        agent_type = ctx.agent_type
         # Contextual re-ranking
         if context_file or context_tags:
             context_set: Set[str] = set()
@@ -1041,15 +1053,13 @@ class QueryMixin:
             node_scores.clear()
             node_scores.update(_filtered)
 
-    def _query_phase_rerank(
-        self,
-        query_text: str,
-        all_results: Dict[str, "MemoryResult"],
-        node_scores: Dict[str, float],
-        limit: int,
-        pw_graph: float,
-    ) -> None:
+    def _query_phase_rerank(self, ctx: "RetrievalContext") -> None:
         """Phase 6: Graph expansion + cross-encoder reranking + plugin modifiers."""
+        query_text = ctx.query_text
+        all_results = ctx.all_results
+        node_scores = ctx.node_scores
+        limit = ctx.limit
+        pw_graph = ctx.pw_graph
         # Multi-hop graph traversal with spreading activation (P6).
         _MAX_GRAPH_HOPS = 2
         _HOP_DECAY = 0.4  # Score multiplier per hop (0.4 for hop 1, 0.16 for hop 2)
@@ -1209,25 +1219,23 @@ class QueryMixin:
             return retry_results
         return None
 
-    def _query_phase_assemble(
-        self,
-        query_text: str,
-        all_results: Dict[str, "MemoryResult"],
-        node_scores: Dict[str, float],
-        raw_vec_sims: Dict[str, float],
-        limit: int,
-        _cache_key: Optional[tuple],
-        now_mono: float,
-        session_id: Optional[str],
-        query_hint: Optional[str],
-        ctx_min_vec: float,
-        ctx_min_text: float,
-        ctx_min_composite: float,
-    ) -> Tuple[List["MemoryResult"], float]:
+    def _query_phase_assemble(self, ctx: "RetrievalContext") -> Tuple[List["MemoryResult"], float]:
         """Phase 7: Sort, dedup, abstention, normalize, cache, and track results.
 
         Returns (results, confidence) where confidence is avg top-3 relevance.
         """
+        query_text = ctx.query_text
+        all_results = ctx.all_results
+        node_scores = ctx.node_scores
+        raw_vec_sims = ctx.raw_vec_sims
+        limit = ctx.limit
+        _cache_key = ctx.cache_key
+        now_mono = ctx.now_mono
+        session_id = ctx.session_id
+        query_hint = ctx.query_hint
+        ctx_min_vec = ctx.ctx_min_vec
+        ctx_min_text = ctx.ctx_min_text
+        ctx_min_composite = ctx.ctx_min_composite
         from ._types import (
             _QUERY_CACHE_MAX,
             _SESSION_CACHE_MAX,
