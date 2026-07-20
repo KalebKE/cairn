@@ -596,7 +596,7 @@ class TestUATExportImport:
             event_type="decision",
         )
         filepath = str(tmp_cairn_dir / "test-export.json")
-        with patch("cairn.server.handlers._SAFE_EXPORT_DIR", tmp_cairn_dir):
+        with patch("cairn.server.handlers._safe_export_dir", return_value=tmp_cairn_dir):
             result = await HANDLERS["cairn_backup"]({
                 "mode": "export",
                 "filepath": filepath,
@@ -616,7 +616,7 @@ class TestUATExportImport:
         )
         filepath = str(tmp_cairn_dir / "roundtrip.json")
 
-        with patch("cairn.server.handlers._SAFE_EXPORT_DIR", tmp_cairn_dir):
+        with patch("cairn.server.handlers._safe_export_dir", return_value=tmp_cairn_dir):
             # Export
             result = await HANDLERS["cairn_backup"]({
                 "mode": "export",
@@ -639,7 +639,7 @@ class TestUATExportImport:
     @pytest.mark.asyncio
     async def test_import_nonexistent_file(self, tmp_cairn_dir):
         """UAT: Importing a nonexistent file returns error."""
-        with patch("cairn.server.handlers._SAFE_EXPORT_DIR", tmp_cairn_dir):
+        with patch("cairn.server.handlers._safe_export_dir", return_value=tmp_cairn_dir):
             result = await HANDLERS["cairn_backup"]({
                 "mode": "import",
                 "filepath": str(tmp_cairn_dir / "nonexistent.json"),

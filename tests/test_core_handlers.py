@@ -849,8 +849,9 @@ class TestCairnMaintain:
         from cairn.server.handlers import handle_cairn_maintain
         _store("Memory to backup and restore")
 
-        # _SAFE_EXPORT_DIR is hardcoded to ~/.cairn, so use a path under that
-        safe_dir = Path.home() / ".cairn"
+        # Export must land under the configured CAIRN_HOME (cairn_home()).
+        from cairn.paths import cairn_home
+        safe_dir = cairn_home()
         safe_dir.mkdir(parents=True, exist_ok=True)
         export_path = str(safe_dir / "test_core_handlers_backup.json")
 
@@ -1208,9 +1209,9 @@ class TestDeployGateTracking:
     @staticmethod
     def _clean_gate(session_id):
         """Remove gate files for a test session to ensure clean state."""
-        from cairn.server.handlers import _GATE_DIR
+        from cairn.server.handlers import _gate_dir
         for suffix in (".gate", ".coord"):
-            f = _GATE_DIR / f"{session_id}{suffix}"
+            f = _gate_dir() / f"{session_id}{suffix}"
             if f.exists():
                 f.unlink()
 
@@ -1220,10 +1221,10 @@ class TestDeployGateTracking:
 
         Returns dict of {path: contents} for restoration.
         """
-        from cairn.server.handlers import _GATE_DIR
+        from cairn.server.handlers import _gate_dir
         stashed = {}
         for name in ("default.gate", "default.coord"):
-            f = _GATE_DIR / name
+            f = _gate_dir() / name
             if f.exists():
                 stashed[f] = f.read_text()
                 f.unlink()

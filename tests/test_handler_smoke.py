@@ -263,7 +263,7 @@ class TestCairnBackup:
     async def test_export_to_valid_path(self, tmp_cairn_dir):
         """Export to a valid path under the safe directory."""
         filepath = str(tmp_cairn_dir / "export-test.json")
-        with patch("cairn.server.handlers._SAFE_EXPORT_DIR", tmp_cairn_dir):
+        with patch("cairn.server.handlers._safe_export_dir", return_value=tmp_cairn_dir):
             result = await HANDLERS["cairn_backup"]({
                 "mode": "export",
                 "filepath": filepath,
@@ -279,7 +279,7 @@ class TestCairnBackup:
         await HANDLERS["cairn_store"]({"content": "Roundtrip memory for backup"})
         filepath = str(tmp_cairn_dir / "roundtrip.json")
 
-        with patch("cairn.server.handlers._SAFE_EXPORT_DIR", tmp_cairn_dir):
+        with patch("cairn.server.handlers._safe_export_dir", return_value=tmp_cairn_dir):
             export_result = await HANDLERS["cairn_backup"]({
                 "mode": "export",
                 "filepath": filepath,

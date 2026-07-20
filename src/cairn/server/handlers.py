@@ -21,15 +21,23 @@ logger = logging.getLogger("cairn.server.handlers")
 # ---------------------------------------------------------------------------
 # Deploy gate tracking — file-based so it works in daemon + fallback modes
 # ---------------------------------------------------------------------------
-_GATE_DIR = cairn_home() / "gates"
+
+def _gate_dir() -> Path:
+    """Directory for deploy-gate / coord markers.
+
+    Resolved at call time via ``cairn_home()`` so it follows a CAIRN_HOME
+    change; freezing it at import time was a stale-state bug (a relocated
+    home, or a per-case home in tests, kept writing to the original dir).
+    """
+    return cairn_home() / "gates"
 
 
 def _mark_deploy_gate_cleared(session_id: str | None = None) -> None:
     """Mark the deploy gate as cleared for a session."""
     try:
-        _GATE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        _gate_dir().mkdir(parents=True, exist_ok=True, mode=0o700)
         key = session_id or "default"
-        gate_file = _GATE_DIR / f"{key}.gate"
+        gate_file = _gate_dir() / f"{key}.gate"
         gate_file.write_text(str(time.time()))
     except Exception as e:
         logger.debug("Deploy gate write failed: %s", e)
@@ -38,9 +46,9 @@ def _mark_deploy_gate_cleared(session_id: str | None = None) -> None:
 def _mark_coord_status_checked(session_id: str | None = None) -> None:
     """Mark that coord_status was checked for a session."""
     try:
-        _GATE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        _gate_dir().mkdir(parents=True, exist_ok=True, mode=0o700)
         key = session_id or "default"
-        gate_file = _GATE_DIR / f"{key}.coord"
+        gate_file = _gate_dir() / f"{key}.coord"
         gate_file.write_text(str(time.time()))
     except Exception as e:
         logger.debug("Coord status write failed: %s", e)
@@ -51,8 +59,8 @@ def _is_coord_status_checked(session_id: str | None = None, max_age_sec: int = 1
     try:
         candidates = []
         if session_id:
-            candidates.append(_GATE_DIR / f"{session_id}.coord")
-        candidates.append(_GATE_DIR / "default.coord")
+            candidates.append(_gate_dir() / f"{session_id}.coord")
+        candidates.append(_gate_dir() / "default.coord")
         for gate_file in candidates:
             if gate_file.exists():
                 ts = float(gate_file.read_text().strip())
@@ -100,8 +108,8 @@ def is_deploy_gate_cleared(session_id: str | None = None, max_age_sec: int = 180
         decision_ok = False
         candidates = []
         if session_id:
-            candidates.append(_GATE_DIR / f"{session_id}.gate")
-        candidates.append(_GATE_DIR / "default.gate")
+            candidates.append(_gate_dir() / f"{session_id}.gate")
+        candidates.append(_gate_dir() / "default.gate")
         for gate_file in candidates:
             if gate_file.exists():
                 ts = float(gate_file.read_text().strip())
@@ -131,8 +139,11 @@ def _clamp_int(value, default: int, min_val: int = 1, max_val: int = 10000) -> i
         return default
 
 
-# Safe directory for export/import operations
-_SAFE_EXPORT_DIR = cairn_home()
+# Safe directory for export/import operations — resolved at call time so it
+# follows CAIRN_HOME (import-time freezing was a stale-state bug).
+def _safe_export_dir() -> Path:
+    """Root that export/import paths must stay under, resolved at call time."""
+    return cairn_home()
 
 
 # ---------------------------------------------------------------------------
@@ -1051,9 +1062,9 @@ async def handle_cairn_backup(arguments: dict) -> dict:
     # Path validation: restrict to ~/.cairn/ to prevent sensitive file access.
     # Use os.path.realpath() for TOCTOU-safe symlink resolution.
     resolved = Path(os.path.realpath(Path(filepath).expanduser())).resolve()
-    safe_dir = Path(os.path.realpath(_SAFE_EXPORT_DIR)).resolve()
+    safe_dir = Path(os.path.realpath(_safe_export_dir())).resolve()
     if not str(resolved).startswith(str(safe_dir) + "/") and resolved.parent != safe_dir:
-        return mcp_error(f"Path must be under {_SAFE_EXPORT_DIR}")
+        return mcp_error(f"Path must be under {_safe_export_dir()}")
 
     if mode == "import":
         if not resolved.exists():
@@ -1841,7 +1852,7 @@ async def handle_cairn_protocol(arguments: dict) -> dict:
         try:
             session_id = os.environ.get("SESSION_ID", "")
             if session_id:
-                marker = _GATE_DIR.parent / f"session-{session_id}.protocol"
+                marker = _gate_dir().parent / f"session-{session_id}.protocol"
                 marker.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
                 marker.write_text("loaded")
         except Exception as e:
@@ -1867,7 +1878,7 @@ async def handle_cairn_protocol(arguments: dict) -> dict:
         try:
             session_id = os.environ.get("SESSION_ID", "")
             if session_id:
-                marker = _GATE_DIR.parent / f"session-{session_id}.protocol"
+                marker = _gate_dir().parent / f"session-{session_id}.protocol"
                 marker.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
                 marker.write_text("loaded")
         except Exception:
@@ -1913,7 +1924,7 @@ async def handle_cairn_briefing(arguments: dict) -> dict:
         try:
             sid = session_id or os.environ.get("SESSION_ID", "")
             if sid:
-                marker = _GATE_DIR.parent / f"session-{sid}.protocol"
+                marker = _gate_dir().parent / f"session-{sid}.protocol"
                 marker.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
                 marker.write_text("loaded")
         except Exception as e:
