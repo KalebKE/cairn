@@ -445,14 +445,29 @@ class SQLiteStoreBase:
             check_same_thread=False,
             isolation_level="IMMEDIATE",
         )
-        conn.execute("PRAGMA journal_mode=WAL")
+        # busy_timeout FIRST so every later pragma/statement waits on contention
+        # rather than failing immediately (parallel worktrees open the shared DB
+        # concurrently — see test_concurrent_multiprocess).
+        conn.execute("PRAGMA busy_timeout=30000")  # 30s
+        # journal_mode=WAL is a persistent DB property, so only the first opener
+        # of a fresh DB actually switches it. SQLite does NOT reliably honor
+        # busy_timeout for the journal-mode change, so concurrent first-openers
+        # can get "database is locked" on the switch — retry briefly.
+        for _attempt in range(60):
+            try:
+                conn.execute("PRAGMA journal_mode=WAL")
+                break
+            except sqlite3.OperationalError as e:
+                if "locked" in str(e).lower() or "busy" in str(e).lower():
+                    time.sleep(0.05)
+                    continue
+                raise
         conn.execute("PRAGMA synchronous=NORMAL")
         # HTTP daemon mode: reduce memory footprint (mmap regions + page cache
         # were consuming ~200 MB across connections; see vmmap analysis).
         _is_http = os.environ.get("CAIRN_TRANSPORT", "").lower() == "http"
         conn.execute(f"PRAGMA cache_size={-4000 if _is_http else -16000}")  # 4MB / 16MB
         conn.execute(f"PRAGMA mmap_size={0 if _is_http else 33554432}")  # 0 / 32MB
-        conn.execute("PRAGMA busy_timeout=30000")  # 30s — handles multi-process contention
         conn.execute("PRAGMA journal_size_limit=8388608")  # 8MB — cap WAL growth under multi-process contention
         conn.execute("PRAGMA foreign_keys=ON")
 
