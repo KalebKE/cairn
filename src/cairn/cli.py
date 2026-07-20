@@ -1124,19 +1124,6 @@ def cmd_status(args):
     use_json = _use_json(args)
     data = {}
 
-    # Resolve installed extension capabilities once. Core never trusts a local
-    # license function to unlock Free-tier behavior.
-    has_unlimited_memory = False
-    try:
-        from cairn.plugins import has_capability
-        has_unlimited_memory = has_capability("unlimited_memory")
-    except Exception as e:
-        logger.debug("Capability check failed in status: %s", e)
-    data["tier"] = "pro" if has_unlimited_memory else "free"
-    if not has_unlimited_memory:
-        data["soft_cap"] = 2000
-        data["hard_cap"] = 5000
-
     # SQLite database (primary backend)
     db_path = CAIRN_DIR / "cairn.db"
     if db_path.exists():
@@ -1775,13 +1762,6 @@ def cmd_validate(args):
             "memories",
             "edges",
             "entity_index",
-            "coord_sessions",
-            "coord_file_claims",
-            "coord_branch_claims",
-            "coord_intents",
-            "coord_snapshots",
-            "coord_tasks",
-            "coord_audit",
         ]
     )
     table_rows = []

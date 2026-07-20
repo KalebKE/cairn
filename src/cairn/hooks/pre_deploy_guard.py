@@ -100,10 +100,10 @@ def _is_marker_fresh(session_id, suffix, max_age_sec=1800):
 def _is_gate_cleared(session_id, max_age_sec=1800):
     """Gate requires a recent decision-query marker.
 
-    The coord_status / action_claim requirements came from the removed Pro
+    The extra peer-coordination requirements came from the removed Pro
     coordination module and had no writers in this build, so they are no longer
     gated — mirroring handlers.is_deploy_gate_cleared, which requires only the
-    decision marker when Pro is unavailable.
+    decision-query marker.
     """
     return _is_marker_fresh(session_id, "gate", max_age_sec)
 

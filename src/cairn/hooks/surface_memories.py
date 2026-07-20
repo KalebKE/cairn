@@ -9,12 +9,10 @@ Triggered on Edit/Write/NotebookEdit/Bash. Provides:
 import json
 import os
 import re
-import sys
 import time
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 
 def _cairn_home():
@@ -141,16 +139,7 @@ def _ext_to_tags(file_path: str) -> list:
     return _EXT_MAP.get(ext, [])
 
 
-def _lookup_session_tasks(results: list) -> dict:
-    """Look up session task descriptions for memory results.
-
-    Returns a dict mapping session_id -> task description (truncated).
-    Uses coord_sessions table; returns empty dict on failure.
-    """
-    session_ids = {r.get("session_id") for r in results if r.get("session_id")}
-    if not session_ids:
-        return {}
-    # Session task lookup used the Pro-only coord_sessions table, removed.
+    # Session task lookup was a Pro-only feature, removed.
     return {}
 
 
@@ -166,24 +155,6 @@ def _apply_confidence_boost(results: list) -> list:
     return results
 
 
-def _check_nudge(edit_count: int, tool_calls: list) -> Optional[str]:
-    """Return a nudge string if agent is missing a critical tool call, or None."""
-    normalized = set()
-    for t in tool_calls:
-        if t.startswith("mcp__cairn__"):
-            normalized.add(t.replace("mcp__cairn__", ""))
-        else:
-            normalized.add(t)
-
-    # Nudge 1: 10+ edits without cairn_file_check
-    if edit_count >= 10 and "cairn_file_check" not in normalized:
-        return "[Cairn] Tip: You've made {n} edits without checking for file conflicts. Consider `cairn_file_check(file_path=...)` before your next edit.".format(n=edit_count)
-
-    # Nudge 2: 30+ tool calls without cairn_reflect
-    if len(tool_calls) >= 30 and "cairn_reflect" not in normalized:
-        return "[Cairn] Tip: Consider running `cairn_reflect()` to check for contradictions or stale memories in your current work area."
-
-    return None
 
 
 def _surface_for_edit(file_path: str, session_id: str, project: str, count_surfacing: bool = True):
@@ -208,8 +179,7 @@ def _surface_for_edit(file_path: str, session_id: str, project: str, count_surfa
         if not results:
             return
 
-        # Look up session task descriptions for source attribution
-        session_tasks = _lookup_session_tasks(results)
+        session_tasks = {}  # session-task attribution was a Pro-only feature, removed
 
         print(f"\n[MEMORY] Relevant context for {filename}:")
         for r in results:
@@ -514,19 +484,6 @@ def _check_protocol_reminder(session_id: str):
         pass
 
 
-def _get_session_tool_names_fast(session_id: str) -> list:
-    """Fast read of tool names from coord_audit for this session."""
-    try:
-        import sqlite3
-        db = sqlite3.connect(str(_cairn_home() / "cairn.db"), timeout=1)
-        rows = db.execute(
-            "SELECT tool_name FROM coord_audit WHERE session_id = ? ORDER BY call_index",
-            (session_id,),
-        ).fetchall()
-        db.close()
-        return [r[0] for r in rows]
-    except Exception:
-        return []
 
 
 def main():
@@ -562,18 +519,6 @@ def main():
         if file_path:
             _surface_for_edit(file_path, session_id, project, count_surfacing=False)
 
-    # Mid-session utilization nudge (once per threshold crossing)
-    try:
-        nudge_marker = _cairn_home() / f"session-{session_id}.nudged"
-        if session_id and not nudge_marker.exists():
-            tool_calls_list = _get_session_tool_names_fast(session_id)
-            edit_count = sum(1 for t in tool_calls_list if t in ("Edit", "Write", "NotebookEdit"))
-            nudge = _check_nudge(edit_count, tool_calls_list)
-            if nudge:
-                print(nudge, file=sys.stderr)
-                nudge_marker.touch()  # Only nudge once per session
-    except Exception:
-        pass
 
     # Auto-capture errors from Bash failures + track git commits
     if tool_name == "Bash" and tool_output:

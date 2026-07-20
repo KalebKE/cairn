@@ -201,35 +201,8 @@ _write_timestamps: collections.deque = collections.deque()
 
 _WRITE_TOOLS = frozenset({
     # Core write tools (handlers.py)
-    "cairn_store", "cairn_checkpoint", "cairn_remind",
+    "cairn_store", "cairn_remember", "cairn_checkpoint", "cairn_remind",
     "cairn_memory", "cairn_maintain", "cairn_reflect",
-    # Coord session lifecycle
-    "cairn_session_register", "cairn_session_heartbeat",
-    "cairn_session_deregister", "cairn_session_snapshot",
-    # Coord file/branch claims
-    "cairn_file_claim", "cairn_file_release",
-    "cairn_branch_claim", "cairn_branch_release",
-    # Coord intents
-    "cairn_intent_announce",
-    # Coord tasks
-    "cairn_task_create", "cairn_task_claim", "cairn_task_complete",
-    "cairn_task_fail", "cairn_task_cancel", "cairn_task_progress",
-    "cairn_task_deps", "cairn_update_task",
-    # Coord messaging
-    "cairn_send_message", "cairn_handoff",
-    # Coord actions
-    "cairn_action_claim", "cairn_action_complete",
-    # Coord goals & decisions
-    "cairn_goal", "cairn_goal_link",
-    "cairn_decision_register", "cairn_decision_revoke",
-    # Coord council
-    "cairn_council",
-    # Pro features (not in schemas but used by extended handlers)
-    "cairn_profile_set", "cairn_entity_create", "cairn_entity_update",
-    "cairn_ingest_document",
-    "cairn_oracle_record", "cairn_oracle_resolve",
-    "cairn_oracle_analyze", "cairn_oracle_status",
-    "cairn_track_statement", "cairn_resolve_outcome",
     # Condensed mode meta-tool (rate-limited by inner tool name in call_tool)
     "cairn_call",
 })

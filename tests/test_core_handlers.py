@@ -53,11 +53,6 @@ def _fresh_state(tmp_cairn_dir):
     """Reset bridge + coordination for each test."""
     from cairn.bridge import reset_memory
     reset_memory()
-    try:
-        import cairn_platform.orchestrator.coordination as coord
-        coord._manager = None
-    except (ImportError, AttributeError):
-        pass
     yield
 
 
@@ -206,7 +201,6 @@ class TestCairnQuery:
             def count_memories(self):
                 return 999_999  # far past the old 2,000 soft cap
 
-        monkeypatch.setattr(handlers, "_full_retrieval_available", lambda: False)
         monkeypatch.setattr(bridge, "_get_store", lambda: StoreStub())
         monkeypatch.setattr(
             bridge, "query", lambda **kwargs: f"semantic results for {kwargs['query_text']}"
@@ -1203,24 +1197,22 @@ class TestDeployGateTracking:
     def _clean_gate(session_id):
         """Remove gate files for a test session to ensure clean state."""
         from cairn.server.handlers import _gate_dir
-        for suffix in (".gate", ".coord"):
-            f = _gate_dir() / f"{session_id}{suffix}"
-            if f.exists():
-                f.unlink()
+        f = _gate_dir() / f"{session_id}.gate"
+        if f.exists():
+            f.unlink()
 
     @staticmethod
     def _stash_and_clean_defaults():
-        """Temporarily remove default gate files to prevent fallback interference.
+        """Temporarily remove the default gate file to prevent fallback interference.
 
         Returns dict of {path: contents} for restoration.
         """
         from cairn.server.handlers import _gate_dir
         stashed = {}
-        for name in ("default.gate", "default.coord"):
-            f = _gate_dir() / name
-            if f.exists():
-                stashed[f] = f.read_text()
-                f.unlink()
+        f = _gate_dir() / "default.gate"
+        if f.exists():
+            stashed[f] = f.read_text()
+            f.unlink()
         return stashed
 
     @staticmethod
@@ -1229,30 +1221,19 @@ class TestDeployGateTracking:
         for path, contents in stashed.items():
             path.write_text(contents)
 
-    def test_gate_mark_and_check(self, tmp_cairn_dir, monkeypatch):
-        from cairn.server import handlers
+    def test_gate_mark_and_check(self, tmp_cairn_dir):
         from cairn.server.handlers import (
             _mark_deploy_gate_cleared,
-            _mark_coord_status_checked,
             is_deploy_gate_cleared,
         )
-        # Force Pro-available path so the test exercises the two-gate requirement.
-        # In the public package, _is_pro_available() returns False and the
-        # coord-status check is skipped, making this test's assertions invalid.
-        monkeypatch.setattr(handlers, "_is_pro_available", lambda: True)
         sid = "test-gate-core-handlers-mc"
         self._clean_gate(sid)
         stashed = self._stash_and_clean_defaults()
         try:
-            # Initially should not be cleared
+            # Initially not cleared
             assert not is_deploy_gate_cleared(sid)
-
-            # Mark only deploy gate -- still not cleared (needs coord too)
+            # Marking the decision gate clears it (decision-query is the only gate)
             _mark_deploy_gate_cleared(sid)
-            assert not is_deploy_gate_cleared(sid)
-
-            # Mark coord status too -- now should be cleared
-            _mark_coord_status_checked(sid)
             assert is_deploy_gate_cleared(sid)
         finally:
             self._clean_gate(sid)
@@ -1261,14 +1242,12 @@ class TestDeployGateTracking:
     def test_gate_default_session(self, tmp_cairn_dir):
         from cairn.server.handlers import (
             _mark_deploy_gate_cleared,
-            _mark_coord_status_checked,
             is_deploy_gate_cleared,
         )
         sid = "test-gate-default-ch"
         self._clean_gate(sid)
         try:
             _mark_deploy_gate_cleared(sid)
-            _mark_coord_status_checked(sid)
             assert is_deploy_gate_cleared(sid)
         finally:
             self._clean_gate(sid)
@@ -1276,29 +1255,13 @@ class TestDeployGateTracking:
     def test_gate_expired(self, tmp_cairn_dir):
         from cairn.server.handlers import (
             _mark_deploy_gate_cleared,
-            _mark_coord_status_checked,
             is_deploy_gate_cleared,
         )
         sid = "test-gate-expired-ch"
         self._clean_gate(sid)
         try:
             _mark_deploy_gate_cleared(sid)
-            _mark_coord_status_checked(sid)
             # With max_age_sec=0, the gate should appear expired
             assert not is_deploy_gate_cleared(sid, max_age_sec=0)
         finally:
             self._clean_gate(sid)
-
-    def test_coord_status_checked(self, tmp_cairn_dir):
-        from cairn.server.handlers import _mark_coord_status_checked, _is_coord_status_checked
-        sid = "test-coord-status-ch"
-        self._clean_gate(sid)
-        stashed = self._stash_and_clean_defaults()
-        try:
-            assert not _is_coord_status_checked(sid)
-            _mark_coord_status_checked(sid)
-            assert _is_coord_status_checked(sid)
-            assert not _is_coord_status_checked(sid, max_age_sec=0)
-        finally:
-            self._clean_gate(sid)
-            self._restore_defaults(stashed)

@@ -685,11 +685,7 @@ class TestCmdValidateTableAllowlist:
         """_VALID_TABLES used in cmd_validate should be a known set of table names."""
         # The allowlist is defined inline — verify that the expected tables
         # are all identifiers (no SQL injection vectors).
-        expected = {
-            "memories", "edges", "entity_index",
-            "coord_sessions", "coord_file_claims", "coord_branch_claims",
-            "coord_intents", "coord_snapshots", "coord_tasks", "coord_audit",
-        }
+        expected = {"memories", "edges", "entity_index"}
         for tbl in expected:
             assert tbl.isidentifier(), f"{tbl} is not a valid identifier"
 

@@ -14,49 +14,8 @@ def _cairn_home():
     return Path(os.environ.get("CAIRN_HOME", str(Path.home() / ".cairn")))
 
 
-# Critical tools that agents SHOULD call at least once per session.
-# Scored: each hit = 1 point, total / len = percentage.
-CRITICAL_TOOLS = [
-    "cairn_reflect",          # Contradiction/stale detection — 0 calls ever
-    "cairn_decision_query",   # Check active decisions before domain work — 0 calls
-    "cairn_file_check",       # Conflict check before edits — 5 calls / 931 edits
-    "cairn_checkpoint",       # Save state at 70% context — 4 calls ever
-    "cairn_coord_status",     # Check peers before taking work — 10 calls
-]
-
-
-def _build_utilization_report(tool_calls: list) -> dict:
-    """Score which critical Cairn tools the agent used this session."""
-    called = set(tool_calls)
-    # Normalize: strip mcp__cairn__ prefix if present
-    normalized = set()
-    for t in called:
-        if t.startswith("mcp__cairn__"):
-            normalized.add(t.replace("mcp__cairn__", ""))
-        else:
-            normalized.add(t)
-
-    missed = [t for t in CRITICAL_TOOLS if t not in normalized]
-    hit_count = len(CRITICAL_TOOLS) - len(missed)
-    score = round(hit_count / len(CRITICAL_TOOLS) * 100) if CRITICAL_TOOLS else 100
-
-    return {"score": score, "missed": missed, "hit": hit_count, "total": len(CRITICAL_TOOLS)}
-
-
-def _get_session_tool_names(session_id: str) -> list:
-    """Get list of tool names called in this session from coord_audit."""
-    try:
-        import sqlite3
-        db_path = str(_cairn_home() / "cairn.db")
-        conn = sqlite3.connect(db_path, timeout=2)
-        rows = conn.execute(
-            "SELECT DISTINCT tool_name FROM coord_audit WHERE session_id = ?",
-            (session_id,),
-        ).fetchall()
-        conn.close()
-        return [r[0] for r in rows]
-    except Exception:
-        return []
+# Tool-utilization scoring depended on the removed Pro coordination audit —
+# with no live source of session-wide tool calls, the scorecard was removed.
 
 
 def _log_hook_error(hook_name, error):
@@ -190,57 +149,6 @@ def _print_activity_report(session_id: str):
     except Exception:
         pass
 
-    # Utilization scorecard
-    try:
-        tool_names = _get_session_tool_names(session_id)
-        report = _build_utilization_report(tool_names)
-        if report["missed"]:
-            print(f"  Utilization: {report['score']}% ({report['hit']}/{report['total']} critical tools used)")
-            print(f"  Unused: {', '.join(report['missed'])}")
-    except Exception:
-        pass
-
-    # Pro upgrade nudge -- frequency scales with memory count (closer to limit = more frequent)
-    try:
-        pro_available = False
-        try:
-            from cairn.plugins import has_capability
-            pro_available = has_capability("pro_tools")
-        except Exception:
-            pass
-        if not pro_available:
-            mem_count = 0
-            try:
-                from cairn.bridge import _get_store
-                _s = _get_store()
-                mem_count = _s.node_count() if hasattr(_s, 'node_count') else 0
-            except Exception:
-                pass
-
-            from cairn.telemetry import _load as _telem_load
-            tdata = _telem_load()
-            session_total = tdata.get("sessions", {}).get("total", 0)
-
-            # Graduated urgency: more memories = more frequent nudge
-            show = False
-            if mem_count >= 1800:
-                show = True  # every session
-                print(f"  {mem_count:,}/2,000 memories -- approaching free tier limit")
-                print("  Search quality degrades at 2,000. Run 'cairn upgrade' for unlimited.")
-            elif mem_count >= 1500:
-                show = session_total % 3 == 0  # every 3rd session
-                if show:
-                    print(f"  {mem_count:,}/2,000 memories (75%). Pro removes limits. Run 'cairn upgrade'")
-            elif mem_count >= 1000:
-                show = session_total % 5 == 0  # every 5th session
-                if show:
-                    print(f"  {mem_count:,}/2,000 memories. Pro: unlimited + coordination + routing. Run 'cairn upgrade'")
-            elif mem_count >= 500:
-                show = session_total % 10 == 0  # every 10th session
-                if show:
-                    print("  Pro: coordination, routing, and 96 more tools. Run 'cairn upgrade'")
-    except Exception:
-        pass
 
 
 def _build_summary(session_id: str, project: str) -> str:

@@ -28,19 +28,6 @@ async def test_gate_dir_follows_cairn_home_change(monkeypatch, tmp_path):
     assert not (a / "gates" / "s2.gate").exists()
 
 
-@pytest.mark.asyncio
-async def test_coord_status_marker_follows_cairn_home_change(monkeypatch, tmp_path):
-    a = tmp_path / "homeA"
-    b = tmp_path / "homeB"
-    a.mkdir()
-    b.mkdir()
-
-    monkeypatch.setenv("CAIRN_HOME", str(b))
-    handlers._mark_coord_status_checked("s1")
-    assert (b / "gates" / "s1.coord").exists(), "coord marker did not follow CAIRN_HOME"
-    assert handlers._is_coord_status_checked("s1") is True
-
-
 def test_safe_export_dir_follows_cairn_home_change(monkeypatch, tmp_path):
     b = tmp_path / "homeB"
     b.mkdir()

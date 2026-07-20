@@ -131,37 +131,17 @@ class StoreMixin:
                 row = self._exec("SELECT COUNT(*) FROM memories").fetchone()
                 count = row[0] if row and row[0] is not None else 0
                 max_nodes = self._apply_grandfather(base_max, count)
-                unlimited_memory = False
-                try:
-                    from cairn.plugins import has_capability
-                    unlimited_memory = has_capability("unlimited_memory")
-                except Exception as e:
-                    logger.debug("Capability check failed in capacity: %s", e)
                 if count >= max_nodes:
-                    if unlimited_memory:
-                        raise StorageError(
-                            f"Node count ({count:,}) has reached the limit ({max_nodes:,}). "
-                            "Run cairn_consolidate to prune, or raise CAIRN_MAX_NODES env var."
-                        )
                     raise StorageError(
-                        f"Free tier write cap reached ({count:,}/{max_nodes:,} memories). "
-                        "Existing memories remain queryable. "
-                        "Upgrade to Pro for unlimited memories + full retrieval quality: "
-                        "https://tracqi.com/pro?ref=core-hard-cap"
+                        f"Node count ({count:,}) has reached the limit ({max_nodes:,}). "
+                        "Run cairn_consolidate to prune, or raise CAIRN_MAX_NODES env var."
                     )
                 if count >= int(max_nodes * 0.9):
-                    if unlimited_memory:
-                        self._capacity_warning = (
-                            f"Memory store is at {count:,}/{max_nodes:,} "
-                            f"({count*100//max_nodes}% capacity). "
-                            "Consider running cairn_consolidate or cairn_compact to free space."
-                        )
-                    else:
-                        self._capacity_warning = (
-                            f"Free tier near write cap ({count:,}/{max_nodes:,}). "
-                            "Upgrade to Pro to remove the cap: "
-                            "https://tracqi.com/pro?ref=core-cap-warning"
-                        )
+                    self._capacity_warning = (
+                        f"Memory store is at {count:,}/{max_nodes:,} "
+                        f"({count*100//max_nodes}% capacity). "
+                        "Consider running cairn_consolidate or cairn_compact to free space."
+                    )
                     logger.warning(self._capacity_warning)
             self._invalidate_query_cache(new_content=content)
             # Canonical dedup (#6): catch reformatted duplicates

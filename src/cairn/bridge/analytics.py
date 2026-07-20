@@ -175,12 +175,12 @@ def diagnostic_report(days: int = 30) -> Dict[str, Any]:
     }
 
     # --- 2. Tool Usage ------------------------------------------------------
-    # Coordination audit (coord_audit) was a Pro-only feature; unavailable here.
+    # Tool-usage auditing was a Pro-only feature; unavailable here.
     tool_usage: Dict[str, Any] = {"top_tools": [], "cairn_tools": [], "total_calls": 0, "cairn_calls": 0}
     report["tool_usage"] = tool_usage
 
     # --- 3. Session Activity ------------------------------------------------
-    # coord_sessions was a Pro-only feature; unavailable here.
+    # Session activity tracking was a Pro-only feature; unavailable here.
     sessions: Dict[str, Any] = {"total": 0, "week": 0, "month": 0}
     report["sessions"] = sessions
 

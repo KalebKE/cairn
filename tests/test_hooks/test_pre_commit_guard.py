@@ -1,8 +1,8 @@
 """Behavioral tests for pre_commit_guard's commit-scope / atomicity check.
 
 The guard blocks (exit 2) oversized multi-directory commits and allows small,
-focused ones. (Its peer-coordination half imports the removed cairn_platform
-module and fails open, so only the scope check is live in this build.)
+focused ones. (Its peer-coordination half was removed with the Pro coordination
+module, so only the scope check remains.)
 
 Uses a real temporary git repo so the two `git diff --cached` calls the guard
 makes return genuine staged-file / shortstat output.

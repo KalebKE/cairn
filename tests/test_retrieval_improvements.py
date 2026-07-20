@@ -96,7 +96,7 @@ class TestRRFFusion:
 
 
 # ============================================================================
-# Entity-match channel (in-repo replacement for cairn_platform entity
+# Entity-match channel (in-repo replacement for the removed Pro entity
 # expansion): query tokens vs metadata tags/fact terms/project/entity_id,
 # fused as a fourth RRF channel at modest weight.
 # ============================================================================

@@ -43,69 +43,19 @@ def _mark_deploy_gate_cleared(session_id: str | None = None) -> None:
         logger.debug("Deploy gate write failed: %s", e)
 
 
-def _mark_coord_status_checked(session_id: str | None = None) -> None:
-    """Mark that coord_status was checked for a session."""
-    try:
-        _gate_dir().mkdir(parents=True, exist_ok=True, mode=0o700)
-        key = session_id or "default"
-        gate_file = _gate_dir() / f"{key}.coord"
-        gate_file.write_text(str(time.time()))
-    except Exception as e:
-        logger.debug("Coord status write failed: %s", e)
-
-
-def _is_coord_status_checked(session_id: str | None = None, max_age_sec: int = 1800) -> bool:
-    """Check if coord_status was checked recently (default: 30 min)."""
-    try:
-        candidates = []
-        if session_id:
-            candidates.append(_gate_dir() / f"{session_id}.coord")
-        candidates.append(_gate_dir() / "default.coord")
-        for gate_file in candidates:
-            if gate_file.exists():
-                ts = float(gate_file.read_text().strip())
-                if (time.time() - ts) < max_age_sec:
-                    return True
-        return False
-    except Exception as e:
-        logger.debug("Coord status read failed: %s", e)
-        return False  # fail-closed
-
-
-def _is_pro_available() -> bool:
-    """Check if an installed extension advertises Pro capabilities."""
-    try:
-        from cairn.plugins import has_capability
-        return has_capability("pro_tools")
-    except Exception:
-        return False
-
-
 # Fork note: the upstream "nagware" block (periodic $19/mo upsell messages
 # appended to cairn_query/cairn_welcome/cairn_store results) was removed —
 # this is a self-hosted install; injecting marketing copy into model context
 # costs tokens and pollutes answers.
 
 
-def _full_retrieval_available() -> bool:
-    """Check whether a full-retrieval extension capability is available."""
-    try:
-        from cairn.plugins import has_capability
-        return has_capability("full_retrieval")
-    except Exception:
-        return False
-
-
 def is_deploy_gate_cleared(session_id: str | None = None, max_age_sec: int = 1800) -> bool:
     """Check if the deploy gate was cleared recently (default: 30 min).
 
-    Requires cairn_query(event_type="decision") to have been called.
-    Also requires cairn_coord_status if pro modules are available.
-    Checks session-specific markers first, then 'default'.
+    Requires cairn_query(event_type="decision") to have been called this
+    session. Checks session-specific markers first, then 'default'.
     """
     try:
-        # Check decision query marker
-        decision_ok = False
         candidates = []
         if session_id:
             candidates.append(_gate_dir() / f"{session_id}.gate")
@@ -114,17 +64,8 @@ def is_deploy_gate_cleared(session_id: str | None = None, max_age_sec: int = 180
             if gate_file.exists():
                 ts = float(gate_file.read_text().strip())
                 if (time.time() - ts) < max_age_sec:
-                    decision_ok = True
-                    break
-
-        if not decision_ok:
-            return False
-
-        # Require coord_status check only when pro is available
-        if not _is_pro_available():
-            return True
-
-        return _is_coord_status_checked(session_id, max_age_sec)
+                    return True
+        return False
     except Exception as e:
         logger.debug("Deploy gate check failed: %s", e)
         return False  # fail-closed for safety
@@ -2273,12 +2214,6 @@ async def handle_cairn_stats(arguments: dict) -> dict:
             from cairn.server.tool_schemas import TOOL_SCHEMAS
 
             all_tools = {t["name"] for t in TOOL_SCHEMAS}
-            try:
-                from cairn.server.coord_schemas import COORD_TOOL_SCHEMAS
-
-                all_tools |= {t["name"] for t in COORD_TOOL_SCHEMAS}
-            except ImportError:
-                pass
 
             tracker = UsageTracker()
             try:

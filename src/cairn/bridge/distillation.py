@@ -83,7 +83,7 @@ def distill_trajectory(session_id: str) -> Optional[str]:
 
         trajectory_text = "\n".join(mem_lines[:20])  # Cap at 20 entries
 
-        # Tool sequence came from coord_audit (a Pro-only feature); unavailable here.
+        # Tool sequence came from a Pro-only audit feature; unavailable here.
         tool_sequence = ""
 
         # LLM distillation call
