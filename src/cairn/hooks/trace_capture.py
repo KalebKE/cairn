@@ -10,9 +10,14 @@ from datetime import datetime
 from pathlib import Path
 
 
+def _cairn_home():
+    """Cairn data home, honoring CAIRN_HOME (env-inline; no cairn import)."""
+    return Path(os.environ.get("CAIRN_HOME", str(Path.home() / ".cairn")))
+
+
 def _log_hook_error(hook_name, error):
     try:
-        log_path = Path.home() / ".cairn" / "hooks.log"
+        log_path = _cairn_home() / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         tb = traceback.format_exc()
@@ -52,7 +57,7 @@ def main():
 
 def _log_timing(hook_name, elapsed_ms):
     try:
-        log_path = Path.home() / ".cairn" / "hooks.log"
+        log_path = _cairn_home() / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         data = f"[{timestamp}] {hook_name}: OK ({elapsed_ms:.0f}ms)\n"

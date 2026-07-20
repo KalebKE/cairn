@@ -9,6 +9,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
+def _cairn_home():
+    """Cairn data home, honoring CAIRN_HOME (env-inline; no cairn import)."""
+    return Path(os.environ.get("CAIRN_HOME", str(Path.home() / ".cairn")))
+
+
 # Critical tools that agents SHOULD call at least once per session.
 # Scored: each hit = 1 point, total / len = percentage.
 CRITICAL_TOOLS = [
@@ -42,7 +47,7 @@ def _get_session_tool_names(session_id: str) -> list:
     """Get list of tool names called in this session from coord_audit."""
     try:
         import sqlite3
-        db_path = os.path.expanduser("~/.cairn/cairn.db")
+        db_path = str(_cairn_home() / "cairn.db")
         conn = sqlite3.connect(db_path, timeout=2)
         rows = conn.execute(
             "SELECT DISTINCT tool_name FROM coord_audit WHERE session_id = ?",
@@ -56,7 +61,7 @@ def _get_session_tool_names(session_id: str) -> list:
 
 def _log_hook_error(hook_name, error):
     try:
-        log_path = Path.home() / ".cairn" / "hooks.log"
+        log_path = _cairn_home() / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         tb = traceback.format_exc()
@@ -83,7 +88,7 @@ def _get_activity_counts(session_id: str) -> dict:
 def _get_surfaced_count(session_id: str) -> int:
     """Read and clean up the surfacing counter file."""
     try:
-        marker = Path.home() / ".cairn" / f"session-{session_id}.surfaced"
+        marker = _cairn_home() / f"session-{session_id}.surfaced"
         if marker.exists():
             count = marker.stat().st_size
             marker.unlink()
@@ -98,7 +103,7 @@ def _get_surfaced_details(session_id: str) -> tuple:
     unique_ids = 0
     unique_files = 0
     try:
-        json_path = Path.home() / ".cairn" / f"session-{session_id}.surfaced.json"
+        json_path = _cairn_home() / f"session-{session_id}.surfaced.json"
         if json_path.exists():
             data = json.loads(json_path.read_text())
             all_ids = set()
@@ -339,7 +344,7 @@ def _auto_feedback_on_surfaced(session_id: str):
     """Auto-record 'helpful' feedback for memories surfaced during active work."""
     if not session_id:
         return
-    json_path = Path.home() / ".cairn" / f"session-{session_id}.surfaced.json"
+    json_path = _cairn_home() / f"session-{session_id}.surfaced.json"
     if not json_path.exists():
         return
     try:
@@ -473,7 +478,7 @@ def main():
 
 def _log_timing(hook_name, elapsed_ms):
     try:
-        log_path = Path.home() / ".cairn" / "hooks.log"
+        log_path = _cairn_home() / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         data = f"[{timestamp}] {hook_name}: OK ({elapsed_ms:.0f}ms)\n"

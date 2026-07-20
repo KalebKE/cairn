@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Cairn PreToolUse hook — Deploy guard (fallback mode).
 
-BLOCKS deployment commands unless the coordination gate was cleared by
-calling cairn_query(event_type="decision") in the current session.
+BLOCKS deployment commands unless the decision gate was cleared by calling
+cairn_query(event_type="decision") in the current session.
 
 Exit code 2 = block the tool call.
 Exit code 0 = allow.
@@ -26,12 +26,24 @@ _DEPLOY_PATTERNS = [
 ]
 
 _DEPLOY_RE = [re.compile(p) for p in _DEPLOY_PATTERNS]
-_GATE_DIR = Path.home() / ".cairn" / "gates"
+
+
+def _cairn_home() -> Path:
+    """Cairn data home, honoring CAIRN_HOME.
+
+    Mirrors cairn.paths.cairn_home() but reads the env inline so this fast
+    guard never pays the heavy ``cairn`` package import.
+    """
+    return Path(os.environ.get("CAIRN_HOME", str(Path.home() / ".cairn")))
+
+
+def _gate_dir() -> Path:
+    return _cairn_home() / "gates"
 
 
 def _log_hook_error(hook_name, error):
     try:
-        log_path = Path.home() / ".cairn" / "hooks.log"
+        log_path = _cairn_home() / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         tb = traceback.format_exc()
@@ -47,7 +59,7 @@ def _log_hook_error(hook_name, error):
 
 def _log_timing(hook_name, elapsed_ms):
     try:
-        log_path = Path.home() / ".cairn" / "hooks.log"
+        log_path = _cairn_home() / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         data = f"[{timestamp}] {hook_name}: OK ({elapsed_ms:.0f}ms)\n"
@@ -71,9 +83,10 @@ def _is_marker_fresh(session_id, suffix, max_age_sec=1800):
     """Check if a gate marker file is recent."""
     try:
         candidates = []
+        gate_dir = _gate_dir()
         if session_id:
-            candidates.append(_GATE_DIR / f"{session_id}.{suffix}")
-        candidates.append(_GATE_DIR / f"default.{suffix}")
+            candidates.append(gate_dir / f"{session_id}.{suffix}")
+        candidates.append(gate_dir / f"default.{suffix}")
         for gate_file in candidates:
             if gate_file.exists():
                 ts = float(gate_file.read_text().strip())
@@ -84,17 +97,15 @@ def _is_marker_fresh(session_id, suffix, max_age_sec=1800):
         return False
 
 
-def _is_action_claimed(session_id, max_age_sec=1800):
-    """Check if this session has claimed the deploy action."""
-    return _is_marker_fresh(session_id, "action_claim", max_age_sec)
-
-
 def _is_gate_cleared(session_id, max_age_sec=1800):
-    """Gate requires decision query, coord_status check, AND action claim."""
-    decision_ok = _is_marker_fresh(session_id, "gate", max_age_sec)
-    coord_ok = _is_marker_fresh(session_id, "coord", max_age_sec)
-    action_ok = _is_action_claimed(session_id, max_age_sec)
-    return decision_ok and coord_ok and action_ok
+    """Gate requires a recent decision-query marker.
+
+    The coord_status / action_claim requirements came from the removed Pro
+    coordination module and had no writers in this build, so they are no longer
+    gated — mirroring handlers.is_deploy_gate_cleared, which requires only the
+    decision marker when Pro is unavailable.
+    """
+    return _is_marker_fresh(session_id, "gate", max_age_sec)
 
 
 def main():
@@ -119,20 +130,11 @@ def main():
         print("[DEPLOY-GATE] Gate cleared. Proceeding.")
         return
 
-    # BLOCK — identify which marker is missing
-    missing = []
-    if not _is_marker_fresh(session_id, "gate"):
-        missing.append("cairn_query(event_type='decision', query='<target area>')")
-    if not _is_marker_fresh(session_id, "coord"):
-        missing.append("cairn_coord_status")
-    if not _is_action_claimed(session_id):
-        missing.append("cairn_action_claim(action_type='deploy', action_target='vercel:<project>')")
-
-    print("\n[DEPLOY-GATE] BLOCKED: Coordination gate not cleared.")
-    print("  You MUST run ALL of these before deploying:")
-    for m in missing:
-        print(f"    - {m}  (NOT YET RUN)")
-    print("  This prevents duplicate deploys across agents.")
+    # BLOCK — the decision-query gate has not been cleared for this session.
+    print("\n[DEPLOY-GATE] BLOCKED: no recent decision query for this session.")
+    print("  Run this before deploying:")
+    print("    - cairn_query(event_type='decision', query='<target area>')  (NOT YET RUN)")
+    print("  This surfaces prior decisions/constraints before an irreversible deploy.")
     sys.exit(2)
 
 

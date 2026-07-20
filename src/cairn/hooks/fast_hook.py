@@ -13,6 +13,12 @@ import os
 import socket
 import sys
 import time
+from pathlib import Path
+
+
+def _cairn_home():
+    """Cairn data home, honoring CAIRN_HOME (env-inline; no cairn import)."""
+    return Path(os.environ.get("CAIRN_HOME", str(Path.home() / ".cairn")))
 
 # Windows uses TCP loopback; Unix uses domain socket
 if sys.platform == "win32":
@@ -20,7 +26,7 @@ if sys.platform == "win32":
     HOOK_HOST = "127.0.0.1"
     HOOK_PORT = 19876
 else:
-    SOCK_PATH = os.path.expanduser("~/.cairn/hook.sock")
+    SOCK_PATH = str(_cairn_home() / "hook.sock")
     HOOK_HOST = None
     HOOK_PORT = None
 
@@ -220,8 +226,7 @@ def _log_timing(hook_name, elapsed_ms, mode):
     """Log hook timing to ~/.cairn/hooks.log."""
     try:
         from datetime import datetime
-        from pathlib import Path
-        log_path = Path.home() / ".cairn" / "hooks.log"
+        log_path = _cairn_home() / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         timestamp = datetime.now().isoformat(timespec="seconds")
         data = f"[{timestamp}] fast_hook/{hook_name}: OK ({elapsed_ms:.0f}ms, {mode})\n"

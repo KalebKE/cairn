@@ -6,6 +6,12 @@ import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
+
+
+def _cairn_home():
+    """Cairn data home, honoring CAIRN_HOME (env-inline; no cairn import)."""
+    return Path(os.environ.get("CAIRN_HOME", str(Path.home() / ".cairn")))
 
 
 def _resolve_python() -> str:
@@ -50,7 +56,7 @@ _DEFAULT_PROJECTS = _detect_default_projects()
 def _load_projects():
     """Load project configs: built-in Cairn + optional ~/.cairn/post_edit_projects.json."""
     projects = dict(_DEFAULT_PROJECTS)
-    config_path = os.path.expanduser("~/.cairn/post_edit_projects.json")
+    config_path = str(_cairn_home() / "post_edit_projects.json")
     if os.path.exists(config_path):
         try:
             with open(config_path) as f:

@@ -16,6 +16,11 @@ from datetime import datetime
 from pathlib import Path
 
 
+def _cairn_home():
+    """Cairn data home, honoring CAIRN_HOME (env-inline; no cairn import)."""
+    return Path(os.environ.get("CAIRN_HOME", str(Path.home() / ".cairn")))
+
+
 _MAX_LOG_BYTES = 5 * 1024 * 1024  # 5 MB cap
 
 
@@ -62,7 +67,7 @@ def _rotate_log_if_needed(log_path: Path):
 def _log_hook_error(hook_name: str, error: Exception):
     """Log hook errors to ~/.cairn/hooks.log for debugging."""
     try:
-        log_path = Path.home() / ".cairn" / "hooks.log"
+        log_path = _cairn_home() / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         _rotate_log_if_needed(log_path)
         timestamp = datetime.now().isoformat(timespec="seconds")
@@ -79,7 +84,7 @@ def _log_hook_error(hook_name: str, error: Exception):
 
 def _log_timing(hook_name: str, elapsed_ms: float):
     try:
-        log_path = Path.home() / ".cairn" / "hooks.log"
+        log_path = _cairn_home() / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         _rotate_log_if_needed(log_path)
         timestamp = datetime.now().isoformat(timespec="seconds")
@@ -98,7 +103,7 @@ def _track_surfaced_ids(session_id: str, file_path: str, memory_ids: list):
     if not session_id or not memory_ids:
         return
     try:
-        json_path = Path.home() / ".cairn" / f"session-{session_id}.surfaced.json"
+        json_path = _cairn_home() / f"session-{session_id}.surfaced.json"
         existing = {}
         if json_path.exists():
             existing = json.loads(json_path.read_text())
@@ -287,7 +292,7 @@ def _surface_for_edit(file_path: str, session_id: str, project: str, count_surfa
         # Track surfacing count for session activity summary (edits only, not reads)
         if count_surfacing and session_id:
             try:
-                marker = Path.home() / ".cairn" / f"session-{session_id}.surfaced"
+                marker = _cairn_home() / f"session-{session_id}.surfaced"
                 with open(marker, "a") as f:
                     f.write("x")
             except Exception:
@@ -531,7 +536,7 @@ def _check_protocol_reminder(session_id: str):
     if not session_id:
         return
     try:
-        cairn_dir = Path.home() / ".cairn"
+        cairn_dir = _cairn_home()
         protocol_marker = cairn_dir / f"session-{session_id}.protocol"
         if protocol_marker.exists():
             return  # Already called this session
@@ -556,7 +561,7 @@ def _get_session_tool_names_fast(session_id: str) -> list:
     """Fast read of tool names from coord_audit for this session."""
     try:
         import sqlite3
-        db = sqlite3.connect(os.path.expanduser("~/.cairn/cairn.db"), timeout=1)
+        db = sqlite3.connect(str(_cairn_home() / "cairn.db"), timeout=1)
         rows = db.execute(
             "SELECT tool_name FROM coord_audit WHERE session_id = ? ORDER BY call_index",
             (session_id,),
@@ -602,7 +607,7 @@ def main():
 
     # Mid-session utilization nudge (once per threshold crossing)
     try:
-        nudge_marker = Path.home() / ".cairn" / f"session-{session_id}.nudged"
+        nudge_marker = _cairn_home() / f"session-{session_id}.nudged"
         if session_id and not nudge_marker.exists():
             tool_calls_list = _get_session_tool_names_fast(session_id)
             edit_count = sum(1 for t in tool_calls_list if t in ("Edit", "Write", "NotebookEdit"))
