@@ -2216,134 +2216,141 @@ def cmd_embed_daemon(args):
         print("Usage: cairn embed-daemon {start|stop|status}")
 
 
-def cmd_doctor(args):
-    """Verify Cairn installation: import, model, database, MCP, hooks."""
-    from cairn.cli_ui import print_header, print_section, print_status_line, print_summary
+class _DoctorReport:
+    """Accumulates doctor check results and prints them as they land.
 
-    use_json = _use_json(args)
-    checks = []
-    errors = 0
-    warnings = 0
+    Carries the ok/fail/warn/section behaviour that ``cmd_doctor`` used to
+    express as nested closures, so each diagnostic can live in its own
+    ``_doctor_check_*`` function while sharing one result tally.
+    """
 
-    def ok(msg):
-        checks.append({"status": "ok", "message": msg})
-        if not use_json:
-            print_status_line("ok", msg)
+    def __init__(self, use_json: bool):
+        from cairn.cli_ui import print_section, print_status_line
+        self.use_json = use_json
+        self.checks = []
+        self.errors = 0
+        self.warnings = 0
+        self._print_section = print_section
+        self._print_status_line = print_status_line
 
-    def fail(msg):
-        nonlocal errors
-        errors += 1
-        checks.append({"status": "fail", "message": msg})
-        if not use_json:
-            print_status_line("fail", msg)
+    def ok(self, msg):
+        self.checks.append({"status": "ok", "message": msg})
+        if not self.use_json:
+            self._print_status_line("ok", msg)
 
-    def warn(msg):
-        nonlocal warnings
-        warnings += 1
-        checks.append({"status": "warn", "message": msg})
-        if not use_json:
-            print_status_line("warn", msg)
+    def fail(self, msg):
+        self.errors += 1
+        self.checks.append({"status": "fail", "message": msg})
+        if not self.use_json:
+            self._print_status_line("fail", msg)
 
-    if not use_json:
-        print_header("Cairn Doctor")
+    def warn(self, msg):
+        self.warnings += 1
+        self.checks.append({"status": "warn", "message": msg})
+        if not self.use_json:
+            self._print_status_line("warn", msg)
 
-    # 1. Package import
-    if not use_json:
-        print_section("Package Import")
+    def section(self, title):
+        if not self.use_json:
+            self._print_section(title)
+
+
+def _doctor_check_imports(report) -> bool:
+    """Package + entry-point imports. Returns False if cairn itself is fatal."""
+    report.section("Package Import")
     try:
         import cairn
 
-        ok(f"cairn {cairn.__version__} imported")
+        report.ok(f"cairn {cairn.__version__} imported")
     except Exception as e:
-        fail(f"Cannot import cairn: {e}")
-        if use_json:
-            print(json.dumps({"checks": checks, "errors": errors, "warnings": warnings}, indent=2))
-        else:
-            print(f"\n{errors} error(s), {warnings} warning(s)")
-        sys.exit(1)
+        report.fail(f"Cannot import cairn: {e}")
+        return False
 
     try:
         from cairn.bridge import status as _s, auto_capture as _ac, query as _q  # noqa: F811,F401
 
-        ok("cairn.bridge imported (status, auto_capture, query)")
+        report.ok("cairn.bridge imported (status, auto_capture, query)")
     except Exception as e:
-        fail(f"Cannot import cairn.bridge: {e}")
+        report.fail(f"Cannot import cairn.bridge: {e}")
 
     try:
         from cairn.server.handlers import HANDLERS
 
-        ok(f"cairn.server.handlers: {len(HANDLERS)} handlers registered")
+        report.ok(f"cairn.server.handlers: {len(HANDLERS)} handlers registered")
     except Exception as e:
-        fail(f"Cannot import handlers: {e}")
+        report.fail(f"Cannot import handlers: {e}")
 
     try:
         from cairn.server.tool_schemas import TOOL_SCHEMAS
 
-        ok(f"cairn.server.tool_schemas: {len(TOOL_SCHEMAS)} tools defined")
+        report.ok(f"cairn.server.tool_schemas: {len(TOOL_SCHEMAS)} tools defined")
     except Exception as e:
-        fail(f"Cannot import tool_schemas: {e}")
+        report.fail(f"Cannot import tool_schemas: {e}")
+    return True
 
-    # 2. ONNX model
-    if not use_json:
-        print_section("Embedding Model")
+
+def _doctor_check_model(report) -> None:
+    """Embedding model files + a live 384-dim generation probe."""
+    report.section("Embedding Model")
     bge_path = BGE_MODEL_DIR / "model.onnx"
     minilm_path = MINILM_MODEL_DIR / "model.onnx"
     if bge_path.exists():
         model_mb = bge_path.stat().st_size / (1024 * 1024)
-        ok(f"bge-small-en-v1.5 model.onnx present ({model_mb:.0f} MB)")
+        report.ok(f"bge-small-en-v1.5 model.onnx present ({model_mb:.0f} MB)")
         active_model_dir = BGE_MODEL_DIR
     elif minilm_path.exists():
         model_mb = minilm_path.stat().st_size / (1024 * 1024)
-        ok(f"all-MiniLM-L6-v2 model.onnx present ({model_mb:.0f} MB)")
-        warn("Using legacy model. Run 'cairn setup --download-model' to upgrade to bge-small-en-v1.5")
+        report.ok(f"all-MiniLM-L6-v2 model.onnx present ({model_mb:.0f} MB)")
+        report.warn("Using legacy model. Run 'cairn setup --download-model' to upgrade to bge-small-en-v1.5")
         active_model_dir = MINILM_MODEL_DIR
     else:
-        fail(f"model.onnx not found at {BGE_MODEL_DIR} or {MINILM_MODEL_DIR}")
+        report.fail(f"model.onnx not found at {BGE_MODEL_DIR} or {MINILM_MODEL_DIR}")
         active_model_dir = BGE_MODEL_DIR
 
     tokenizer_path = active_model_dir / "tokenizer.json"
     if tokenizer_path.exists():
-        ok("tokenizer.json present")
+        report.ok("tokenizer.json present")
     else:
-        fail(f"tokenizer.json not found at {active_model_dir}")
+        report.fail(f"tokenizer.json not found at {active_model_dir}")
 
     try:
         from cairn.embedding import generate_embedding, get_embedding_info
 
         info = get_embedding_info()
         if info.get("onnx_available"):
-            ok("ONNX Runtime available")
+            report.ok("ONNX Runtime available")
         else:
-            warn("ONNX Runtime not available, will use fallback")
+            report.warn("ONNX Runtime not available, will use fallback")
 
         emb = generate_embedding("test embedding")
         from cairn.embedding import is_embedding_degraded, get_active_backend
         backend = get_active_backend() or "hash-fallback"
         if len(emb) != 384:
-            fail(f"Embedding dimension wrong: {len(emb)} (expected 384)")
+            report.fail(f"Embedding dimension wrong: {len(emb)} (expected 384)")
         elif is_embedding_degraded() or backend in ("hash", "hash-fallback"):
             # Do NOT report this as OK — a hash-fallback backend means semantic
             # search is silently broken: stored ONNX vectors won't match hashed
             # query vectors. This is the failure mode that went unnoticed for
             # months. Fix: install the ONNX model, then re-embed the store.
-            fail(f"Embeddings DEGRADED to {backend} — semantic search is broken. "
-                 f"The ONNX model failed to load; queries and stored vectors will "
-                 f"not match. Install the model and re-embed the store.")
+            report.fail(f"Embeddings DEGRADED to {backend} — semantic search is broken. "
+                        f"The ONNX model failed to load; queries and stored vectors will "
+                        f"not match. Install the model and re-embed the store.")
         else:
-            ok(f"Embedding generation works (384-dim, backend={backend})")
+            report.ok(f"Embedding generation works (384-dim, backend={backend})")
     except Exception as e:
-        fail(f"Embedding generation failed: {e}")
+        report.fail(f"Embedding generation failed: {e}")
 
-    # 3. Database
+
+def _doctor_check_database(report):
+    """Open a read-only probe connection; returns it (or None) for later checks."""
     # Use a single lightweight read-only connection with short busy_timeout
     # to avoid blocking when the MCP server holds a WAL write lock.
-    if not use_json:
-        print_section("Database")
+    report.section("Database")
     db_path = CAIRN_DIR / "cairn.db"
     _doctor_conn = None
     if db_path.exists():
         size_mb = db_path.stat().st_size / (1024 * 1024)
-        ok(f"cairn.db exists ({size_mb:.2f} MB)")
+        report.ok(f"cairn.db exists ({size_mb:.2f} MB)")
         try:
             import sqlite3 as _sqlite3
             _doctor_conn = _sqlite3.connect(str(db_path), timeout=5)
@@ -2358,43 +2365,44 @@ def cmd_doctor(args):
             except Exception:
                 vec_enabled = False
             mem_count = _doctor_conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
-            ok(f"Database accessible: {mem_count} memories, {size_mb:.2f} MB")
+            report.ok(f"Database accessible: {mem_count} memories, {size_mb:.2f} MB")
             if vec_enabled:
-                ok("sqlite-vec enabled (vector search)")
+                report.ok("sqlite-vec enabled (vector search)")
             else:
-                warn("sqlite-vec not available (text-only search)")
+                report.warn("sqlite-vec not available (text-only search)")
         except Exception as e:
-            fail(f"Database check failed: {e}")
+            report.fail(f"Database check failed: {e}")
     else:
-        warn("cairn.db not found (will be created on first use)")
+        report.warn("cairn.db not found (will be created on first use)")
+    return _doctor_conn
 
-    # 4. MCP registration (client-specific)
-    client = getattr(args, "client", None)
+
+def _doctor_check_mcp(report, client) -> None:
+    """MCP server registration (Claude Code CLI, or generic availability)."""
     check_claude = client == "claude-code" or shutil.which("claude")
     if check_claude:
-        if not use_json:
-            print_section("MCP Server (Claude Code)")
+        report.section("MCP Server (Claude Code)")
         try:
             result = subprocess.run(["claude", "mcp", "list"], capture_output=True, text=True, timeout=5)
             if "cairn" in result.stdout:
-                ok("cairn registered in Claude Code")
+                report.ok("cairn registered in Claude Code")
             else:
-                fail("cairn NOT registered in Claude Code")
-                if not use_json:
+                report.fail("cairn NOT registered in Claude Code")
+                if not report.use_json:
                     print("    Run: claude mcp add -s user cairn -- python3 -m cairn.server.mcp_server")
         except FileNotFoundError:
-            warn("Claude Code CLI not found (cannot verify MCP registration)")
+            report.warn("Claude Code CLI not found (cannot verify MCP registration)")
         except Exception as e:
-            warn(f"MCP check failed: {e}")
+            report.warn(f"MCP check failed: {e}")
     else:
-        if not use_json:
-            print_section("MCP Server")
+        report.section("MCP Server")
         python_path = _resolve_python_path()
-        ok(f"MCP server available: {python_path} -m cairn.server.mcp_server")
+        report.ok(f"MCP server available: {python_path} -m cairn.server.mcp_server")
 
-    # Claude Desktop config check
-    if not use_json:
-        print_section("Claude Desktop")
+
+def _doctor_check_claude_desktop(report) -> None:
+    """Claude Desktop config registration."""
+    report.section("Claude Desktop")
     if sys.platform == "darwin":
         desktop_config = Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
     else:
@@ -2409,97 +2417,105 @@ def cmd_doctor(args):
                 entry = servers["cairn"]
                 cmd = entry.get("command", "")
                 if cmd and Path(cmd).exists():
-                    ok(f"Claude Desktop: cairn configured (python: {cmd})")
+                    report.ok(f"Claude Desktop: cairn configured (python: {cmd})")
                 elif cmd:
-                    warn(f"Claude Desktop: cairn configured but python not found: {cmd}")
+                    report.warn(f"Claude Desktop: cairn configured but python not found: {cmd}")
                 else:
-                    warn("Claude Desktop: cairn entry has no command")
+                    report.warn("Claude Desktop: cairn entry has no command")
             else:
-                warn("Claude Desktop: cairn not registered")
-                if not use_json:
+                report.warn("Claude Desktop: cairn not registered")
+                if not report.use_json:
                     print("    Run: cairn setup --client claude-desktop")
         except (json.JSONDecodeError, OSError) as e:
-            warn(f"Claude Desktop: cannot read config: {e}")
+            report.warn(f"Claude Desktop: cannot read config: {e}")
     elif desktop_config:
-        ok("Claude Desktop: config not found (not installed or not configured)")
+        report.ok("Claude Desktop: config not found (not installed or not configured)")
     else:
-        ok("Claude Desktop: skipped (APPDATA not set)")
+        report.ok("Claude Desktop: skipped (APPDATA not set)")
 
-    # 5. FTS5 health
-    if not use_json:
-        print_section("FTS5 Index")
-    if _doctor_conn:
+
+def _doctor_check_fts5(report, conn) -> None:
+    """FTS5 index population, drift, and integrity."""
+    report.section("FTS5 Index")
+    if not conn:
+        return
+    db_path = CAIRN_DIR / "cairn.db"
+    try:
+        fts_count = conn.execute("SELECT COUNT(*) FROM memories_fts").fetchone()[0]
+        mem_count = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+        if fts_count > 0:
+            report.ok(f"FTS5 index populated ({fts_count} entries, {mem_count} memories)")
+            if abs(fts_count - mem_count) > mem_count * 0.1:
+                report.warn(f"FTS5 index drift: {fts_count} vs {mem_count} memories (>10% mismatch)")
+        else:
+            report.warn("FTS5 index empty (text search will use slower LIKE fallback)")
+        # Integrity check (requires write access; use separate connection)
         try:
-            fts_count = _doctor_conn.execute("SELECT COUNT(*) FROM memories_fts").fetchone()[0]
-            mem_count = _doctor_conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
-            if fts_count > 0:
-                ok(f"FTS5 index populated ({fts_count} entries, {mem_count} memories)")
-                if abs(fts_count - mem_count) > mem_count * 0.1:
-                    warn(f"FTS5 index drift: {fts_count} vs {mem_count} memories (>10% mismatch)")
+            import sqlite3 as _sqlite3
+            _fts_conn = _sqlite3.connect(str(db_path), timeout=5)
+            _fts_conn.execute("PRAGMA busy_timeout=5000")
+            _fts_conn.execute("INSERT INTO memories_fts(memories_fts) VALUES('integrity-check')")
+            report.ok("FTS5 integrity check passed")
+            _fts_conn.close()
+        except Exception as fts_err:
+            if "readonly" in str(fts_err) or "locked" in str(fts_err):
+                report.ok("FTS5 index readable (integrity check skipped, DB busy)")
             else:
-                warn("FTS5 index empty (text search will use slower LIKE fallback)")
-            # Integrity check (requires write access; use separate connection)
-            try:
-                import sqlite3 as _sqlite3
-                _fts_conn = _sqlite3.connect(str(db_path), timeout=5)
-                _fts_conn.execute("PRAGMA busy_timeout=5000")
-                _fts_conn.execute("INSERT INTO memories_fts(memories_fts) VALUES('integrity-check')")
-                ok("FTS5 integrity check passed")
-                _fts_conn.close()
-            except Exception as fts_err:
-                if "readonly" in str(fts_err) or "locked" in str(fts_err):
-                    ok("FTS5 index readable (integrity check skipped, DB busy)")
-                else:
-                    fail(f"FTS5 integrity check failed: {fts_err}")
-                    if not use_json:
-                        print("    Fix: INSERT INTO memories_fts(memories_fts) VALUES('rebuild')")
-        except Exception as e:
-            warn(f"FTS5 check skipped: {e}")
+                report.fail(f"FTS5 integrity check failed: {fts_err}")
+                if not report.use_json:
+                    print("    Fix: INSERT INTO memories_fts(memories_fts) VALUES('rebuild')")
+    except Exception as e:
+        report.warn(f"FTS5 check skipped: {e}")
 
-    # 5b. Vec index health
-    if not use_json:
-        print_section("Vector Index")
-    if _doctor_conn:
-        try:
-            vec_count = _doctor_conn.execute("SELECT COUNT(*) FROM memories_vec").fetchone()[0]
-            mem_count = _doctor_conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
-            ok(f"Vec index: {vec_count} embeddings, {mem_count} memories")
-            if vec_count > mem_count:
-                orphans = vec_count - mem_count
-                warn(f"Vec index has ~{orphans} potential orphaned embeddings (run 'cairn consolidate' to clean)")
-        except Exception as e:
-            warn(f"Vec table not available: {e}")
 
-    # 6. Memory quality
-    if not use_json:
-        print_section("Memory Quality")
-    if _doctor_conn:
-        try:
-            rows = _doctor_conn.execute("SELECT metadata FROM memories WHERE metadata LIKE '%feedback_score%'").fetchall()
-            if rows:
-                scores = []
-                flagged = 0
-                for (meta_str,) in rows:
-                    try:
-                        meta = json.loads(meta_str)
-                        scores.append(meta.get("feedback_score", 0))
-                        if meta.get("flagged_for_review"):
-                            flagged += 1
-                    except Exception as e:
-                        logger.debug("Feedback metadata parse failed: %s", e)
-                if scores:
-                    avg = sum(scores) / len(scores)
-                    ok(f"{len(scores)} memories with feedback (avg score: {avg:.2f})")
-                    if flagged > 0:
-                        warn(f"{flagged} memory(ies) flagged for review (score <= -3)")
-            else:
-                ok("No feedback signals recorded yet")
-        except Exception as e:
-            warn(f"Quality check skipped: {e}")
+def _doctor_check_vec(report, conn) -> None:
+    """Vector index count + orphan detection."""
+    report.section("Vector Index")
+    if not conn:
+        return
+    try:
+        vec_count = conn.execute("SELECT COUNT(*) FROM memories_vec").fetchone()[0]
+        mem_count = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+        report.ok(f"Vec index: {vec_count} embeddings, {mem_count} memories")
+        if vec_count > mem_count:
+            orphans = vec_count - mem_count
+            report.warn(f"Vec index has ~{orphans} potential orphaned embeddings (run 'cairn consolidate' to clean)")
+    except Exception as e:
+        report.warn(f"Vec table not available: {e}")
 
-    # 8. Recent hook errors
-    if not use_json:
-        print_section("Hook Health")
+
+def _doctor_check_memory_quality(report, conn) -> None:
+    """Feedback-score coverage + review-flagged memories."""
+    report.section("Memory Quality")
+    if not conn:
+        return
+    try:
+        rows = conn.execute("SELECT metadata FROM memories WHERE metadata LIKE '%feedback_score%'").fetchall()
+        if rows:
+            scores = []
+            flagged = 0
+            for (meta_str,) in rows:
+                try:
+                    meta = json.loads(meta_str)
+                    scores.append(meta.get("feedback_score", 0))
+                    if meta.get("flagged_for_review"):
+                        flagged += 1
+                except Exception as e:
+                    logger.debug("Feedback metadata parse failed: %s", e)
+            if scores:
+                avg = sum(scores) / len(scores)
+                report.ok(f"{len(scores)} memories with feedback (avg score: {avg:.2f})")
+                if flagged > 0:
+                    report.warn(f"{flagged} memory(ies) flagged for review (score <= -3)")
+        else:
+            report.ok("No feedback signals recorded yet")
+    except Exception as e:
+        report.warn(f"Quality check skipped: {e}")
+
+
+def _doctor_check_hook_log(report) -> None:
+    """Recent hook errors from hooks.log."""
+    report.section("Hook Health")
     hooks_log = CAIRN_DIR / "hooks.log"
     if hooks_log.exists():
         try:
@@ -2507,51 +2523,54 @@ def cmd_doctor(args):
             error_lines = [line for line in lines if line.startswith("[") and ": OK " not in line]
             if error_lines:
                 recent = error_lines[-5:]
-                warn(f"{len(error_lines)} hook error(s) in log, last {len(recent)}:")
-                if not use_json:
+                report.warn(f"{len(error_lines)} hook error(s) in log, last {len(recent)}:")
+                if not report.use_json:
                     for line in recent:
                         print(f"    {line[:120]}")
             else:
-                ok("No hook errors in log")
+                report.ok("No hook errors in log")
         except Exception as e:
-            warn(f"Cannot read hooks.log: {e}")
+            report.warn(f"Cannot read hooks.log: {e}")
     else:
-        ok("No hooks.log (no errors recorded)")
+        report.ok("No hooks.log (no errors recorded)")
 
-    # 9. Hooks configuration (Claude Code-specific)
+
+def _doctor_check_hooks_config(report, client) -> None:
+    """SessionStart/Stop/PostToolUse hook wiring in settings.json."""
     check_hooks = client == "claude-code" or SETTINGS_JSON_PATH.exists()
-    if check_hooks:
-        if not use_json:
-            print_section("Hooks (Claude Code)")
-        if SETTINGS_JSON_PATH.exists():
-            try:
-                settings = json.loads(SETTINGS_JSON_PATH.read_text())
-                hooks = settings.get("hooks", {})
-                expected_events = ["SessionStart", "Stop", "PostToolUse"]
-                for event in expected_events:
-                    found = False
-                    for entry in hooks.get(event, []):
-                        for h in entry.get("hooks", []):
-                            if "cairn" in h.get("command", ""):
-                                found = True
-                                cmd_parts = h["command"].split()
-                                if cmd_parts and not Path(cmd_parts[0]).exists():
-                                    warn(f"{event} hook references {cmd_parts[0]} which doesn't exist")
-                                break
-                    if found:
-                        ok(f"{event} hook configured")
-                    else:
-                        warn(f"{event} hook not configured")
-            except Exception as e:
-                warn(f"Cannot read settings.json: {e}")
-        else:
-            warn("settings.json not found (hooks not configured)")
+    if not check_hooks:
+        return
+    report.section("Hooks (Claude Code)")
+    if SETTINGS_JSON_PATH.exists():
+        try:
+            settings = json.loads(SETTINGS_JSON_PATH.read_text())
+            hooks = settings.get("hooks", {})
+            expected_events = ["SessionStart", "Stop", "PostToolUse"]
+            for event in expected_events:
+                found = False
+                for entry in hooks.get(event, []):
+                    for h in entry.get("hooks", []):
+                        if "cairn" in h.get("command", ""):
+                            found = True
+                            cmd_parts = h["command"].split()
+                            if cmd_parts and not Path(cmd_parts[0]).exists():
+                                report.warn(f"{event} hook references {cmd_parts[0]} which doesn't exist")
+                            break
+                if found:
+                    report.ok(f"{event} hook configured")
+                else:
+                    report.warn(f"{event} hook not configured")
+        except Exception as e:
+            report.warn(f"Cannot read settings.json: {e}")
+    else:
+        report.warn("settings.json not found (hooks not configured)")
 
-    # 9b. Read-path health — catch the silent-death mode where the PostToolUse
-    # surface hook is wired but the daemon socket is gone, so nothing ever
-    # surfaces and nothing errors (the way the read path quietly died before).
-    if not use_json:
-        print_section("Read Path (Surfacing)")
+
+def _doctor_check_surfacing(report) -> None:
+    """Read-path health: surface hook wired but daemon socket gone = silent death."""
+    # Catch the silent-death mode where the PostToolUse surface hook is wired
+    # but the daemon socket is gone, so nothing ever surfaces and nothing errors.
+    report.section("Read Path (Surfacing)")
     surface_wired = False
     if SETTINGS_JSON_PATH.exists():
         try:
@@ -2565,17 +2584,17 @@ def cmd_doctor(args):
     _hook_sock = CAIRN_DIR / "hook.sock"
     if surface_wired:
         if _hook_sock.exists():
-            ok("Surface hook wired and daemon hook.sock present")
+            report.ok("Surface hook wired and daemon hook.sock present")
         else:
-            fail("Surface hook is WIRED but hook.sock is MISSING — memory "
-                 "surfacing is silently dead (the daemon isn't serving the hook "
-                 "socket). Restart the MCP daemon.")
+            report.fail("Surface hook is WIRED but hook.sock is MISSING — memory "
+                        "surfacing is silently dead (the daemon isn't serving the hook "
+                        "socket). Restart the MCP daemon.")
     else:
-        ok("Surface hook not wired (explicit-query mode)")
+        report.ok("Surface hook not wired (explicit-query mode)")
 
-    # 9b-2. Query expansion — wired into the query pipeline but silently
-    # contributes nothing without a working LLM provider. Surface that state
-    # instead of letting it no-op invisibly.
+
+def _doctor_check_query_expansion(report) -> None:
+    """Query expansion enabled but no LLM provider = silent no-op."""
     try:
         from cairn.query_expansion import is_expansion_enabled
         if is_expansion_enabled():
@@ -2586,21 +2605,20 @@ def cmd_doctor(args):
                 or _provider not in ("", "anthropic")
             )
             if _has_llm:
-                ok(f"Query expansion enabled (LLM provider: {_provider})")
+                report.ok(f"Query expansion enabled (LLM provider: {_provider})")
             else:
-                warn("Query expansion is enabled but no LLM provider is configured "
-                     "(CAIRN_LLM_PROVIDER/ANTHROPIC_API_KEY unset) — expansion "
-                     "silently no-ops. Configure a provider or set "
-                     "CAIRN_QUERY_EXPANSION=0.")
+                report.warn("Query expansion is enabled but no LLM provider is configured "
+                            "(CAIRN_LLM_PROVIDER/ANTHROPIC_API_KEY unset) — expansion "
+                            "silently no-ops. Configure a provider or set "
+                            "CAIRN_QUERY_EXPANSION=0.")
         else:
-            ok("Query expansion disabled (CAIRN_QUERY_EXPANSION=0)")
+            report.ok("Query expansion disabled (CAIRN_QUERY_EXPANSION=0)")
     except Exception as e:
-        warn(f"Query expansion check failed: {e}")
+        report.warn(f"Query expansion check failed: {e}")
 
-    # 9b-3. Retrieval-quality trend — the nightly job appends seeded
-    # eval-retrieval scores to eval-history.csv; a falling MRR is how a silent
-    # degradation (e.g. embeddings quietly broken) shows up in METRICS before
-    # anyone notices behaviorally.
+
+def _doctor_check_retrieval_trend(report) -> None:
+    """Retrieval-quality MRR trend from eval-history.csv (silent-degradation signal)."""
     try:
         _hist = CAIRN_DIR / "logs" / "eval-history.csv"
         if _hist.exists():
@@ -2610,20 +2628,21 @@ def cmd_doctor(args):
                 _prev = sorted(_mrrs[:-1])
                 _median = _prev[len(_prev) // 2]
                 if _median > 0 and _mrrs[-1] < 0.9 * _median:
-                    warn(f"Retrieval MRR dropped: latest {_mrrs[-1]:.3f} vs median "
-                         f"{_median:.3f} — investigate embeddings/scoring regressions")
+                    report.warn(f"Retrieval MRR dropped: latest {_mrrs[-1]:.3f} vs median "
+                                f"{_median:.3f} — investigate embeddings/scoring regressions")
                 else:
-                    ok(f"Retrieval MRR trend healthy (latest {_mrrs[-1]:.3f}, "
-                       f"median {_median:.3f}, n={len(_mrrs)})")
+                    report.ok(f"Retrieval MRR trend healthy (latest {_mrrs[-1]:.3f}, "
+                              f"median {_median:.3f}, n={len(_mrrs)})")
             else:
-                ok(f"Retrieval eval history: {len(_mrrs)} run(s) (trend needs 5)")
+                report.ok(f"Retrieval eval history: {len(_mrrs)} run(s) (trend needs 5)")
         else:
-            ok("Retrieval eval history: none yet (nightly job will create it)")
+            report.ok("Retrieval eval history: none yet (nightly job will create it)")
     except Exception as e:
-        warn(f"Eval trend check failed: {e}")
+        report.warn(f"Eval trend check failed: {e}")
 
-    # 9c. Maintenance freshness — maintenance is only useful if it actually runs.
-    # It silently stopped for months once; flag stale markers loudly.
+
+def _doctor_check_maintenance(report) -> None:
+    """Maintenance freshness — stale markers mean the nightly jobs stopped running."""
     _maint_intervals = {"last-consolidate": 3, "last-compact": 3,
                         "last-backup": 7, "last-doctor": 7}
     _stale_maint = []
@@ -2637,34 +2656,78 @@ def cmd_doctor(args):
             except Exception:
                 pass
     if _stale_maint:
-        warn("Maintenance appears stale (not running?): " + "; ".join(_stale_maint))
+        report.warn("Maintenance appears stale (not running?): " + "; ".join(_stale_maint))
     else:
-        ok("Maintenance markers fresh (or none yet)")
+        report.ok("Maintenance markers fresh (or none yet)")
 
-    # 6. Python path
-    if not use_json:
-        print_section("Environment")
+
+def _doctor_check_environment(report) -> None:
+    """Python path + home + platform."""
+    report.section("Environment")
     python_path = _resolve_python_path()
     if Path(python_path).exists():
-        ok(f"Python: {python_path}")
+        report.ok(f"Python: {python_path}")
     else:
-        fail(f"Python path does not exist: {python_path}")
+        report.fail(f"Python path does not exist: {python_path}")
 
-    ok(f"Cairn home: {CAIRN_DIR}")
-    ok(f"Platform: {sys.platform}")
+    report.ok(f"Cairn home: {CAIRN_DIR}")
+    report.ok(f"Platform: {sys.platform}")
 
-    # CLAUDE.md block check
+
+def _doctor_check_claude_md(report) -> None:
+    """CLAUDE.md Cairn block + pre-Cairn backup."""
     if CLAUDE_MD_PATH.exists():
         claude_content = CLAUDE_MD_PATH.read_text()
         if CAIRN_BEGIN in claude_content:
-            ok("CLAUDE.md: Cairn block installed")
+            report.ok("CLAUDE.md: Cairn block installed")
             backup = CLAUDE_MD_PATH.with_suffix(".md.pre-cairn")
             if backup.exists():
-                ok(f"CLAUDE.md: pre-Cairn backup at {backup.name}")
+                report.ok(f"CLAUDE.md: pre-Cairn backup at {backup.name}")
         else:
-            warn("CLAUDE.md exists but has no Cairn block (run 'cairn setup' to add)")
+            report.warn("CLAUDE.md exists but has no Cairn block (run 'cairn setup' to add)")
     else:
-        warn("CLAUDE.md not found (run 'cairn setup' to create)")
+        report.warn("CLAUDE.md not found (run 'cairn setup' to create)")
+
+
+def cmd_doctor(args):
+    """Verify Cairn installation: import, model, database, MCP, hooks.
+
+    Orchestrates the individual ``_doctor_check_*`` diagnostics, each of which
+    records ok/fail/warn results on a shared :class:`_DoctorReport`.
+    """
+    from cairn.cli_ui import print_header, print_summary
+
+    use_json = _use_json(args)
+    report = _DoctorReport(use_json)
+
+    if not use_json:
+        print_header("Cairn Doctor")
+
+    # Package import is fatal if cairn itself won't load — bail with a terse tally.
+    if not _doctor_check_imports(report):
+        if use_json:
+            print(json.dumps({"checks": report.checks, "errors": report.errors, "warnings": report.warnings}, indent=2))
+        else:
+            print(f"\n{report.errors} error(s), {report.warnings} warning(s)")
+        sys.exit(1)
+
+    client = getattr(args, "client", None)
+
+    _doctor_check_model(report)
+    _doctor_conn = _doctor_check_database(report)
+    _doctor_check_mcp(report, client)
+    _doctor_check_claude_desktop(report)
+    _doctor_check_fts5(report, _doctor_conn)
+    _doctor_check_vec(report, _doctor_conn)
+    _doctor_check_memory_quality(report, _doctor_conn)
+    _doctor_check_hook_log(report)
+    _doctor_check_hooks_config(report, client)
+    _doctor_check_surfacing(report)
+    _doctor_check_query_expansion(report)
+    _doctor_check_retrieval_trend(report)
+    _doctor_check_maintenance(report)
+    _doctor_check_environment(report)
+    _doctor_check_claude_md(report)
 
     # Cleanup
     if _doctor_conn:
@@ -2672,12 +2735,12 @@ def cmd_doctor(args):
 
     # Summary
     if use_json:
-        print(json.dumps({"checks": checks, "errors": errors, "warnings": warnings}, indent=2))
+        print(json.dumps({"checks": report.checks, "errors": report.errors, "warnings": report.warnings}, indent=2))
     else:
         print()
-        print_summary(errors, warnings)
+        print_summary(report.errors, report.warnings)
 
-    sys.exit(1 if errors > 0 else 0)
+    sys.exit(1 if report.errors > 0 else 0)
 
 
 def cmd_export_obsidian(args):
