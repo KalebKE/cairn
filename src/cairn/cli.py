@@ -2470,48 +2470,7 @@ def cmd_doctor(args):
         except Exception as e:
             warn(f"Vec table not available: {e}")
 
-    # 6. Coordination tables
-    if not use_json:
-        print_section("Coordination")
-    if _doctor_conn:
-        try:
-            coord_tables = [
-                "coord_sessions",
-                "coord_file_claims",
-                "coord_branch_claims",
-                "coord_intents",
-                "coord_snapshots",
-                "coord_tasks",
-                "coord_audit",
-            ]
-            found = 0
-            for tbl in coord_tables:
-                row = _doctor_conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (tbl,)).fetchone()
-                if row:
-                    found += 1
-            if found == len(coord_tables):
-                ok(f"All {found} coordination tables present")
-            elif found > 0:
-                warn(f"Only {found}/{len(coord_tables)} coordination tables found")
-            else:
-                warn("No coordination tables (run any coordination tool to create them)")
-
-            # Check stale sessions
-            try:
-                cutoff = (datetime.now(timezone.utc) - timedelta(seconds=360)).isoformat()
-                stale = _doctor_conn.execute(
-                    "SELECT COUNT(*) FROM coord_sessions WHERE last_heartbeat < ?", (cutoff,)
-                ).fetchone()[0]
-                if stale > 0:
-                    warn(f"{stale} stale session(s) (heartbeat >360s ago)")
-                else:
-                    ok("No stale sessions")
-            except Exception as e:
-                logger.debug("Stale session check failed: %s", e)
-        except Exception as e:
-            warn(f"Coordination check skipped: {e}")
-
-    # 7. Memory quality
+    # 6. Memory quality
     if not use_json:
         print_section("Memory Quality")
     if _doctor_conn:
@@ -2694,14 +2653,11 @@ def cmd_doctor(args):
     ok(f"Cairn home: {CAIRN_DIR}")
     ok(f"Platform: {sys.platform}")
 
-    # CLAUDE.md tier check
+    # CLAUDE.md block check
     if CLAUDE_MD_PATH.exists():
         claude_content = CLAUDE_MD_PATH.read_text()
         if CAIRN_BEGIN in claude_content:
-            if "Multi-Agent Coordination" in claude_content:
-                ok("CLAUDE.md: Cairn Pro block installed")
-            else:
-                ok("CLAUDE.md: Cairn Core block installed")
+            ok("CLAUDE.md: Cairn block installed")
             backup = CLAUDE_MD_PATH.with_suffix(".md.pre-cairn")
             if backup.exists():
                 ok(f"CLAUDE.md: pre-Cairn backup at {backup.name}")
