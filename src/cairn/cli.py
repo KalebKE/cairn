@@ -2170,52 +2170,6 @@ def _jp_restore_config(args):
     print("Restart Claude Code terminals to apply.")
 
 
-def cmd_embed_daemon(args):
-    """Manage the shared embedding daemon."""
-    try:
-        from cairn_platform.embedding_daemon import is_daemon_running, get_daemon_pid, stop_daemon, main as daemon_main
-    except ImportError:
-        print("Embedding daemon module (cairn_platform.embedding_daemon) is not installed in this build.")
-        sys.exit(1)
-
-    subcmd = args.embed_command
-    if subcmd == "start":
-        if is_daemon_running():
-            pid = get_daemon_pid()
-            print(f"Embedding daemon already running (PID {pid})")
-        else:
-            print("Starting embedding daemon...")
-            daemon_main()
-    elif subcmd == "stop":
-        if stop_daemon():
-            print("Embedding daemon stopped")
-        else:
-            print("No embedding daemon running")
-    elif subcmd == "status":
-        pid = get_daemon_pid()
-        if pid:
-            print(f"Embedding daemon running (PID {pid})")
-            try:
-                from cairn.embedding_client import EmbeddingClient
-
-                client = EmbeddingClient()
-                if client._connect():
-                    info = client.info()
-                    if info:
-                        print(f"  Model: {info.get('model', 'unknown')}")
-                        print(f"  Backend: {info.get('backend', 'unknown')}")
-                        print(f"  Cache: {info.get('cache_size', 0)}/{info.get('cache_max', 0)}")
-                        print(f"  Requests: {info.get('request_count', 0)}")
-                        print(f"  Uptime: {info.get('uptime_s', 0)}s")
-                    client.close()
-            except Exception as e:
-                logger.debug("Embedding daemon info check failed: %s", e)
-        else:
-            print("Embedding daemon not running")
-    else:
-        print("Usage: cairn embed-daemon {start|stop|status}")
-
-
 class _DoctorReport:
     """Accumulates doctor check results and prints them as they land.
 
@@ -3045,13 +2999,6 @@ def main():
     hooks_sub.add_parser("path", help="Print the hooks directory path")
     hooks_sub.add_parser("doctor", help="Check hook configuration health")
 
-    # --- Embedding daemon commands ---
-    embed_parser = subparsers.add_parser("embed-daemon", help="Manage shared embedding daemon")
-    embed_sub = embed_parser.add_subparsers(dest="embed_command", help="Daemon subcommands")
-    embed_sub.add_parser("start", help="Start the embedding daemon")
-    embed_sub.add_parser("stop", help="Stop the embedding daemon")
-    embed_sub.add_parser("status", help="Show daemon status")
-
     # --- Reminder commands (experimental) ---
     remind_parser = subparsers.add_parser("remind", help="Manage time-based reminders (experimental)")
     remind_sub = remind_parser.add_subparsers(dest="remind_command", help="Reminder subcommands")
@@ -3157,7 +3104,6 @@ def main():
         "serve": cmd_serve,
         "proxy": cmd_proxy,
         "hooks": cmd_hooks,
-        "embed-daemon": cmd_embed_daemon,
         "remind": cmd_remind,
         "eval-retrieval": cmd_eval_retrieval,
         "eval-context-packet": cmd_eval_context_packet,

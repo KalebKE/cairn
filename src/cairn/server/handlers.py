@@ -240,75 +240,9 @@ def _validate_memory_write(content: str, event_type: str, metadata: Any) -> tupl
 # ============================================================================
 
 
-def _broadcast_decision(session_id: str, project: str, content: str):
-    """Best-effort broadcast of a stored decision to active peers."""
-    try:
-        from cairn_platform.orchestrator.coordination import get_manager
-        mgr = get_manager()
-
-        # Only broadcast if there are active peers
-        sessions = mgr.list_sessions(auto_clean=False)
-        peers = [s for s in sessions if s.get("session_id") != session_id]
-        if not peers:
-            return
-
-        # Truncate to first meaningful line for the subject
-        first_line = content.split("\n")[0].strip()[:120]
-        mgr.send_message(
-            from_session=session_id,
-            subject=f"Decision stored: {first_line}",
-            msg_type="inform",
-            project=project,
-            ttl_minutes=120,
-        )
-    except Exception as e:
-        logger.debug("Decision broadcast failed: %s", e)
-
-
-# Domain keywords for auto-classification of decisions
-_DOMAIN_KEYWORDS = {
-    "auth": ["auth", "login", "password", "session", "token", "oauth", "credential"],
-    "deploy": ["deploy", "vercel", "netlify", "docker", "k8s", "ci/cd", "pipeline"],
-    "testing": ["test", "pytest", "jest", "coverage", "e2e", "unit test"],
-    "database": ["database", "postgres", "mysql", "sqlite", "supabase", "migration", "schema"],
-    "api": ["api", "endpoint", "route", "rest", "graphql"],
-    "frontend": ["frontend", "react", "next.js", "tailwind", "component", "ui", "ux"],
-    "architecture": ["architecture", "refactor", "module", "pattern", "structure"],
-}
-
-
-def _extract_decision_domain(content: str) -> str:
-    """Extract a domain from decision content using keyword matching."""
-    lower = content.lower()
-    for domain, keywords in _DOMAIN_KEYWORDS.items():
-        if any(kw in lower for kw in keywords):
-            return domain
-    return "general"
-
-
-def _auto_register_decision(
-    mgr,
-    session_id: str,
-    project: str,
-    content: str,
-    entity_id=None,
-):
-    """Auto-register a decision in coordination when cairn_store gets a decision type.
-    Returns the registered decision dict or None if skipped/failed."""
-    if mgr is None:
-        return None
-
-    try:
-        domain = _extract_decision_domain(content)
-        return mgr.register_decision(
-            session_id=session_id,
-            project=project or "",
-            domain=domain,
-            decision=content[:500],
-            rationale="Auto-registered from cairn_store(event_type='decision')",
-        )
-    except Exception:
-        return None
+# Peer decision broadcast / auto-registration into coordination was a Pro-only
+# feature (removed) — decisions are still surfaced locally via the decision-trail
+# card in handle_cairn_store below.
 
 
 async def handle_cairn_store(arguments: dict) -> dict:
@@ -398,19 +332,6 @@ async def handle_cairn_store(arguments: dict) -> dict:
             agent_type=agent_type,
         )
 
-        # Broadcast decisions to active peers for real-time awareness
-        if event_type == "decision" and session_id and project:
-            _broadcast_decision(session_id, project, content)
-
-        # Auto-register decisions in coordination (Part C of utilization boost)
-        if event_type == "decision" and session_id:
-            try:
-                from cairn_platform.orchestrator.coordination import get_manager
-                mgr = get_manager()
-                _auto_register_decision(mgr, session_id, project, content, entity_id)
-            except Exception:
-                pass  # Non-critical
-
         # Surface prior decision trail for consistency awareness
         if event_type == "decision" and content:
             try:
@@ -452,15 +373,6 @@ async def handle_cairn_store(arguments: dict) -> dict:
             except Exception as e:
                 logger.debug("decision trail surfacing failed: %s", e)
 
-        # Attach finding to active intent ("already explored" signal)
-        if event_type in ("decision", "lesson_learned") and session_id:
-            try:
-                from cairn_platform.orchestrator.coordination import get_manager
-                mgr = get_manager()
-                mgr.attach_finding(session_id, content[:300])
-            except Exception as e:
-                logger.debug("attach_finding skipped: %s", e)
-
         # Track tool call for telemetry
         try:
             from cairn.telemetry import track_tool_call
@@ -491,11 +403,8 @@ async def handle_cairn_query(arguments: dict) -> dict:
     if mode == "browse":
         return await handle_cairn_browse(arguments)
 
-    # Trace mode — session tool call timeline
-    if mode == "trace":
-        return await handle_cairn_trace(arguments)
-
-    # Unified mode — cross-search memories + knowledge documents
+    # Unified mode — memory search (knowledge-document search was a Pro-only
+    # feature, removed; unified now returns memory results only).
     if mode == "unified":
         query_text = arguments.get("query", "").strip()
         if not query_text:
@@ -515,16 +424,6 @@ async def handle_cairn_query(arguments: dict) -> dict:
         except Exception as e:
             logger.warning("unified: memory search failed: %s", e)
             results.append({"source": "memory", "error": str(e)})
-        # Knowledge document search
-        try:
-            from cairn_platform.knowledge.engine import search_documents
-            doc_result = search_documents(query=query_text, limit=limit, entity_id=entity_id)
-            results.append({"source": "document", "data": doc_result})
-        except ImportError:
-            results.append({"source": "document", "note": "Knowledge module not available"})
-        except Exception as e:
-            logger.warning("unified: document search failed: %s", e)
-            results.append({"source": "document", "error": str(e)})
         return mcp_response({"mode": "unified", "results": results})
 
     query_text = arguments.get("query", "").strip()
@@ -660,45 +559,6 @@ async def handle_cairn_query(arguments: dict) -> dict:
 # ============================================================================
 
 
-async def handle_cairn_trace(arguments: dict) -> dict:
-    """Format a session's tool call trace as a timeline."""
-    session_id = arguments.get("session_id", "").strip()
-    if not session_id:
-        return mcp_error("session_id is required for trace mode")
-
-    try:
-        from cairn_platform.orchestrator.coordination import CoordinationManager
-
-        mgr = CoordinationManager.get_instance()
-        rows = mgr.query_audit(session_id=session_id, limit=500)
-
-        if not rows:
-            return mcp_response(f"No trace data for session {session_id}")
-
-        # Sort by call_index (ascending) if available, else by created_at
-        rows.sort(key=lambda r: (r.get("call_index") or 0, r.get("created_at", "")))
-
-        error_count = sum(1 for r in rows if r.get("result_status") == "error")
-        total_latency = sum(r.get("latency_ms") or 0 for r in rows)
-
-        lines = [f"Session {session_id[:12]} -- {len(rows)} tool calls, {total_latency/1000:.1f}s total, {error_count} errors\n"]
-
-        for r in rows:
-            idx = r.get("call_index") or "-"
-            lat = f"{r.get('latency_ms') or 0}ms"
-            tool = r.get("tool_name", "?")
-            status = r.get("result_status") or "ok"
-            size = r.get("input_size") or 0
-            size_str = f"{size/1024:.1f}KB" if size >= 1024 else f"{size}B"
-
-            lines.append(f" #{idx:<4} {lat:<8} {tool:<12} {status:<8} {size_str}")
-
-        return mcp_response("\n".join(lines))
-    except Exception as e:
-        logger.error("cairn_query (trace) failed: %s", e, exc_info=True)
-        return mcp_error(f"Trace query failed: {e}")
-
-
 # ============================================================================
 # Handler: cairn_query mode=browse
 # ============================================================================
@@ -771,28 +631,7 @@ async def handle_cairn_welcome(arguments: dict) -> dict:
     except Exception:
         pass
 
-    # Register this session in coordination — the MCP handler is the most
-    # reliable registration path because it runs in-process (no subprocess
-    # timeout, correct PID).  The coord_session_start hook often times out
-    # under SQLite contention with many concurrent agents.
-    try:
-        from cairn_platform.orchestrator.coordination import get_manager
-        import os as _os
-
-        mgr = get_manager()
-        # For stdio transport the MCP server is a child of the Claude process,
-        # so getppid() gives the Claude PID.  For HTTP daemon mode, use own PID
-        # as a fallback (the hook daemon will update it via heartbeat).
-        from cairn.server.mcp_server import _TRANSPORT
-        caller_pid = _os.getppid() if _TRANSPORT == "stdio" else _os.getpid()
-        mgr.register_session(
-            session_id=session_id,
-            pid=caller_pid,
-            project=project or _os.getcwd(),
-            metadata={"client": "claude-code", "mcp_transport": _TRANSPORT},
-        )
-    except Exception as e:
-        logger.debug("register_session in cairn_welcome failed: %s", e)
+    # Session registration into coordination was a Pro-only feature, removed.
 
     try:
         from cairn.bridge import welcome
@@ -1825,17 +1664,9 @@ async def handle_cairn_protocol(arguments: dict) -> dict:
         except Exception as e:
             return mcp_error(f"Gate status failed: {e}")
 
-    # Detect peer count for auto-mode selection
+    # Peer detection for auto-mode selection was a Pro-only feature (removed);
+    # always solo now.
     peer_count = 0
-    try:
-        from cairn_platform.orchestrator.coordination import get_manager
-
-        mgr = get_manager()
-        sessions = mgr.list_sessions(auto_clean=True)
-        # Exclude self — count only other active peers
-        peer_count = max(0, len(sessions) - 1)
-    except Exception as e:
-        logger.debug("Coordination session list failed: %s", e)
 
     try:
         from cairn.protocol import get_protocol

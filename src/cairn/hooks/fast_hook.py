@@ -38,11 +38,9 @@ _FALLBACK_SCRIPTS = {
     "auto_capture": "auto_capture",
     "assistant_capture": "assistant_capture",
     "pre_add_guard": "pre_add_guard",
-    "pre_file_guard": "pre_file_guard",
     "pre_push_guard": "pre_push_guard",
     "pre_deploy_guard": "pre_deploy_guard",
     "pre_commit_guard": "pre_commit_guard",
-    "trace_capture": "trace_capture",
 }
 # Note: pre_irreversible_advisor is intentionally absent — it's daemon-only
 # (advisory, never blocks) with no standalone fallback script.
@@ -56,7 +54,7 @@ _SLOW_HOOKS = {"pre_push_guard"}
 # These are pre-action guards that can block dangerous operations (exit code 2).
 # All other hooks are informational and safe to skip if daemon is unavailable.
 _BLOCKING_HOOKS = {
-    "pre_add_guard", "pre_file_guard", "pre_push_guard",
+    "pre_add_guard", "pre_push_guard",
     "pre_deploy_guard", "pre_commit_guard",
 }
 
@@ -64,7 +62,6 @@ _BLOCKING_HOOKS = {
 # These capture high-value content that would otherwise be silently dropped.
 _BEST_EFFORT_HOOKS = {
     "assistant_capture",
-    "trace_capture",         # captures content that would otherwise be lost
 }
 
 # Retry settings for startup race (hook fires before MCP server opens socket)

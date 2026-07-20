@@ -99,8 +99,8 @@ _CORE_SCHEMAS = [
                 "query": {"type": "string", "description": "Search query (exact phrase when mode='phrase', regex pattern when mode='regex'). Not required for mode='timeline' or mode='browse'."},
                 "mode": {
                     "type": "string",
-                    "enum": ["semantic", "phrase", "regex", "timeline", "browse", "trace", "unified"],
-                    "description": "Search mode: 'semantic' (default), 'phrase' for exact match, 'regex' for regular-expression match (newest first), 'timeline' for recent memories by day, 'browse' for listing, 'trace' for session tool call timeline, 'unified' for cross-searching memories + knowledge documents",
+                    "enum": ["semantic", "phrase", "regex", "timeline", "browse", "unified"],
+                    "description": "Search mode: 'semantic' (default), 'phrase' for exact match, 'regex' for regular-expression match (newest first), 'timeline' for recent memories by day, 'browse' for listing, 'unified' for a cross-search view of memories",
                 },
                 "limit": {"type": "integer", "default": 10},
                 "event_type": {"type": "string", "description": "Filter by event type (also used as type filter in semantic mode for scoped search)"},

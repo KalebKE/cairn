@@ -550,7 +550,7 @@ class QueryMixin:
 
         Returns [(node_id, score)] ranked by hit count; empty list when the
         query yields no candidate entity tokens (channel skipped).
-        Replaces the dead cairn_platform entity-graph expansion.
+        Replaces the removed Pro entity-graph expansion.
         """
         import re as _re
 

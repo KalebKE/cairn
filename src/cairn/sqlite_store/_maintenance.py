@@ -350,9 +350,9 @@ class MaintenanceMixin:
         decay_stats = self.apply_strength_decay()
         stats["decayed_memories"] = decay_stats["decayed"]
 
-        # Phase 6: Entity deduplication -- merge entities with matching names
-        merge_stats = self.merge_duplicate_entities()
-        stats["merged_entities"] = merge_stats["merged"]
+        # Phase 6 (entity deduplication) relied on the Pro entity-graph engine,
+        # which was removed — no entities to merge.
+        stats["merged_entities"] = 0
 
         # Auto-prune old forgetting log entries
         self.prune_forgetting_log()
@@ -455,56 +455,6 @@ class MaintenanceMixin:
             stats["decayed"] = len(_to_decay)
 
         return stats
-
-    def merge_duplicate_entities(self) -> dict:
-        """Merge entities with matching lowercased names.
-
-        Transfers memories from duplicate entity_id to primary (first-seen).
-        """
-        stats: Dict[str, int] = {"merged": 0}
-        try:
-            from cairn_platform.entity.engine import get_entity_manager
-            em = get_entity_manager(Path(self.db_path) if hasattr(self, 'db_path') else None)
-        except Exception as e:
-            logger.debug("Entity engine unavailable for merge: %s", e)
-            return stats
-
-        try:
-            entity_ids = em.list_entity_ids()
-        except Exception as e:
-            logger.debug("list_entity_ids failed: %s", e)
-            return stats
-
-        if len(entity_ids) < 2:
-            return stats
-
-        name_groups: Dict[str, list] = {}
-        for eid, name in entity_ids:
-            key = name.strip().lower()
-            name_groups.setdefault(key, []).append(eid)
-
-        for name_key, eids in name_groups.items():
-            if len(eids) < 2:
-                continue
-            primary = eids[0]
-            for duplicate in eids[1:]:
-                with self._lock:
-                    self._conn.execute(
-                        "UPDATE memories SET entity_id = ? WHERE entity_id = ?",
-                        (primary, duplicate),
-                    )
-                    self._commit()
-                try:
-                    em.delete_entity(duplicate)
-                except Exception as e:
-                    logger.debug("Failed to delete duplicate entity %s: %s", duplicate, e)
-                stats["merged"] += 1
-                logger.info(
-                    "Merged entity %s into %s (name: %s)", duplicate, primary, name_key,
-                )
-
-        return stats
-
     # ------------------------------------------------------------------
     # Reembedding
     # ------------------------------------------------------------------

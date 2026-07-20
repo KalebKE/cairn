@@ -25,7 +25,7 @@ from cairn.server import handlers
 HOOK_MODULES = [
     "fast_hook", "session_start", "session_stop", "surface_memories",
     "pre_edit_surface", "pre_add_guard", "pre_commit_guard", "pre_push_guard",
-    "pre_file_guard", "pre_deploy_guard", "trace_capture", "track_file_read",
+    "pre_deploy_guard", "track_file_read",
     "post_edit_test",
 ]
 
@@ -71,6 +71,20 @@ def test_no_cairn_platform_imports_in_hooks():
         if "cairn_platform" in line
     ]
     assert not offenders, "dead cairn_platform reference(s): " + ", ".join(offenders)
+
+
+def test_no_cairn_platform_anywhere_in_src():
+    """Repo-wide guard: the removed Pro package must not be referenced in src."""
+    import cairn
+
+    src_dir = Path(cairn.__file__).parent
+    offenders = [
+        f"{py.relative_to(src_dir)}:{i}"
+        for py in sorted(src_dir.rglob("*.py"))
+        for i, line in enumerate(py.read_text().splitlines(), 1)
+        if "cairn_platform" in line
+    ]
+    assert not offenders, "cairn_platform reference(s): " + ", ".join(offenders)
 
 
 def test_gate_marker_written_by_server_is_read_by_guard(monkeypatch, tmp_path):

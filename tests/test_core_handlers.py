@@ -279,13 +279,6 @@ class TestCairnQuery:
         }))
         assert not _is_error(result)
 
-    def test_query_trace_mode_no_session(self):
-        """Trace mode requires session_id."""
-        from cairn.server.handlers import handle_cairn_query
-        result = run_async(handle_cairn_query({"mode": "trace"}))
-        assert _is_error(result)
-        assert "session_id" in _text(result).lower()
-
     def test_query_phrase_mode_exact(self):
         from cairn.server.handlers import handle_cairn_query
         _store("The quick brown fox jumps over the lazy dog")

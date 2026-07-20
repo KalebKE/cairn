@@ -48,9 +48,9 @@ from cairn.server import handlers as _handlers_module
 TOOL_SCHEMAS = list(_CORE_SCHEMAS)
 HANDLERS = dict(_CORE_HANDLERS)
 
-# Fork note: the upstream Pro loader (cairn_platform.* builtin modules gated
-# on a `pro_tools` capability, plus its "run 'cairn activate'" upsell log) was
-# removed — this self-hosted fork ships core tools plus discovered plugins only.
+# Fork note: the upstream Pro loader (builtin modules gated on a `pro_tools`
+# capability, plus its "run 'cairn activate'" upsell log) was removed — this
+# self-hosted fork ships core tools plus discovered plugins only.
 
 # Discover external plugins (e.g. cairn-pro)
 from cairn.plugins import discover_plugins
@@ -124,12 +124,6 @@ def _close_on_exit():
     """Close SQLite store and unregister PID when the MCP server process exits."""
     global _shutting_down
     _shutting_down = True
-    # Close CoordinationManager (cairn.db connection)
-    try:
-        from cairn_platform.orchestrator.coordination import close_manager
-        close_manager()
-    except Exception:
-        pass
     try:
         from cairn.server.pid_registry import unregister_pid
         unregister_pid()
@@ -884,8 +878,8 @@ async def main():
         _maint_task = asyncio.create_task(_maintenance_scheduler())
 
     # Fork note: the upstream background coordination loop was removed — it
-    # depended entirely on the absent cairn_platform coordination module and
-    # woke every 60-90s only to swallow an ImportError.
+    # depended entirely on the absent Pro coordination module and woke every
+    # 60-90s only to swallow an ImportError.
 
     # RSS memory watchdog — graceful exit before memory pressure causes SIGSEGV
     _rss_watchdog_task = asyncio.create_task(_rss_watchdog())
