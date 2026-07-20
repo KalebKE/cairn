@@ -9,13 +9,54 @@ Two regressions:
     markers from the removed Pro coordination module (no writers), so the gate
     could never clear even with matching paths.
 """
+import importlib
 import json
 import time
+from pathlib import Path
 
 import pytest
 
 from cairn.hooks import pre_deploy_guard
 from cairn.server import handlers
+
+
+# Every hook script that builds a data path carries an env-inline _cairn_home()
+# resolver instead of hardcoding ~/.cairn.
+HOOK_MODULES = [
+    "fast_hook", "session_start", "session_stop", "surface_memories",
+    "pre_edit_surface", "pre_add_guard", "pre_commit_guard", "pre_push_guard",
+    "pre_file_guard", "pre_deploy_guard", "trace_capture", "track_file_read",
+    "post_edit_test",
+]
+
+
+@pytest.mark.parametrize("modname", HOOK_MODULES)
+def test_hook_cairn_home_follows_env(modname, monkeypatch, tmp_path):
+    mod = importlib.import_module(f"cairn.hooks.{modname}")
+    assert hasattr(mod, "_cairn_home"), f"{modname} has no _cairn_home() resolver"
+
+    home = tmp_path / "custom"
+    home.mkdir()
+    monkeypatch.setenv("CAIRN_HOME", str(home))
+    assert mod._cairn_home() == home, f"{modname} did not follow CAIRN_HOME"
+
+    monkeypatch.delenv("CAIRN_HOME", raising=False)
+    assert mod._cairn_home() == Path.home() / ".cairn", f"{modname} default is not ~/.cairn"
+
+
+def test_no_hardcoded_cairn_home_in_hooks():
+    """Static guard: no hook may hardcode ~/.cairn outside its resolver default."""
+    import cairn.hooks as pkg
+
+    hooks_dir = Path(pkg.__file__).parent
+    offenders = []
+    for py in sorted(hooks_dir.glob("*.py")):
+        for i, line in enumerate(py.read_text().splitlines(), 1):
+            if 'os.environ.get("CAIRN_HOME"' in line:
+                continue  # the resolver's own default fallback
+            if 'Path.home() / ".cairn"' in line or 'expanduser("~/.cairn' in line:
+                offenders.append(f"{py.name}:{i}: {line.strip()}")
+    assert not offenders, "hardcoded ~/.cairn (use _cairn_home()):\n" + "\n".join(offenders)
 
 
 def test_gate_marker_written_by_server_is_read_by_guard(monkeypatch, tmp_path):
