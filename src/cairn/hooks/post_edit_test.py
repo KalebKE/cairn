@@ -32,7 +32,7 @@ _PYTHON = _resolve_python()
 
 # Project test configs: directory prefix -> (test command, cwd)
 # Auto-detect: if this hook file lives inside an Cairn checkout, use that as the default project.
-# Otherwise, no built-in defaults (user configures via ~/.cairn/post_edit_projects.json).
+# Otherwise, no built-in defaults (user configures via $CAIRN_HOME/post_edit_projects.json).
 def _detect_default_projects():
     """Detect projects from the location of this hook file."""
     projects = {}
@@ -54,7 +54,7 @@ _DEFAULT_PROJECTS = _detect_default_projects()
 
 
 def _load_projects():
-    """Load project configs: built-in Cairn + optional ~/.cairn/post_edit_projects.json."""
+    """Load project configs: built-in Cairn + optional $CAIRN_HOME/post_edit_projects.json."""
     projects = dict(_DEFAULT_PROJECTS)
     config_path = str(_cairn_home() / "post_edit_projects.json")
     if os.path.exists(config_path):

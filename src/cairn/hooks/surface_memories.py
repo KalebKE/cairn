@@ -14,6 +14,7 @@ import time
 import traceback
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 
 def _cairn_home():
@@ -65,7 +66,7 @@ def _rotate_log_if_needed(log_path: Path):
 
 
 def _log_hook_error(hook_name: str, error: Exception):
-    """Log hook errors to ~/.cairn/hooks.log for debugging."""
+    """Log hook errors to the Cairn hooks.log for debugging (honors CAIRN_HOME)."""
     try:
         log_path = _cairn_home() / "hooks.log"
         log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -174,7 +175,7 @@ def _apply_confidence_boost(results: list) -> list:
     return results
 
 
-def _check_nudge(edit_count: int, tool_calls: list) -> "Optional[str]":
+def _check_nudge(edit_count: int, tool_calls: list) -> Optional[str]:
     """Return a nudge string if agent is missing a critical tool call, or None."""
     normalized = set()
     for t in tool_calls:

@@ -223,7 +223,7 @@ def _fallback(hook_name, payload):
 
 
 def _log_timing(hook_name, elapsed_ms, mode):
-    """Log hook timing to ~/.cairn/hooks.log."""
+    """Log hook timing to the Cairn hooks.log (honors CAIRN_HOME)."""
     try:
         from datetime import datetime
         log_path = _cairn_home() / "hooks.log"

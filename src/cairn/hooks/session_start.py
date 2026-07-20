@@ -3,7 +3,7 @@
 import os
 import time
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 
@@ -50,7 +50,6 @@ def main():
         return
 
     memory_count = result.get("memory_count", 0)
-    recent = result.get("recent_memories", [])
 
     print(f"## Welcome back! Cairn ready — {memory_count} memories")
 

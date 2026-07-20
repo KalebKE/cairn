@@ -4,7 +4,7 @@
 Fires before Read tool. Records file paths so pre_edit_surface.py can
 warn when editing a file that was never read (read-before-write discipline).
 
-Storage: ~/.cairn/session-reads/<session-id>.json (JSON array of paths)
+Storage: $CAIRN_HOME/session-reads/<session-id>.json (default ~/.cairn; JSON array of paths)
 """
 import json
 import os
