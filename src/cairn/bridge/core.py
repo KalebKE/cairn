@@ -57,14 +57,6 @@ def auto_capture(
     """
     content = unicodedata.normalize("NFC", content)
 
-    # Auto-resolve entity_id from project if not explicitly provided
-    if not entity_id and project:
-        try:
-            from cairn_platform.entity.engine import resolve_project_entity
-            entity_id = resolve_project_entity(project)
-        except Exception as e:
-            logger.debug("Entity resolution failed: %s", e)
-
     # Determine source early — hooks vs direct API calls have different filtering rules.
     _source = (metadata or {}).get("source", "")
     _is_hook = _source.startswith("auto_") or _source.endswith("_hook")

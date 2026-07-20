@@ -83,22 +83,8 @@ def distill_trajectory(session_id: str) -> Optional[str]:
 
         trajectory_text = "\n".join(mem_lines[:20])  # Cap at 20 entries
 
-        # Gather tool sequence from coord_audit if available
+        # Tool sequence came from coord_audit (a Pro-only feature); unavailable here.
         tool_sequence = ""
-        try:
-            from cairn_platform.orchestrator.coordination import get_manager
-            mgr = get_manager()
-            if mgr:
-                audit_rows = mgr._conn.execute(
-                    "SELECT tool_name, result_status FROM coord_audit "
-                    "WHERE session_id = ? ORDER BY call_index ASC LIMIT 30",
-                    (session_id,),
-                ).fetchall()
-                if audit_rows:
-                    tools = [f"{r[0]}({'ok' if r[1] == 'ok' else 'err'})" for r in audit_rows]
-                    tool_sequence = f"\nTool sequence: {' → '.join(tools)}"
-        except Exception:
-            pass  # Coordination unavailable — continue without tool sequence
 
         # LLM distillation call
         system_prompt = (

@@ -77,13 +77,7 @@ def welcome(session_id: Optional[str] = None, project: Optional[str] = None) -> 
     # These types have 95-98% never-accessed rates because recency-based
     # selection misses older entries. Direct type queries fix this.
     try:
-        _entity_id = None
-        if project:
-            try:
-                from cairn_platform.entity.engine import resolve_project_entity
-                _entity_id = resolve_project_entity(project)
-            except Exception as e:
-                logger.debug("Welcome entity resolution failed: %s", e)
+        _entity_id = None  # entity resolution was a Pro-only feature; unavailable here
         recent_ids = {n.id for n in recent}
         _welcome_types = ("user_preference", "user_fact", "decision", "task_completion", "checkpoint", "session_summary", "behavioral_pattern")
         _limit_per_type = 8
@@ -218,14 +212,8 @@ def welcome(session_id: Optional[str] = None, project: Optional[str] = None) -> 
     # Build project_context — skip expensive embedding search (db.query) on fast path.
     # Use only direct type lookups and coordination queries.
     project_context = ""
-    _entity_id = None
+    _entity_id = None  # entity resolution was a Pro-only feature; unavailable here
     if project:
-        try:
-            from cairn_platform.entity.engine import resolve_project_entity
-            _entity_id = resolve_project_entity(project)
-        except Exception:
-            pass
-
         # Surface latest project_status snapshot
         try:
             status_nodes = db.get_by_type("project_status", limit=3, entity_id=_entity_id)
@@ -239,21 +227,6 @@ def welcome(session_id: Optional[str] = None, project: Optional[str] = None) -> 
                 project_context = f"### Project Status\n- {text}\n\n"
         except Exception as e:
             logger.debug("Welcome project_status query failed: %s", e)
-
-        # Surface active coordination decisions for this project
-        try:
-            from cairn_platform.orchestrator.coordination import get_manager
-            cm = get_manager()
-            coord_decs = cm.query_decisions(project=project, status="active", limit=5)
-            if coord_decs:
-                dec_items = []
-                for d in coord_decs:
-                    dec_text = f"[{d['domain']}] {d['decision'][:200]}"
-                    dec_items.append(f"- {dec_text}")
-                if dec_items:
-                    project_context += "\n### Coordination Decisions\n" + "\n".join(dec_items)
-        except Exception as e:
-            logger.debug("Welcome coord_decisions query failed: %s", e)
 
     node_count = db.node_count()
 

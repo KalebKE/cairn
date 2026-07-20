@@ -771,39 +771,9 @@ def _schedule_entity_extraction(
     content: str,
     event_type: str,
 ) -> None:
-    """Fire entity extraction in a background daemon thread.
+    """No-op: async entity extraction was a Pro-only feature.
 
-    Non-blocking. Silently skipped if API key missing or extraction disabled.
+    Retained as a call site so ``auto_capture`` stays unchanged; the graph
+    entity-resolution backend is not part of this build.
     """
-    import os as _os
-    if _os.environ.get("CAIRN_ENTITY_EXTRACTION", "").lower() in ("0", "false", "off"):
-        return
-    if not _os.environ.get("ANTHROPIC_API_KEY"):
-        return
-
-    t_ref: list[threading.Thread] = []
-
-    def _run():
-        try:
-            from cairn_platform.entity.extraction import extract_entities, resolve_and_link
-            from cairn_platform.entity.engine import get_entity_manager
-            from pathlib import Path as _Path
-
-            extraction = extract_entities(content, event_type)
-            if extraction["entities"]:
-                em = get_entity_manager(_Path(store.db_path))
-                resolve_and_link(store, em, node_id, extraction)
-        except Exception as e:
-            logger.debug("Async entity extraction failed: %s", e)
-        finally:
-            if t_ref and hasattr(store, "unregister_background_thread"):
-                try:
-                    store.unregister_background_thread(t_ref[0])
-                except Exception:
-                    pass
-
-    t = threading.Thread(target=_run, daemon=True, name="entity-extraction")
-    t_ref.append(t)
-    if hasattr(store, "register_background_thread"):
-        store.register_background_thread(t)
-    t.start()
+    return

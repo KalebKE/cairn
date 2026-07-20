@@ -174,69 +174,14 @@ def diagnostic_report(days: int = 30) -> Dict[str, Any]:
         "avg_access_count": rate_stats["avg_access_count"],
     }
 
-    # --- 2. Tool Usage (from coord_audit) -----------------------------------
+    # --- 2. Tool Usage ------------------------------------------------------
+    # Coordination audit (coord_audit) was a Pro-only feature; unavailable here.
     tool_usage: Dict[str, Any] = {"top_tools": [], "cairn_tools": [], "total_calls": 0, "cairn_calls": 0}
-    try:
-        from cairn_platform.orchestrator.coordination import get_manager
-        mgr = get_manager()
-        if mgr:
-            # Top 20 tools by call count
-            top_rows = mgr._conn.execute(
-                """SELECT tool_name, COUNT(*) as calls,
-                          AVG(latency_ms) as avg_latency
-                   FROM coord_audit
-                   WHERE created_at > datetime('now', '-' || ? || ' days')
-                   GROUP BY tool_name ORDER BY calls DESC LIMIT 20""",
-                (days,),
-            ).fetchall()
-            tool_usage["top_tools"] = [
-                {"tool": r[0], "calls": r[1], "avg_latency_ms": round(r[2]) if r[2] else None}
-                for r in top_rows
-            ]
-
-            # Total call count
-            total_row = mgr._conn.execute(
-                """SELECT COUNT(*) FROM coord_audit
-                   WHERE created_at > datetime('now', '-' || ? || ' days')""",
-                (days,),
-            ).fetchone()
-            tool_usage["total_calls"] = total_row[0] if total_row else 0
-
-            # Cairn-specific tools
-            cairn_rows = mgr._conn.execute(
-                """SELECT tool_name, COUNT(*) FROM coord_audit
-                   WHERE tool_name LIKE 'mcp__cairn%'
-                     AND created_at > datetime('now', '-' || ? || ' days')
-                   GROUP BY tool_name ORDER BY COUNT(*) DESC""",
-                (days,),
-            ).fetchall()
-            tool_usage["cairn_tools"] = [{"tool": r[0], "calls": r[1]} for r in cairn_rows]
-            tool_usage["cairn_calls"] = sum(r[1] for r in cairn_rows)
-    except Exception as e:
-        logger.debug("diagnostic: coord_audit unavailable: %s", e)
     report["tool_usage"] = tool_usage
 
     # --- 3. Session Activity ------------------------------------------------
+    # coord_sessions was a Pro-only feature; unavailable here.
     sessions: Dict[str, Any] = {"total": 0, "week": 0, "month": 0}
-    try:
-        from cairn_platform.orchestrator.coordination import get_manager
-        mgr = get_manager()
-        if mgr:
-            sess_row = mgr._conn.execute(
-                """SELECT
-                     COUNT(*),
-                     SUM(CASE WHEN started_at > datetime('now', '-7 days') THEN 1 ELSE 0 END),
-                     SUM(CASE WHEN started_at > datetime('now', '-30 days') THEN 1 ELSE 0 END)
-                   FROM coord_sessions"""
-            ).fetchone()
-            if sess_row:
-                sessions = {
-                    "total": sess_row[0] or 0,
-                    "week": sess_row[1] or 0,
-                    "month": sess_row[2] or 0,
-                }
-    except Exception as e:
-        logger.debug("diagnostic: coord_sessions unavailable: %s", e)
     report["sessions"] = sessions
 
     # --- 4. LLM Costs -------------------------------------------------------
@@ -380,62 +325,8 @@ def get_activity_summary(days: int = 7) -> Dict[str, Any]:
     except Exception as e:
         logger.warning(f"Activity summary: insights failed: {e}")
 
-    # Coordination data (sessions, tasks, claims)
-    try:
-        from cairn_platform.orchestrator.coordination import get_manager
-
-        mgr = get_manager()
-
-        # Sessions (active)
-        try:
-            sessions = mgr.list_sessions(auto_clean=False)
-            for s in sessions:
-                result["sessions"].append(
-                    {
-                        "session_id": s.get("session_id", "")[:16],
-                        "project": s.get("project", ""),
-                        "task": s.get("task", ""),
-                        "started_at": s.get("started_at", ""),
-                        "last_heartbeat": s.get("last_heartbeat", ""),
-                        "status": s.get("status", ""),
-                    }
-                )
-        except Exception as e:
-            logger.warning(f"Activity summary: sessions failed: {e}")
-
-        # Tasks (pending + in_progress)
-        try:
-            for st in ("pending", "in_progress"):
-                tasks = mgr.list_tasks(status=st)
-                for t in tasks:
-                    result["tasks"].append(
-                        {
-                            "id": t.get("id", ""),
-                            "title": t.get("title", ""),
-                            "status": t.get("status", ""),
-                            "progress": t.get("progress", 0),
-                            "created_at": t.get("created_at", ""),
-                        }
-                    )
-        except Exception as e:
-            logger.warning(f"Activity summary: tasks failed: {e}")
-
-        # File + branch claims across active sessions
-        try:
-            for s in sessions:
-                sid = s.get("session_id", "")
-                claims = mgr.get_session_claims(sid)
-                for fp in claims.get("file_claims", []):
-                    result["claims"].append({"type": "file", "path": fp, "session": sid[:16]})
-                for br in claims.get("branch_claims", []):
-                    result["claims"].append({"type": "branch", "path": br, "session": sid[:16]})
-        except Exception as e:
-            logger.warning(f"Activity summary: claims failed: {e}")
-
-    except ImportError:
-        logger.info("Coordination module not available for activity summary")
-    except Exception as e:
-        logger.warning(f"Activity summary: coordination failed: {e}")
+    # Coordination data (sessions, tasks, claims) was a Pro-only feature;
+    # unavailable here, so these lists stay empty.
 
     return result
 
