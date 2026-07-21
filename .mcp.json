@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "cairn": {
-      "command": "python3.11",
+      "command": "python3",
       "args": ["-m", "cairn.server.mcp_server"],
       "env": {}
     }
