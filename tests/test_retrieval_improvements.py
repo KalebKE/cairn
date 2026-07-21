@@ -616,3 +616,49 @@ class TestMalformedPriorityMetadata:
         )
         results = store.query("cache eviction memo", limit=5)
         assert isinstance(results, list)
+
+
+class TestCEResortMode:
+    """CAIRN_CE_MODE=resort lets the cross-encoder fully reorder the top-K
+    (permuting existing fused scores, preserving the score multiset), vs the
+    default position-aware gentle boost."""
+
+    @staticmethod
+    def _fake_ce(favored: str):
+        def fake(query, passages, temporal_metadata=None):
+            return [10.0 if favored in p else float(-i) for i, p in enumerate(passages)]
+        return fake
+
+    def test_resort_promotes_ce_favorite(self, store, monkeypatch):
+        # All candidates must be relevant enough to survive the Phase-4
+        # composite floor — an off-topic memory never reaches the reranker.
+        import cairn.reranker as rr
+
+        store.store(content="Deploy pipeline memo alpha about blue-green rollout health gates")
+        store.store(content="Deploy pipeline memo beta about rollback of failed canary releases")
+        store.store(content="Deploy pipeline memo gamma about staging smoke checks before traffic")
+
+        monkeypatch.setenv("CAIRN_CE_MODE", "resort")
+        monkeypatch.setattr(rr, "cross_encoder_score", self._fake_ce("gamma"))
+
+        results = store.query("deploy pipeline memo", limit=3)
+        assert results, "query returned nothing"
+        assert "gamma" in results[0].content, (
+            "resort mode must let the CE fully decide the top result"
+        )
+
+    def test_resort_preserves_score_multiset(self, store, monkeypatch):
+        import cairn.reranker as rr
+
+        for i in range(4):
+            store.store(content=f"Distinct memo number {i} about database index tuning strategies")
+
+        monkeypatch.setattr(rr, "cross_encoder_score", self._fake_ce("number 3"))
+
+        monkeypatch.setenv("CAIRN_CE_MODE", "boost")
+        boost = store.query("database index tuning", limit=4)
+        monkeypatch.setenv("CAIRN_CE_MODE", "resort")
+        resort = store.query("database index tuning", limit=4)
+
+        # Same result SET either way — resort only reorders.
+        assert {r.id for r in boost} == {r.id for r in resort}

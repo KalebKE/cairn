@@ -1125,18 +1125,39 @@ class QueryMixin:
                     else:
                         ce_norm = [0.5] * len(ce_scores)
 
-                    # Position-aware CE boost (QMD-inspired): top RRF results
-                    # are already high-confidence from multi-channel fusion, so
-                    # reranker has less override power. Lower-ranked results
-                    # benefit more from semantic reranking.
-                    for i, nid in enumerate(top_ids_for_rerank):
-                        if i < 3:
-                            ce_w = 0.15   # Rank 1-3: preserve exact matches
-                        elif i < 10:
-                            ce_w = 0.30   # Rank 4-10: balanced
-                        else:
-                            ce_w = 0.50   # Rank 11+: trust reranker more
-                        node_scores[nid] *= 1.0 + ce_w * ce_norm[i]
+                    # CE application mode — call-time env read so the eval
+                    # A/B can flip it per-arm (CAIRN_QUERY_EXPANSION pattern).
+                    _ce_mode = os.environ.get("CAIRN_CE_MODE", "boost")
+                    if _ce_mode == "resort":
+                        # Full re-sort: permute the EXISTING fused scores among
+                        # the reranked candidates in CE order. The score
+                        # multiset is unchanged (downstream abstention floors
+                        # keep their meaning); only the ordering of the top-K
+                        # changes, and the CE fully decides it.
+                        existing = sorted(
+                            (node_scores[nid] for nid in top_ids_for_rerank),
+                            reverse=True,
+                        )
+                        ce_order = sorted(
+                            range(len(top_ids_for_rerank)),
+                            key=lambda i: ce_norm[i],
+                            reverse=True,
+                        )
+                        for slot, i in enumerate(ce_order):
+                            node_scores[top_ids_for_rerank[i]] = existing[slot]
+                    else:
+                        # Position-aware CE boost (QMD-inspired): top RRF
+                        # results are already high-confidence from
+                        # multi-channel fusion, so reranker has less override
+                        # power. Lower-ranked results benefit more.
+                        for i, nid in enumerate(top_ids_for_rerank):
+                            if i < 3:
+                                ce_w = 0.15   # Rank 1-3: preserve exact matches
+                            elif i < 10:
+                                ce_w = 0.30   # Rank 4-10: balanced
+                            else:
+                                ce_w = 0.50   # Rank 11+: trust reranker more
+                            node_scores[nid] *= 1.0 + ce_w * ce_norm[i]
             except ImportError:
                 pass  # reranker module not available
             except Exception as e:
