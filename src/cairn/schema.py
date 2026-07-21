@@ -9,7 +9,7 @@ from typing import Tuple
 
 logger = logging.getLogger("cairn.schema")
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 
 def init_schema(
@@ -289,6 +289,25 @@ def init_schema(
         c.commit()
         logger.info("Schema migrated v13 -> v14: added derived_from, source_uri, status columns")
 
+    # v14 -> v15: add query_log table (durable query corpus for retrieval eval)
+    current_version = c.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
+    if current_version and current_version[0] < 15:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS query_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts TEXT NOT NULL,
+                query_text TEXT NOT NULL,
+                surfacing_context TEXT,
+                session_id TEXT,
+                result_count INTEGER,
+                top_score REAL
+            )
+        """)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_query_log_ts ON query_log(ts)")
+        c.execute("UPDATE schema_version SET version = 15")
+        c.commit()
+        logger.info("Schema migrated v14 -> v15: added query_log table")
+
     # ----------------------------------------------------------------
     # Table definitions (idempotent CREATE IF NOT EXISTS)
     # ----------------------------------------------------------------
@@ -414,6 +433,21 @@ def init_schema(
     """)
     c.execute("CREATE INDEX IF NOT EXISTS idx_forgetting_log_deleted_at ON forgetting_log(deleted_at)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_forgetting_log_reason ON forgetting_log(reason)")
+
+    # Durable query log — real-query corpus for retrieval eval (replay probes).
+    # Gated at write time by CAIRN_QUERY_LOG; pruned by maintenance after 90d.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS query_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL,
+            query_text TEXT NOT NULL,
+            surfacing_context TEXT,
+            session_id TEXT,
+            result_count INTEGER,
+            top_score REAL
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_query_log_ts ON query_log(ts)")
 
     # Cloud delete queue
     c.execute("""

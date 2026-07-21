@@ -160,6 +160,16 @@ class MaintenanceMixin:
             self._commit()
             return cursor.rowcount
 
+    def prune_query_log(self, max_age_days: int = 90) -> int:
+        """Remove query log entries older than max_age_days. Returns count removed."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+        with self._lock:
+            cursor = self._conn.execute(
+                "DELETE FROM query_log WHERE ts < ?", (cutoff,)
+            )
+            self._commit()
+            return cursor.rowcount
+
     def get_forgetting_log(self, limit: int = 50, reason: Optional[str] = None) -> List[Dict[str, Any]]:
         """Retrieve recent forgetting log entries."""
         if reason:
@@ -356,6 +366,9 @@ class MaintenanceMixin:
 
         # Auto-prune old forgetting log entries
         self.prune_forgetting_log()
+
+        # Auto-prune old query log entries (eval replay corpus, 90d retention)
+        self.prune_query_log()
 
         stats["node_count_after"] = self.node_count()
 

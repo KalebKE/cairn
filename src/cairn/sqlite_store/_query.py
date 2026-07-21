@@ -1374,6 +1374,31 @@ class QueryMixin:
             except Exception:
                 logger.debug("access_count batch update failed", exc_info=True)
 
+        # --- Durable query log: real-query corpus for retrieval eval ---
+        # Deliberately outside `if deduped:` — zero-result queries are signal.
+        # Call-time env read so tests/eval runs can disable per-case.
+        if os.environ.get("CAIRN_QUERY_LOG", "1") != "0":
+            try:
+                _sc = ctx.surfacing_context
+                _sc_str = (
+                    str(getattr(_sc, "value", _sc)) if _sc is not None else None
+                )
+                self._conn.execute(
+                    "INSERT INTO query_log (ts, query_text, surfacing_context, "
+                    "session_id, result_count, top_score) VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        datetime.now(timezone.utc).isoformat(),
+                        query_text[:500],
+                        _sc_str,
+                        session_id,
+                        len(deduped),
+                        round(max(node_scores.values()), 4) if node_scores else 0.0,
+                    ),
+                )
+                self._commit()
+            except Exception:
+                logger.debug("query_log insert failed", exc_info=True)
+
         # Annotate results with embedding backend for transparency
         try:
             from cairn.embedding import get_active_backend
