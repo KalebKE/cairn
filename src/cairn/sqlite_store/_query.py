@@ -1547,7 +1547,20 @@ class QueryMixin:
         similarity, BM25, temporal proximity) into a single unified score.
         Documents found by multiple channels naturally receive higher scores.
 
-        Formula: score(d) = sum_c [ w_c / (k + rank_c(d)) ]
+        Canonical weighted RRF (Cormack et al. 2009):
+            score(d) = sum_c [ w_c / (k + rank_c(d) + 1) ]
+        followed by a max-normalization of the combined scores to [0, 1] —
+        downstream abstention floors (ctx_min_composite 0.08-0.10,
+        _MIN_COMPOSITE_SCORE) are calibrated to that scale; raw RRF peaks at
+        ~1/(k+1) and would abstain on everything.
+
+        Historical note: this function used to min-max normalize each channel
+        to [0,1] before weighting ("so one channel's outlier doesn't compress
+        the others"). That step was provably inert: every non-empty channel's
+        top rank scores exactly 1/(k+1), so the per-channel division was one
+        uniform scalar across all channels, cancelled by the final max-norm.
+        Verified bit-identical over randomized inputs (see
+        test_rrf_canonical_equals_historical_renorm) and removed.
 
         Args:
             ranked_lists: List of ranked results per channel. Each is
@@ -1563,27 +1576,13 @@ class QueryMixin:
         if weights is None:
             weights = [1.0] * len(ranked_lists)
 
-        # Per-channel RRF scores, normalized per-channel to [0,1] before fusion
-        # so one channel's outlier doesn't compress all others
         scores: Dict[str, float] = {}
         for channel_idx, ranked in enumerate(ranked_lists):
             w = weights[channel_idx]
-            if not ranked:
-                continue
-            # Compute per-channel RRF scores
-            channel_scores: Dict[str, float] = {}
             for rank_pos, (doc_id, _raw_score) in enumerate(ranked):
-                channel_scores[doc_id] = 1.0 / (k + rank_pos + 1)
-            # Normalize this channel to [0, 1]
-            ch_max = max(channel_scores.values()) if channel_scores else 1.0
-            if ch_max > 0:
-                for doc_id in channel_scores:
-                    channel_scores[doc_id] /= ch_max
-            # Weighted accumulation
-            for doc_id, ch_score in channel_scores.items():
-                scores[doc_id] = scores.get(doc_id, 0.0) + w * ch_score
+                scores[doc_id] = scores.get(doc_id, 0.0) + w / (k + rank_pos + 1)
 
-        # Normalize combined scores to [0, 1]
+        # Normalize combined scores to [0, 1] (downstream floors assume this).
         if scores:
             max_score = max(scores.values())
             if max_score > 0:

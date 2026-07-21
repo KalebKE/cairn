@@ -94,6 +94,60 @@ class TestRRFFusion:
         python_found = any("Python" in r.content for r in results[:2])
         assert python_found
 
+    def test_rrf_canonical_equals_historical_renorm(self):
+        """Regression pin: the removed per-channel renorm was provably inert.
+
+        The historical implementation min-max normalized each channel before
+        weighting. Every non-empty channel's top rank scores exactly 1/(k+1),
+        so that division was one uniform scalar across all channels — erased
+        by the final max-norm. Canonical RRF must therefore be bit-identical
+        to the historical variant on any input.
+        """
+        import random
+
+        from cairn.sqlite_store._query import QueryMixin
+
+        def historical_renorm(ranked_lists, weights, k=60):
+            scores = {}
+            for ci, ranked in enumerate(ranked_lists):
+                if not ranked:
+                    continue
+                ch = {}
+                for pos, (doc_id, _s) in enumerate(ranked):
+                    ch[doc_id] = 1.0 / (k + pos + 1)
+                ch_max = max(ch.values())
+                for d in ch:
+                    ch[d] /= ch_max
+                for d, s in ch.items():
+                    scores[d] = scores.get(d, 0.0) + weights[ci] * s
+            if scores:
+                m = max(scores.values())
+                if m > 0:
+                    scores = {d: s / m for d, s in scores.items()}
+            return scores
+
+        rng = random.Random(7)
+        for trial in range(100):
+            n_channels = rng.randint(1, 4)
+            channels = []
+            for _ in range(n_channels):
+                seen, ranked = set(), []
+                for _ in range(rng.randint(0, 12)):
+                    d = f"d{rng.randint(0, 20)}"
+                    if d not in seen:
+                        seen.add(d)
+                        ranked.append((d, rng.random()))
+                channels.append(ranked)
+            weights = [rng.choice([0.5, 0.7, 1.0, 1.2, 1.5]) for _ in range(n_channels)]
+
+            canonical = QueryMixin._rrf_fuse(channels, weights=weights)
+            legacy = historical_renorm(channels, weights)
+            assert canonical.keys() == legacy.keys()
+            for doc in canonical:
+                assert abs(canonical[doc] - legacy[doc]) < 1e-12, (
+                    f"trial {trial}: {doc} diverged"
+                )
+
 
 # ============================================================================
 # Entity-match channel (in-repo replacement for the removed Pro entity
