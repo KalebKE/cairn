@@ -662,3 +662,15 @@ class TestCEResortMode:
 
         # Same result SET either way — resort only reorders.
         assert {r.id for r in boost} == {r.id for r in resort}
+
+
+class TestCEHybridMode:
+    def test_hybrid_promotes_ce_favorite_only(self, store, monkeypatch):
+        import cairn.reranker as rr
+        store.store(content="Deploy pipeline memo alpha about blue-green rollout health gates")
+        store.store(content="Deploy pipeline memo beta about rollback of failed canary releases")
+        store.store(content="Deploy pipeline memo gamma about staging smoke checks before traffic")
+        monkeypatch.setenv("CAIRN_CE_MODE", "hybrid")
+        monkeypatch.setattr(rr, "cross_encoder_score", TestCEResortMode._fake_ce("gamma"))
+        results = store.query("deploy pipeline memo", limit=3)
+        assert results and "gamma" in results[0].content

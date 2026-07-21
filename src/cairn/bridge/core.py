@@ -11,6 +11,7 @@ resolve at call time.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import unicodedata
 from datetime import datetime, timezone
@@ -394,6 +395,10 @@ def auto_capture(
             logger.debug(f"Pre-computed embedding generation failed: {e}")
 
     if dedup_threshold is not None or event_type in EVOLUTION_TYPES:
+        # Internal dedup/evolution lookup — suppress query_log so the replay
+        # corpus only contains genuine retrieval queries, not memory contents.
+        _prev_ql = os.environ.get("CAIRN_QUERY_LOG")
+        os.environ["CAIRN_QUERY_LOG"] = "0"
         try:
             _similar_results = store.query(
                 content[:200], limit=8,
@@ -401,6 +406,11 @@ def auto_capture(
             )
         except Exception as e:
             logger.debug(f"Similar-content query failed: {e}")
+        finally:
+            if _prev_ql is None:
+                os.environ.pop("CAIRN_QUERY_LOG", None)
+            else:
+                os.environ["CAIRN_QUERY_LOG"] = _prev_ql
 
     # Phase 1: content-level dedup — reuse a near-identical existing memory.
     _dedup = _try_content_dedup(store, content, event_type, session_id, _similar_results, dedup_threshold)

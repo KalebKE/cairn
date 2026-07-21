@@ -277,6 +277,20 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         # pattern created a new event loop per call, causing ~1.8 GB/hr memory
         # growth from fragmentation and retained references.
         result = await handler(arguments)
+        # Record the tool call in the usage tracker so cairn_stats(utilization)
+        # reflects MCP traffic (previously only LLM calls were counted).
+        try:
+            global _usage_tracker
+            if _usage_tracker is None:
+                from cairn.usage_tracker import UsageTracker
+                _usage_tracker = UsageTracker()
+            _usage_tracker.record(
+                session_id=arguments.get("session_id"),
+                tool_name=rate_name, model="mcp-tool",
+                input_tokens=0, output_tokens=0,
+            )
+        except Exception:
+            logger.debug("usage tracking failed", exc_info=True)
         # Extract text from MCP response format
         content_list = result.get("content", [{}])
         text = content_list[0].get("text", str(result)) if content_list else str(result)

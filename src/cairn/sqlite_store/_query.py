@@ -1127,8 +1127,31 @@ class QueryMixin:
 
                     # CE application mode — call-time env read so the eval
                     # A/B can flip it per-arm (CAIRN_QUERY_EXPANSION pattern).
-                    _ce_mode = os.environ.get("CAIRN_CE_MODE", "boost")
-                    if _ce_mode == "resort":
+                    _ce_mode = os.environ.get("CAIRN_CE_MODE", "hybrid")
+                    if _ce_mode == "hybrid":
+                        # Resort rank-1 only: the CE's single favorite takes
+                        # the top fused score (capturing resort's MRR gain);
+                        # everyone else keeps the gentle boost (protecting
+                        # P@K, which full resort degraded in the A/B).
+                        for i, nid in enumerate(top_ids_for_rerank):
+                            ce_w = 0.15 if i < 3 else (0.30 if i < 10 else 0.50)
+                            node_scores[nid] *= 1.0 + ce_w * ce_norm[i]
+                        best_i = max(range(len(top_ids_for_rerank)),
+                                     key=lambda i: ce_scores[i])
+                        # Confidence margin on SIGMOID(raw logits) — min-max
+                        # normalized scores stretch any tiny difference to a
+                        # full-range margin, so they can't express indifference.
+                        _sig = [1.0 / (1.0 + math.exp(-min(30.0, max(-30.0, sc))))
+                                for sc in ce_scores]
+                        _rest = [_sig[i] for i in range(len(_sig)) if i != best_i]
+                        _margin = _sig[best_i] - max(_rest) if _rest else 0.0
+                        # Only override rank 1 when the CE is CONFIDENT — an
+                        # indifferent CE (tiny margin) must not trample the
+                        # metadata knowledge weighting (priority/type order).
+                        if _margin >= 0.10:
+                            top_score = max(node_scores[n] for n in top_ids_for_rerank)
+                            node_scores[top_ids_for_rerank[best_i]] = top_score * 1.01
+                    elif _ce_mode == "resort":
                         # Full re-sort: permute the EXISTING fused scores among
                         # the reranked candidates in CE order. The score
                         # multiset is unchanged (downstream abstention floors
@@ -1753,12 +1776,19 @@ class QueryMixin:
             priority = 3.0
         priority = min(5.0, max(1.0, priority))
         priority_factor = 0.7 + (priority * 0.08)
+        # capture_confidence as a ranking signal (audit follow-up) — env-gated
+        # OFF until the A/B shows it earns a default.
+        confidence_factor = 1.0
+        if os.environ.get("CAIRN_CONFIDENCE_SIGNAL", "0") == "1":
+            confidence_factor = {"high": 1.1, "low": 0.8}.get(
+                node.metadata.get("capture_confidence"), 1.0
+            )
         _la = node.last_accessed.isoformat() if node.last_accessed else None
         _ca = node.created_at.isoformat() if node.created_at else None
         decay_factor = self._compute_decay_factor(
             event_type, _la, _ca, node.access_count or 0
         )
-        return type_weight * fb_factor * priority_factor * decay_factor
+        return type_weight * fb_factor * priority_factor * decay_factor * confidence_factor
 
     def _compute_decay_factor(self, event_type: str, last_accessed: Optional[str],
                                created_at: Optional[str],

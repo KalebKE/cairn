@@ -173,6 +173,21 @@ def _pool_candidates(store, query: str, seed_id: str, top_k: int,
     return ids
 
 
+def _query_log_topics(store, size: int) -> List[Dict[str, str]]:
+    """Real logged queries as probe topics (replay source).
+
+    Returns sample_memories-shaped dicts; query_text doubles as content so
+    the divergence step is skipped (these queries ARE the real thing).
+    """
+    rows = store._conn.execute(
+        "SELECT DISTINCT query_text FROM query_log "
+        "WHERE length(query_text) >= 12 ORDER BY id DESC LIMIT ?",
+        (size,),
+    ).fetchall()
+    return [{"id": f"qlog-{i}", "content": r[0], "event_type": "query_log"}
+            for i, r in enumerate(rows)]
+
+
 def build_probe_set(
     store,
     size: int = 30,
@@ -180,6 +195,7 @@ def build_probe_set(
     top_k: int = 10,
     negatives: int = 3,
     out_path: Optional[str] = None,
+    from_query_log: bool = False,
 ) -> Dict[str, Any]:
     """Build and freeze a judged probe set against `store`.
 
@@ -194,16 +210,23 @@ def build_probe_set(
     os.environ["CAIRN_QUERY_LOG"] = "0"
     try:
         rng = random.Random(seed)
-        samples = sample_memories(store, sample_size=size, seed=seed)
+        if from_query_log:
+            samples = _query_log_topics(store, size)
+        else:
+            samples = sample_memories(store, sample_size=size, seed=seed)
         probes: List[ProbeV2] = []
         skipped: List[Dict[str, str]] = []
 
         for mem in samples:
-            gen = generate_divergent_query(mem["content"])
-            if gen is None:
-                skipped.append({"id": mem["id"], "reason": "generation_failed_or_overlap"})
-                continue
-            query, overlap = gen
+            if from_query_log:
+                # The logged query IS the probe — no generation, no seed label.
+                query, overlap = mem["content"], 0.0
+            else:
+                gen = generate_divergent_query(mem["content"])
+                if gen is None:
+                    skipped.append({"id": mem["id"], "reason": "generation_failed_or_overlap"})
+                    continue
+                query, overlap = gen
 
             candidate_ids = _pool_candidates(store, query, mem["id"], top_k, negatives, rng)
             qrels: Dict[str, int] = {}
@@ -226,7 +249,7 @@ def build_probe_set(
 
             probes.append(ProbeV2(
                 query_text=query,
-                method="llm-divergent",
+                method="query-log-replay" if from_query_log else "llm-divergent",
                 qrels=qrels,
                 meta={
                     "seed_memory_id": mem["id"],

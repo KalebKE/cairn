@@ -2825,7 +2825,8 @@ def cmd_eval_retrieval(args):
         print(f"Building probe set against snapshot {snap} (size={sample_size}, seed={seed})...")
         store = SQLiteStore(db_path=snap)
         try:
-            payload = build_probe_set(store, size=sample_size, seed=seed, top_k=10)
+            payload = build_probe_set(store, size=sample_size, seed=seed, top_k=10,
+                                      from_query_log=getattr(args, "from_query_log", False))
         finally:
             store.close()
         print(f"Probe set: {payload['path']}")
@@ -3090,6 +3091,8 @@ def main():
     eval_parser.add_argument("--build-probes", action="store_true",
                              help="Build a frozen judged probe set (v2, needs LLM provider) and exit")
     eval_parser.add_argument("--probes", help="Run eval v2 against a frozen probe-set JSON (provider-free)")
+    eval_parser.add_argument("--from-query-log", action="store_true",
+                             help="With --build-probes: source topics from real logged queries (replay)")
     eval_parser.add_argument("--ab", metavar="VAR=VAL_A|VAL_B",
                              help="Paired A/B over one env knob on the probe set "
                                   "(e.g. CAIRN_CROSS_ENCODER=1|0) + sign test")

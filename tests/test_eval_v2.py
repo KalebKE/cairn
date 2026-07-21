@@ -215,3 +215,49 @@ def test_compare_ab_identical_variants_zero_delta(seeded_store, tmp_path):
     for metric, d in cmp["delta"].items():
         assert abs(d) < 1e-9, f"nonzero delta on identical variants: {metric}={d}"
     assert cmp["sign_test"]["p_value"] == 1.0
+
+
+# --- follow-up batch: replay probes, dedup-suppress, confidence signal ------
+
+def test_query_log_replay_topics(store, monkeypatch):
+    from cairn.evaluation import probe_set as ps
+    for q in ("how do we tune the kalman filter noise", "deploy rollback steps for canary"):
+        store._conn.execute(
+            "INSERT INTO query_log (ts, query_text, result_count, top_score) VALUES ('2026-07-21T00:00:00', ?, 1, 0.5)", (q,))
+    store._commit()
+    topics = ps._query_log_topics(store, 10)
+    assert len(topics) == 2 and topics[0]["event_type"] == "query_log"
+
+
+def test_build_probes_from_query_log(store, monkeypatch):
+    from cairn.evaluation import probe_set as ps
+    nid = store.store(content="Kalman filter noise tuning uses process noise 0.01")
+    store._conn.execute(
+        "INSERT INTO query_log (ts, query_text, result_count, top_score) VALUES ('2026-07-21T00:00:00', 'kalman filter noise tuning', 1, 0.9)")
+    store._commit()
+    monkeypatch.setattr(ps, "judge_grade", lambda q, c: 3)
+    payload = ps.build_probe_set(store, size=5, out_path=str(__import__('tempfile').mktemp()), from_query_log=True)
+    assert payload["probe_count"] == 1
+    assert payload["probes"][0]["method"] == "query-log-replay"
+    assert nid in payload["probes"][0]["qrels"]
+
+
+def test_auto_capture_does_not_pollute_query_log(tmp_cairn_dir, monkeypatch):
+    monkeypatch.delenv("CAIRN_QUERY_LOG", raising=False)
+    from cairn.bridge import reset_memory, auto_capture, _get_store
+    reset_memory()
+    auto_capture(content="A decision about database indexes worth deduping later",
+                 event_type="decision")
+    n = _get_store()._conn.execute("SELECT COUNT(*) FROM query_log").fetchone()[0]
+    reset_memory()
+    assert n == 0, "internal dedup queries leaked into the replay corpus"
+
+
+def test_confidence_signal_env_gated(store, monkeypatch):
+    class _Node:
+        metadata = {"event_type": "memory", "capture_confidence": "low"}
+        last_accessed = None; created_at = None; access_count = 0
+    base = store._metadata_score_factor(_Node())
+    monkeypatch.setenv("CAIRN_CONFIDENCE_SIGNAL", "1")
+    gated = store._metadata_score_factor(_Node())
+    assert gated < base  # low confidence demoted only when enabled
