@@ -800,3 +800,285 @@ def format_report(report: EvalReport) -> str:
                 lines.append(f"  Top result: `{top['id']}` (score {top['score']})")
 
     return "\n".join(lines)
+
+
+# ===========================================================================
+# Eval v2 — non-self-referential probes with judged qrels
+# ===========================================================================
+#
+# v1 above measures "can we re-find a memory from its own wording" — useful as
+# a smoke signal, structurally over-optimistic. v2 runs frozen probe sets
+# (see probe_set.py) whose relevance labels are independent LLM-judged qrels,
+# so it can arbitrate scoring changes (e.g. the RRF fusion-mode A/B).
+
+
+@dataclass
+class ProbeResultV2:
+    """Per-probe outcome against judged qrels."""
+
+    query_text: str
+    reciprocal_rank: float          # 1/rank of first grade>=2 result, else 0
+    precision_at_k: float           # fraction of top-K with grade>=2
+    ndcg_at_k: float                # graded nDCG (unjudged results = grade 0)
+    returned: int
+    judged_returned: int            # how many returned results had a qrel entry
+    result_ids: List[str] = field(default_factory=list)
+
+
+@dataclass
+class EvalReportV2:
+    """Aggregate metrics for one run of a frozen probe set."""
+
+    timestamp: str
+    probe_set_path: str
+    probe_set_sha256: str
+    probe_count: int
+    top_k: int
+    variant: str                    # label for this run's configuration
+    env_overrides: Dict[str, str] = field(default_factory=dict)
+    expansion_enabled: bool = False
+    cross_encoder_enabled: bool = True
+    db_path: str = ""
+    mrr: float = 0.0
+    precision_at_k: float = 0.0
+    ndcg_at_k: float = 0.0
+    hit_rate: float = 0.0           # probes with >=1 grade>=2 result in top-K
+    abstentions: int = 0            # probes returning zero results
+    pool_coverage: float = 0.0      # judged_returned / returned, averaged
+    per_probe: List[Dict[str, Any]] = field(default_factory=list)
+    duration_seconds: float = 0.0
+
+
+def snapshot_db(src_db: str, dest_dir: Optional[str] = None) -> str:
+    """Copy a cairn.db via the SQLite online-backup API into a temp dir.
+
+    Eval queries mutate access/retrieval counts — they must never run against
+    the live store. Returns the path of the snapshot copy.
+    """
+    import sqlite3
+    import tempfile
+
+    if dest_dir is None:
+        dest_dir = tempfile.mkdtemp(prefix="cairn-eval-")
+    dest = str(Path(dest_dir) / "cairn.db")
+    src = sqlite3.connect(src_db, timeout=30)
+    dst = sqlite3.connect(dest)
+    try:
+        src.backup(dst)
+    finally:
+        dst.close()
+        src.close()
+    return dest
+
+
+def run_evaluation_v2(
+    probe_set_path: str,
+    db_path: Optional[str] = None,
+    top_k: int = 5,
+    env: Optional[Dict[str, str]] = None,
+    variant: str = "default",
+) -> EvalReportV2:
+    """Run a frozen probe set. Snapshot-by-default; provider-free.
+
+    When ``db_path`` is None the live DB is snapshotted first. When a path is
+    given it is used directly (compare_ab passes per-arm copies so arm 1's
+    access-count bumps can't bias arm 2). ``env`` holds the variant's
+    environment overrides, restored afterwards.
+
+    Determinism controls for comparisons: query expansion and query logging
+    are disabled for the duration; the cross-encoder is left as configured.
+    """
+    import os
+
+    from cairn.evaluation.probe_set import load_probe_set
+
+    probes, meta = load_probe_set(probe_set_path)
+
+    if db_path is None:
+        from cairn.paths import db_path as live_db
+        db_path = snapshot_db(str(live_db()))
+
+    overrides = dict(env or {})
+    forced = {"CAIRN_QUERY_EXPANSION": "0", "CAIRN_QUERY_LOG": "0"}
+    all_keys = set(forced) | set(overrides)
+    saved = {k: os.environ.get(k) for k in all_keys}
+    os.environ.update(forced)
+    os.environ.update(overrides)
+
+    start = time.time()
+    try:
+        from cairn.sqlite_store import SQLiteStore
+
+        store = SQLiteStore(db_path=db_path)
+        try:
+            per: List[ProbeResultV2] = []
+            for probe in probes:
+                try:
+                    results = store.query(probe.query_text, limit=top_k)
+                except Exception:
+                    logger.warning("probe query failed: %r", probe.query_text, exc_info=True)
+                    results = []
+                ids = [r.id for r in results]
+                grades = [probe.qrels.get(i, 0) for i in ids]
+                judged = sum(1 for i in ids if i in probe.qrels)
+
+                rr = 0.0
+                for rank, g in enumerate(grades, start=1):
+                    if g >= 2:
+                        rr = 1.0 / rank
+                        break
+                p_at_k = (sum(1 for g in grades if g >= 2) / top_k) if top_k else 0.0
+                # nDCG ideal comes from the full qrel set, not just returned
+                ideal = sorted(probe.qrels.values(), reverse=True)
+                ideal_dcg = _dcg([float(g) for g in ideal], top_k)
+                ndcg = (_dcg([float(g) for g in grades], top_k) / ideal_dcg) if ideal_dcg > 0 else 0.0
+
+                per.append(ProbeResultV2(
+                    query_text=probe.query_text,
+                    reciprocal_rank=rr,
+                    precision_at_k=p_at_k,
+                    ndcg_at_k=ndcg,
+                    returned=len(ids),
+                    judged_returned=judged,
+                    result_ids=ids,
+                ))
+        finally:
+            store.close()
+
+        n = len(per) or 1
+        with_results = [p for p in per if p.returned]
+        report = EvalReportV2(
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            probe_set_path=probe_set_path,
+            probe_set_sha256=str(meta.get("content_sha256", "")),
+            probe_count=len(per),
+            top_k=top_k,
+            variant=variant,
+            env_overrides=overrides,
+            expansion_enabled=False,
+            cross_encoder_enabled=os.environ.get("CAIRN_CROSS_ENCODER") != "0",
+            db_path=db_path,
+            mrr=sum(p.reciprocal_rank for p in per) / n,
+            precision_at_k=sum(p.precision_at_k for p in per) / n,
+            ndcg_at_k=sum(p.ndcg_at_k for p in per) / n,
+            hit_rate=sum(1 for p in per if p.reciprocal_rank > 0) / n,
+            abstentions=sum(1 for p in per if not p.returned),
+            pool_coverage=(
+                sum(p.judged_returned / p.returned for p in with_results) / len(with_results)
+                if with_results else 0.0
+            ),
+            per_probe=[asdict(p) for p in per],
+            duration_seconds=round(time.time() - start, 2),
+        )
+        return report
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def write_history_row(report: EvalReportV2, csv_path: Optional[str] = None) -> str:
+    """Append a run to eval-history.csv (column 2 = MRR; the doctor's trend
+    parser reads float(row[1]))."""
+    if csv_path is None:
+        from cairn.paths import cairn_home
+        logs = cairn_home() / "logs"
+        logs.mkdir(parents=True, exist_ok=True, mode=0o700)
+        csv_path = str(logs / "eval-history.csv")
+    p = Path(csv_path)
+    header = "date,mrr,ndcg,p_at_k,probe_version,variant\n"
+    line = (
+        f"{report.timestamp},{report.mrr:.4f},{report.ndcg_at_k:.4f},"
+        f"{report.precision_at_k:.4f},{report.probe_set_sha256[:12]},{report.variant}\n"
+    )
+    if not p.exists() or not p.read_text().strip():
+        p.write_text(header + line)
+    else:
+        with p.open("a") as fh:
+            fh.write(line)
+    return csv_path
+
+
+def sign_test(deltas: List[float]) -> Tuple[int, int, float]:
+    """Two-sided exact binomial sign test over paired deltas.
+
+    Returns (n_positive, n_negative, p_value); zero deltas are discarded.
+    """
+    pos = sum(1 for d in deltas if d > 0)
+    neg = sum(1 for d in deltas if d < 0)
+    n = pos + neg
+    if n == 0:
+        return 0, 0, 1.0
+    k = min(pos, neg)
+    tail = sum(math.comb(n, i) for i in range(k + 1)) / (2 ** n)
+    return pos, neg, min(1.0, 2 * tail)
+
+
+def compare_ab(
+    probe_set_path: str,
+    variant_a: Tuple[str, Dict[str, str]],
+    variant_b: Tuple[str, Dict[str, str]],
+    src_db: Optional[str] = None,
+    top_k: int = 5,
+) -> Dict[str, Any]:
+    """Paired A/B of two env-variant configurations on identical snapshots.
+
+    Each variant is (label, env_overrides). Each arm gets its OWN copy of the
+    base snapshot so arm A's access-count bumps cannot bias arm B
+    (access-aware decay reads those counts). Returns per-metric deltas (B - A)
+    and a two-sided sign test over per-probe reciprocal-rank deltas.
+    """
+    import shutil
+    import tempfile
+
+    if src_db is None:
+        from cairn.paths import db_path as live_db
+        src_db = str(live_db())
+
+    base_dir = tempfile.mkdtemp(prefix="cairn-ab-")
+    base = snapshot_db(src_db, base_dir)
+    arms: Dict[str, EvalReportV2] = {}
+    for idx, (label, env) in enumerate((variant_a, variant_b)):
+        arm_db = str(Path(base_dir) / f"cairn-arm{idx}.db")
+        shutil.copy2(base, arm_db)
+        arms[label] = run_evaluation_v2(
+            probe_set_path, db_path=arm_db, top_k=top_k, env=env, variant=label,
+        )
+
+    label_a, label_b = variant_a[0], variant_b[0]
+    ra, rb = arms[label_a], arms[label_b]
+    rr_deltas = [
+        b["reciprocal_rank"] - a["reciprocal_rank"]
+        for a, b in zip(ra.per_probe, rb.per_probe)
+    ]
+    pos, neg, p = sign_test(rr_deltas)
+    return {
+        "a": asdict(ra),
+        "b": asdict(rb),
+        "labels": [label_a, label_b],
+        "delta": {
+            "mrr": rb.mrr - ra.mrr,
+            "ndcg_at_k": rb.ndcg_at_k - ra.ndcg_at_k,
+            "precision_at_k": rb.precision_at_k - ra.precision_at_k,
+            "hit_rate": rb.hit_rate - ra.hit_rate,
+        },
+        "sign_test": {"b_wins": pos, "a_wins": neg, "p_value": p},
+    }
+
+
+def format_report_v2(report: EvalReportV2) -> str:
+    """Human-readable summary of a v2 run."""
+    lines = [
+        "# Retrieval Eval v2",
+        f"- Probe set: {report.probe_set_path} ({report.probe_count} probes, sha {report.probe_set_sha256[:12]})",
+        f"- Variant: {report.variant} {report.env_overrides or ''} | top-K: {report.top_k} | expansion: off | CE: {'on' if report.cross_encoder_enabled else 'off'}",
+        "",
+        f"| MRR | nDCG@{report.top_k} | P@{report.top_k} | hit-rate | abstentions | pool coverage |",
+        "|-----|------|------|----------|-------------|---------------|",
+        f"| {report.mrr:.3f} | {report.ndcg_at_k:.3f} | {report.precision_at_k:.3f} "
+        f"| {report.hit_rate:.3f} | {report.abstentions} | {report.pool_coverage:.2f} |",
+        f"\nDuration: {report.duration_seconds}s | DB: {report.db_path}",
+    ]
+    return "\n".join(lines)

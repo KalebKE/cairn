@@ -2811,6 +2811,77 @@ def cmd_eval_retrieval(args):
     output_path = getattr(args, "output", None)
     use_json = _use_json(args)
 
+    # --- v2 paths: frozen judged probe sets (non-self-referential) ---------
+    if getattr(args, "build_probes", False):
+        from cairn.evaluation.retrieval_eval import snapshot_db
+        from cairn.evaluation.probe_set import build_probe_set
+        from cairn.sqlite_store import SQLiteStore
+
+        live = CAIRN_DIR / "cairn.db"
+        if not live.exists():
+            print("No cairn.db found — nothing to build probes from.")
+            sys.exit(1)
+        snap = snapshot_db(str(live))
+        print(f"Building probe set against snapshot {snap} (size={sample_size}, seed={seed})...")
+        store = SQLiteStore(db_path=snap)
+        try:
+            payload = build_probe_set(store, size=sample_size, seed=seed, top_k=10)
+        finally:
+            store.close()
+        print(f"Probe set: {payload['path']}")
+        print(f"  probes: {payload['probe_count']}  skipped: {len(payload['skipped'])}  sha: {payload['content_sha256'][:12]}")
+        if payload["probe_count"] == 0:
+            print("  WARNING: 0 probes built — is an LLM provider configured (CAIRN_LLM_PROVIDER/ANTHROPIC_API_KEY)?")
+            sys.exit(1)
+        return
+
+    probes_path = getattr(args, "probes", None)
+    if probes_path:
+        from cairn.evaluation.retrieval_eval import (
+            compare_ab, format_report_v2, run_evaluation_v2, write_history_row,
+        )
+
+        ab_spec = getattr(args, "ab", None)
+        if ab_spec:
+            # --ab "VAR=VAL_A|VAL_B": paired A/B over one env knob
+            try:
+                var, vals = ab_spec.split("=", 1)
+                val_a, val_b = vals.split("|", 1)
+            except ValueError:
+                print("Error: --ab expects VAR=VAL_A|VAL_B (e.g. CAIRN_CROSS_ENCODER=1|0)")
+                sys.exit(1)
+            va = (f"{var}={val_a}", {var: val_a})
+            vb = (f"{var}={val_b}", {var: val_b})
+            print(f"Paired A/B on probe set {probes_path}: {va[0]} vs {vb[0]} (top-{top_k})...")
+            cmp = compare_ab(probes_path, va, vb, top_k=top_k)
+            if use_json:
+                print(json.dumps(cmp, indent=2, default=str))
+            else:
+                d = cmp["delta"]; st = cmp["sign_test"]; la, lb = cmp["labels"]
+                print(f"\n| metric | {la} | {lb} | delta (B-A) |")
+                print("|--------|------|------|-------------|")
+                for m in ("mrr", "ndcg_at_k", "precision_at_k", "hit_rate"):
+                    print(f"| {m} | {cmp['a'][m]:.3f} | {cmp['b'][m]:.3f} | {d[m]:+.3f} |")
+                print(f"\nSign test (per-probe RR): B wins {st['b_wins']}, "
+                      f"A wins {st['a_wins']}, p={st['p_value']:.4f}")
+            if output_path:
+                Path(output_path).write_text(json.dumps(cmp, indent=2, default=str))
+                print(f"\nA/B report saved to {output_path}")
+            return
+
+        report = run_evaluation_v2(probes_path, top_k=top_k)
+        csv_path = write_history_row(report)
+        if use_json:
+            from dataclasses import asdict
+            print(json.dumps(asdict(report), indent=2, default=str))
+        else:
+            print(format_report_v2(report))
+            print(f"\nHistory row appended to {csv_path}")
+        if output_path:
+            from dataclasses import asdict
+            Path(output_path).write_text(json.dumps(asdict(report), indent=2, default=str))
+        return
+
     if judge:
         try:
             import anthropic  # noqa: F401
@@ -3016,6 +3087,12 @@ def main():
     eval_parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducible sampling (default: 42)")
     eval_parser.add_argument("--output", help="Save JSON report to this path")
     eval_parser.add_argument("--json", action="store_true", help="Output as JSON to stdout (also: CAIRN_JSON=1)")
+    eval_parser.add_argument("--build-probes", action="store_true",
+                             help="Build a frozen judged probe set (v2, needs LLM provider) and exit")
+    eval_parser.add_argument("--probes", help="Run eval v2 against a frozen probe-set JSON (provider-free)")
+    eval_parser.add_argument("--ab", metavar="VAR=VAL_A|VAL_B",
+                             help="Paired A/B over one env knob on the probe set "
+                                  "(e.g. CAIRN_CROSS_ENCODER=1|0) + sign test")
 
     packet_eval_parser = subparsers.add_parser("eval-context-packet", help="Evaluate task-aware context packet quality")
     packet_eval_parser.add_argument("--sample-size", type=int, default=20, help="Number of memories to probe (default: 20)")
