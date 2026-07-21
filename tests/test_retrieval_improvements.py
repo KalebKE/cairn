@@ -569,3 +569,50 @@ class TestSchemaMigration:
         cols = store._conn.execute("PRAGMA table_info(memories)").fetchall()
         col_names = [c[1] for c in cols]
         assert "extracted_keywords" in col_names
+
+
+class TestMalformedPriorityMetadata:
+    """A memory with a non-numeric priority must not kill the query.
+
+    Real incident: a live memory carried priority="high" (text, not 1-5);
+    _metadata_score_factor computed 0.7 + ("high" * 0.08) -> TypeError,
+    aborting the entire query whenever that memory was a candidate.
+    """
+
+    def test_query_survives_text_priority(self, store):
+        store.store(
+            content="Deployment freeze decision for the holiday season window",
+            metadata={"event_type": "decision", "priority": "high"},
+        )
+        store.store(
+            content="Unrelated note about database vacuum scheduling",
+            metadata={"event_type": "memory"},
+        )
+        # Must not raise, and the malformed-priority memory must still surface.
+        results = store.query("deployment freeze holiday", limit=5)
+        assert any("freeze" in r.content for r in results)
+
+    def test_query_survives_list_priority_in_metadata_json(self, store):
+        # A list can't bind to the priority COLUMN (store() raises), but it
+        # can exist inside the metadata JSON via import/legacy paths — inject
+        # it there directly and prove retrieval still doesn't raise.
+        nid = store.store(
+            content="Priority list experiment memo with odd metadata shape",
+            metadata={"event_type": "memory"},
+        )
+        store._conn.execute(
+            "UPDATE memories SET metadata = json_set(metadata, '$.priority', json('[1,2]')) "
+            "WHERE node_id = ?",
+            (nid,),
+        )
+        store._commit()
+        results = store.query("priority list experiment memo", limit=5)
+        assert isinstance(results, list)  # no exception is the contract
+
+    def test_numeric_string_priority_is_coerced(self, store):
+        store.store(
+            content="Numeric string priority memo about cache eviction",
+            metadata={"event_type": "memory", "priority": "5"},
+        )
+        results = store.query("cache eviction memo", limit=5)
+        assert isinstance(results, list)

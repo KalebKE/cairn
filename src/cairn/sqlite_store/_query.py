@@ -1723,7 +1723,14 @@ class QueryMixin:
         event_type = node.metadata.get("event_type", "")
         type_weight = self._TYPE_WEIGHTS.get(event_type, 1.0)
         fb_factor = self._compute_fb_factor(node.metadata.get("feedback_score", 0))
-        priority = node.metadata.get("priority", 3)
+        # Defensive coercion: priority is user-supplied metadata and has shown
+        # up as text ("high") in the wild — a raise here would abort the whole
+        # query for every candidate set containing the malformed row.
+        try:
+            priority = float(node.metadata.get("priority", 3))
+        except (TypeError, ValueError):
+            priority = 3.0
+        priority = min(5.0, max(1.0, priority))
         priority_factor = 0.7 + (priority * 0.08)
         _la = node.last_accessed.isoformat() if node.last_accessed else None
         _ca = node.created_at.isoformat() if node.created_at else None
