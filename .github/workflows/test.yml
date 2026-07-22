@@ -62,6 +62,9 @@ jobs:
           print('embedding backend:', get_active_backend())
           PY
 
+      - name: Hook-server diagnostics (temporary)
+        run: pytest tests/server/test_hook_server.py -x -v --tb=long -o log_cli=true -o log_cli_level=DEBUG || true
+
       - name: Lint
         run: ruff check src/
 
