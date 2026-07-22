@@ -9,7 +9,8 @@ import shutil
 import subprocess
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
+from datetime import timedelta  # noqa: F401 — module-level contract (test_cli.py pins it)
 from pathlib import Path
 from cairn.paths import cairn_home
 
@@ -2858,7 +2859,9 @@ def cmd_eval_retrieval(args):
             if use_json:
                 print(json.dumps(cmp, indent=2, default=str))
             else:
-                d = cmp["delta"]; st = cmp["sign_test"]; la, lb = cmp["labels"]
+                d = cmp["delta"]
+                st = cmp["sign_test"]
+                la, lb = cmp["labels"]
                 print(f"\n| metric | {la} | {lb} | delta (B-A) |")
                 print("|--------|------|------|-------------|")
                 for m in ("mrr", "ndcg_at_k", "precision_at_k", "hit_rate"):

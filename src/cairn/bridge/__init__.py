@@ -22,17 +22,12 @@ Public API (36 functions, see __all__ for full list):
 import atexit
 import logging
 import os
-import re
 import threading
-import unicodedata
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from cairn import json_compat as json
-from cairn.exceptions import ValidationError
 from cairn.llm import llm_complete  # noqa: F401 — used in distill_trajectory, module-level for test patchability
-from cairn.types import TTLCategory, AutoCaptureEventType
 
 logger = logging.getLogger("cairn.bridge")
 

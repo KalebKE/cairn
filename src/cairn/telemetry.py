@@ -22,7 +22,6 @@ import platform
 import threading
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 from cairn.paths import cairn_home
 
 CAIRN_DIR = cairn_home()

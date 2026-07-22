@@ -19,7 +19,6 @@ import signal
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
 
 try:
     from mcp.server import Server
@@ -418,7 +417,6 @@ async def _socket_watchdog():
 def _configure_logging():
     """Set up logging with both stderr and rotating file handler."""
     from logging.handlers import RotatingFileHandler
-    from pathlib import Path
 
     log_dir = cairn_home() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True, mode=0o700)

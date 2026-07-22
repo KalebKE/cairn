@@ -4,10 +4,9 @@ import logging
 import re
 from collections import Counter
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import cairn.bridge as _bridge
-from cairn import json_compat as json
 from cairn.types import TTLCategory
 
 logger = logging.getLogger("cairn.bridge")
@@ -98,7 +97,6 @@ def _smart_extract(cluster) -> str:
     Returns consolidated text capped at 1000 chars.
     """
     # Build cross-memory word frequency map (words appearing in 2+ members)
-    from collections import Counter
     word_to_members: dict = {}  # word -> set of node indices
     for idx, node in enumerate(cluster):
         for w in set(node.content.lower().split()):

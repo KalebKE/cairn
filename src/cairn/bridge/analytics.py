@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
 import cairn.bridge as _bridge
-from cairn import json_compat as json
 
 logger = logging.getLogger("cairn.bridge")
 

@@ -12,7 +12,6 @@ Dependencies (starlette, uvicorn) are already transitive deps of mcp>=1.0.0.
 import contextlib
 import secrets
 from collections.abc import AsyncIterator
-from pathlib import Path
 from cairn.paths import cairn_home
 
 from starlette.applications import Starlette
