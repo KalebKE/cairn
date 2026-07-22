@@ -43,7 +43,7 @@ Per-session stdio servers over one WAL-mode SQLite store: N sessions across N re
 
 ## Provenance
 
-Cairn began as a fork of [omega-memory](https://github.com/omega-memory/omega-memory) v1.5.5 (Apache-2.0 — see `LICENSE` and `NOTICE`, both retained). It is independently maintained and has diverged substantially: the commercial/coordination/cloud/freemium layers were removed (~40% of the upstream tree), the integration layer was rebuilt (modular bridge, derived tool registry, `RetrievalContext` pipeline), and the eval/tuning infrastructure is original. Roughly a third of the current code is post-fork; the retrieval core's bones are upstream's, kept because they audit well against the literature.
+Cairn began as a fork of [omega-memory](https://github.com/omega-memory/omega-memory) v1.5.5 (Apache-2.0 — see `LICENSE` and `NOTICE`, both retained). It is independently maintained and has diverged substantially.
 
 ## License
 
