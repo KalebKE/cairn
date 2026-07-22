@@ -199,7 +199,11 @@ def _do_surface(payload: Dict[str, Any]) -> str:
             pass
 
     # --- Pass 1: file-context recall (per-file debounce) ---
-    if now - _last_surfaced.get(file_path, 0.0) >= float(cfg["debounce_s"]):
+    _prev = _last_surfaced.get(file_path)
+    # None = never surfaced: always eligible. (A 0.0 default broke on freshly
+    # booted CI runners — time.monotonic() is boot-relative, so uptime <
+    # debounce_s made the FIRST surface of every file look debounced.)
+    if _prev is None or now - _prev >= float(cfg["debounce_s"]):
         # Record the attempt even when empty so we don't re-query the same
         # file for every keystroke-triggered edit within the window.
         _prune_debounce(now, float(cfg["debounce_s"]))
@@ -224,7 +228,8 @@ def _do_surface(payload: Dict[str, Any]) -> str:
             logger.debug("surface pass 1 failed: %s", e)
 
     # --- Pass 2: project knowledge briefing (long per-project debounce) ---
-    if project and now - _last_project_surfaced.get(project, 0.0) >= float(cfg["project_debounce_s"]):
+    _pprev = _last_project_surfaced.get(project) if project else None
+    if project and (_pprev is None or now - _pprev >= float(cfg["project_debounce_s"])):
         _last_project_surfaced[project] = now
         pname = os.path.basename(project.rstrip("/")) or project
         try:

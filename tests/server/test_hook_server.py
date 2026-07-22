@@ -591,3 +591,17 @@ def test_start_returns_same_server_when_healthy(monkeypatch):
             await H.stop_hook_server()
 
     asyncio.run(body())
+
+
+def test_first_surface_not_debounced_on_low_uptime(monkeypatch):
+    """CI regression: now=time.monotonic() is boot-relative, so on a freshly
+    booted runner (uptime < debounce_s) `now - 0.0 >= debounce_s` was False and
+    the FIRST surface of every file/project was silently debounced to ''."""
+    _reset_debounce()
+    monkeypatch.setattr(H, "_cfg", lambda: _base_cfg())
+    monkeypatch.setattr(H.time, "monotonic", lambda: 10.0)  # 10s "uptime"
+    _patch_builder(monkeypatch, lambda *a, **k: _fake_packet(
+        "[MEMORY_CONTEXT] x\n- `m1` note", ["m1"]))
+    block = H._do_surface({"tool_input": json.dumps({"file_path": "/repo/x.py"}),
+                           "session_id": "s", "project": "/repo"})
+    assert block.startswith("[MEMORY_CONTEXT]")
