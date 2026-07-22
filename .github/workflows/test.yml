@@ -47,6 +47,21 @@ jobs:
             curl -sL "$HF/config.json" -o "$MODEL_DIR/config.json"
           fi
 
+      - name: Probe sqlite-vec + embeddings (diagnostic)
+        run: |
+          python -c "
+          import sqlite3, sqlite_vec
+          c = sqlite3.connect(':memory:')
+          c.enable_load_extension(True)
+          sqlite_vec.load(c)
+          print('sqlite-vec OK:', c.execute('select vec_version()').fetchone())
+          "
+          python - <<'PY'
+          from cairn.embedding import generate_embedding, get_active_backend
+          generate_embedding('probe')
+          print('embedding backend:', get_active_backend())
+          PY
+
       - name: Lint
         run: ruff check src/
 
