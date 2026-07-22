@@ -15,6 +15,107 @@
 
 Every scoring change in this fork was either proven equivalent or measured on judged probes before it shipped.
 
+## How it works
+
+### The store
+
+Cairn is one SQLite database sitting in ~/.cairn (with sqlite-vec and FTS5
+loaded), and every coding session spawns its own little MCP server that talks
+to it. There is no daemon to keep alive and nothing goes to a cloud — the
+embeddings are computed locally with a small ONNX model (bge-small-en-v1.5,
+384 dimensions), so the whole thing runs on whatever machine you're already
+sitting at. All your sessions across all your repos and worktrees share the
+one store, which is the point — a lesson learned in one project is available
+in the next one.
+
+Memories are typed: decisions, lessons learned, error patterns, preferences,
+task completions, session summaries. The type ends up driving most of the
+behavior downstream — how aggressively a memory gets deduplicated, how much
+weight it carries in search, and how fast (or whether) it gets forgotten.
+
+
+### Writing a memory
+
+Nothing goes straight into the store. A write first has to get past the noise
+gates (system junk, too-short hook captures, raw JSON pretending to be a
+"decision" — all blocked), and then it gets compared against similar existing
+memories using word-overlap similarity with per-type thresholds. If you
+restate a decision you already made, Cairn doesn't store it twice, it just
+bumps the original. And if the new content is similar-but-not-identical to
+something already there (there's a middle band for this, loosely borrowed from
+Zettelkasten note-taking), the novel sentences get appended to the existing
+memory as an update instead of creating a near-duplicate. The idea is that
+knowledge accretes in place rather than piling up as fifty slightly different
+copies of the same fact.
+
+Whatever survives gets embedded, auto-tagged (languages, tools, and concepts
+pulled out of the text), and stored with a TTL that depends on its type. Then
+in the background it gets linked to related memories, checked for
+contradictions with what's already stored (the older memory gets superseded,
+with an audit trail), and any stale reminders it happens to resolve get
+dismissed.
+
+
+### Reading
+
+A query fans out over four channels: vector similarity, keyword search (BM25
+via FTS5), temporal proximity when the query implies a time range ("last
+week", "back in March"), and a match against the structured tags and entities.
+The four ranked lists get fused with Reciprocal Rank Fusion, which combines
+ranks instead of raw scores — BM25 scores and cosine similarities live on
+completely different scales and fusing them directly is a known mess, so
+ranks it is.
+
+The fused list then gets reweighted by what Cairn knows about each memory: a
+constraint outranks a session summary, memories you've rated helpful rise and
+unhelpful ones sink, and old unused memories fade. After that a local
+cross-encoder reranker (bge-reranker-v2-m3) reads the top 20 candidates
+against the actual query and its favorite takes the top slot — but only when
+it's confident. An indifferent reranker doesn't get to overrule the metadata
+ordering (we measured this one; letting it always win looked great on one
+metric and quietly made the rest of the results worse).
+
+If nothing clears the minimum score, Cairn returns nothing. An empty result
+is more useful than a plausible-looking wrong one.
+
+
+### Forgetting
+
+Memory strength decays exponentially with a per-type half-life — session
+summaries fade in a couple of weeks, task completions in about a month,
+lessons hang around for months. Memories that keep getting accessed decay
+slower, and some types (preferences, constraints, decisions, error patterns)
+never decay at all. When something falls below the strength floor with no
+access history it gets superseded, and every removal is written to a
+forgetting log, so you can always go look at what was forgotten and why.
+
+
+### The ambient loop
+
+Most of the time you don't ask Cairn for anything — session hooks do it. When
+the agent edits or reads a file, relevant memories get surfaced automatically
+as a short score-filtered context block (truncated previews with ids, and the
+agent pulls the full memory only if it actually wants it). Failed commands
+get captured as error patterns, decisions get captured from prompts, and each
+session opens with a briefing of recent context and closes with a summary of
+what got captured. The MCP tools are there for explicit store/query whenever
+the agent wants them, but the hooks make the common case free.
+
+
+### Measuring itself
+
+Retrieval quality is measured, not assumed. Cairn ships an eval harness that
+builds frozen probe sets: an LLM writes realistic queries in words that
+deliberately don't match the stored memory's wording (the earlier version of
+this eval generated queries from the memory itself, which made the scores
+look better than they were), and every candidate result gets relevance-judged
+0-3 to form an answer key. Evals run against a snapshot copy of the store,
+never the live one, because queries bump access counts and access counts feed
+decay. Any config knob can be A/B tested on the same probes with a paired
+sign test, and a running MRR history feeds the doctor command so a silent
+regression shows up in the numbers before you notice it behaviorally. The
+current baseline on a store of about 2,300 memories is 0.84 MRR at top-5.
+
 ## Quick start
 
 ```bash
