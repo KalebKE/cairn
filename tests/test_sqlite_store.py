@@ -3,6 +3,7 @@ import importlib.util
 import json
 import os
 import pytest
+from _vec import requires_vec
 from cairn.exceptions import StorageError
 from cairn.sqlite_store import SQLiteStore
 
@@ -128,6 +129,8 @@ class TestQuery:
         decisions = store.get_by_type("decision", limit=10)
         assert len(decisions) == 2
         assert all(r.metadata.get("event_type") == "decision" for r in decisions)
+
+    @requires_vec
 
     def test_get_by_type_excludes_superseded(self, store):
         # Storing two near-identical decisions supersedes the first; browse
@@ -348,6 +351,7 @@ class TestBatchOps:
         not importlib.util.find_spec("sqlite_vec"),
         reason="sqlite-vec not installed"
     )
+    @requires_vec
     def test_find_similar(self, store):
         store.store(content="Python programming language")
         store.store(content="JavaScript programming language")

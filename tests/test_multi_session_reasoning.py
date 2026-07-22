@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
+from _vec import requires_vec
 
 from cairn.sqlite_store import SQLiteStore, MemoryResult
 
@@ -241,6 +242,7 @@ class TestQueryDecomposition:
         not importlib.util.find_spec("sqlite_vec"),
         reason="sqlite-vec not installed"
     )
+    @requires_vec
     def test_decomposed_query_runs_end_to_end(self, tmp_path):
         """Compound query should return merged results from sub-queries."""
         store = _make_store(tmp_path)

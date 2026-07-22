@@ -2,6 +2,7 @@
 import importlib.util
 import os
 import pytest
+from _vec import requires_vec
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +179,7 @@ class TestContextualReranking:
         not importlib.util.find_spec("sqlite_vec"),
         reason="sqlite-vec not installed"
     )
+    @requires_vec
     def test_context_tags_boost(self, store):
         """Memories with matching tags should get a relevance boost."""
         store.store(

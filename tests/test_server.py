@@ -1,6 +1,7 @@
 """Cairn MCP Server integration tests — full handler coverage."""
 import importlib.util
 import pytest
+from _vec import requires_vec
 from cairn.server.tool_schemas import TOOL_SCHEMAS
 from cairn.server.handlers import HANDLERS
 
@@ -384,6 +385,7 @@ async def test_cairn_store_empty():
     not importlib.util.find_spec("sqlite_vec"),
     reason="sqlite-vec not installed"
 )
+@requires_vec
 async def test_cairn_similar():
     """Find memories similar to a stored memory."""
     node_id = await _store_test_memory("Memory about Python testing")

@@ -5,6 +5,7 @@ from dataclasses import asdict
 from unittest.mock import patch
 
 import pytest
+from _vec import requires_vec
 
 from cairn.evaluation.context_packet_eval import (
     PacketEvalReport,
@@ -486,6 +487,9 @@ def test_backfill_source_edges_dry_run_does_not_mutate(tmp_cairn_dir):
     assert edge_count == 0
 
 
+@requires_vec
+
+
 def test_backfill_source_edges_creates_typed_edge(tmp_cairn_dir):
     store = _seed_store(tmp_cairn_dir)
     try:
@@ -509,6 +513,9 @@ def test_backfill_source_edges_creates_typed_edge(tmp_cairn_dir):
     assert rows
     assert rows[0][0] in {"evolution", "related", "temporal_cluster"}
     assert "context_packet_eval_backfill" in rows[0][1]
+
+
+@requires_vec
 
 
 def test_backfill_packet_miss_edges_links_source_to_used_memory(tmp_cairn_dir):
@@ -542,6 +549,9 @@ def test_backfill_packet_miss_edges_links_source_to_used_memory(tmp_cairn_dir):
     assert rows
     assert rows[0][0] in {"evolution", "related", "temporal_cluster"}
     assert "context_packet_miss_backfill" in rows[0][1]
+
+
+@requires_vec
 
 
 def test_backfill_packet_miss_edges_respects_global_cap(tmp_cairn_dir):
@@ -603,6 +613,9 @@ def test_filter_packet_miss_probes_respects_event_type_allowlist():
     eligible = filter_packet_miss_probes(probes, event_types=["decision"])
 
     assert [probe["source_id"] for probe in eligible] == ["mem-decision"]
+
+
+@requires_vec
 
 
 def test_backfill_packet_miss_report_dry_run_writes_manifest(tmp_cairn_dir):

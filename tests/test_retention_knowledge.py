@@ -18,6 +18,7 @@ These tests pin the retention semantics that protect it:
 import json
 
 import pytest
+from _vec import requires_vec
 
 
 def _backdate(store, node_id: str, days: int) -> None:
@@ -97,6 +98,8 @@ class TestKnowledgeDedupKeepsNewer:
             store, "_vec_query", lambda emb, limit=1, **kw: [(old_rowid, 0.05)]
         )
 
+    @requires_vec
+
     def test_decision_dedup_supersedes_old_and_keeps_new(self, store, monkeypatch):
         old = store.store(
             content="Decision v1: CoDriver enrichment cards use the A3 prompt variant",
@@ -118,6 +121,8 @@ class TestKnowledgeDedupKeepsNewer:
             (new, old),
         ).fetchone()
         assert edge, "supersession must be graph-traversable (supersedes edge new->old)"
+
+    @requires_vec
 
     def test_episodic_dedup_still_keeps_old(self, store, monkeypatch):
         old = store.store(

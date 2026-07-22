@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from _vec import requires_vec
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -95,6 +96,8 @@ class TestContradictionDetection:
         assert count == 0
         old = store.get_node(nid1)
         assert old.metadata.get("superseded") is not True
+
+    @requires_vec
 
     def test_cross_type_user_preference_supersedes_decision(self, store):
         """A user_preference should supersede a conflicting decision."""
