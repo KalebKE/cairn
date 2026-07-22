@@ -1,338 +1,50 @@
 # Cairn
 
-**Cross-model memory for AI agents. Local-first. Works with Claude, GPT, Gemini, Cursor, Claw Code, and any MCP client.** Your agent's brain shouldn't live on someone else's server, or be locked to one provider.
+**Self-hosted, local-first memory for AI coding agents.** One SQLite store, shared across every repo, worktree, and session — served over MCP to Claude Code or any MCP client. Your agent's memory lives on your machine, not someone else's server.
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![PyPI](https://img.shields.io/pypi/v/cairn.svg)](https://pypi.org/project/cairn/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-1123%20passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-1765%20passing-brightgreen.svg)]()
 
----
+## What it does
 
-## The Problem
+- **Capture**: decisions, lessons, errors, and preferences — stored explicitly (`cairn_store`) or auto-captured by session hooks, with Jaccard dedup, Zettelkasten-style memory *evolution*, contradiction supersession, and noise blocklists.
+- **Retrieve**: hybrid search fusing four channels (vector · BM25/FTS5 · temporal · entity) with canonical Reciprocal Rank Fusion, then a confidence-gated cross-encoder rerank (`bge-reranker-v2-m3`). Embeddings are local ONNX (`bge-small-en-v1.5`, 384-d, cosine).
+- **Forget**: per-type exponential decay (ACT-R style, access-aware), TTLs, strength floors, and an audited `forgetting_log` — protected types (decisions, preferences, constraints) never decay.
+- **Measure**: a built-in eval harness with **non-self-referential judged probe sets**, paired A/B on any config knob, sign tests, and an MRR trend that `cairn doctor` watches for silent degradation. Current baseline on a 2,300-memory live store: **MRR 0.842, nDCG@5 0.71, hit-rate 0.92**.
 
-AI coding agents are stateless. Every new session starts from zero. The "solutions" either lock you into one model provider or send your codebase context to their cloud.
+Every scoring change in this fork was either proven equivalent or measured on judged probes before it shipped.
 
-- **Context loss.** Agents forget every decision, preference, and architectural choice between sessions. Developers spend 10-30 minutes per session re-explaining context that was already established.
-- **Repeated mistakes.** Without learning from past sessions, agents make the same errors over and over. They don't remember what worked, what failed, or why a particular approach was chosen.
-- **Cloud memory = someone else's database.** Services like Mem0 require API keys and send your data to their servers. When they change pricing, get acquired, or go down, your agent's accumulated intelligence disappears.
-- **Vendor lock-in.** Anthropic's Memory Tool only works with Claude. OpenAI's memory only works with GPT. Switch models, lose your memory.
-
-Cairn solves this. Memory, coordination, and learning that runs entirely on your machine. Works with every major LLM and coding agent. No cloud. No API keys. No vendor lock-in.
-
-<!-- TODO: terminal GIF showing memory recall across sessions -->
-<!-- mcp-name: io.github.tracqitechnology/cairn -->
-
-## Quick Install
+## Quick start
 
 ```bash
-pip install cairn[server]    # Full install (memory + MCP server)
-cairn setup                         # Downloads model, registers MCP, installs hooks
-cairn doctor                        # Verify everything works
+git clone git@github.com:KalebKE/cairn.git && cd cairn
+pip install -e .
+cairn doctor                                   # model / db / embeddings health
+claude mcp add -s user cairn -- cairn serve    # register (stdio, per-session)
 ```
 
-### Claude Desktop
+Data lives in `~/.cairn` (override with `CAIRN_HOME`). The MCP surface is 15 composite tools (`cairn_store`, `cairn_query`, `cairn_welcome`, `cairn_memory`, `cairn_maintain`, `cairn_stats`, `cairn_reflect`, …) defined in a single `ToolSpec` registry; condensed mode exposes 5 and routes the rest through `cairn_call`.
+
+## Evaluating & tuning
 
 ```bash
-pip install cairn[server]
-cairn setup --client claude-desktop
+cairn eval-retrieval --build-probes --sample-size 30   # LLM-judged probe set (frozen, reusable)
+cairn eval-retrieval --probes <set.json>               # provider-free scored run
+cairn eval-retrieval --probes <set.json> --ab CAIRN_CE_MODE=boost|hybrid
+cairn eval-retrieval --build-probes --from-query-log   # replay real logged queries
 ```
 
-This registers Cairn as an MCP server in Claude Desktop's config. Restart Claude Desktop to activate.
+Evals always run against a snapshot copy — never the live store (queries mutate access counts, which feed decay).
 
-### Cursor, Claw Code, Windsurf, Cline, Codex
+## Concurrency model
 
-```bash
-pip install cairn[server]
-cairn setup --client cursor      # or: claw-code, windsurf, cline, codex
-```
+Per-session stdio servers over one WAL-mode SQLite store: N sessions across N repos/worktrees share memory safely (single-writer with busy-timeout retries; cross-session dedup keeps parallel sessions from storing the same fact twice). There is deliberately **no** inter-agent coordination layer — one agent per worktree is the intended pattern; git is the isolation.
 
-<details>
-<summary><strong>Library-only install (no MCP server)</strong></summary>
+## Provenance
 
-If you only need Cairn as a Python library for scripts, CI/CD, or automation:
-
-```bash
-pip install cairn    # Core only, no MCP server process
-```
-
-```python
-from cairn import store, query, remember
-
-store("Always use TypeScript strict mode", "user_preference")
-results = query("TypeScript preferences")
-```
-
-This gives you the full storage and retrieval API without running an MCP server (~50 MB lighter, no background process). Hooks still work:
-
-```bash
-cairn setup --hooks-only    # Auto-capture + memory surfacing, no MCP server (~600MB RAM saved)
-```
-
-</details>
-
-### From Source
-
-```bash
-git clone https://github.com/TracqiTechnology/cairn.git
-cd cairn
-pip install -e ".[server,dev]"
-cairn setup
-```
-
-`cairn setup` will:
-1. Create `~/.cairn/` directory
-2. Download the ONNX embedding model (~90 MB) to `~/.cache/cairn/models/`
-3. Register `cairn` as an MCP server (Claude Code auto-detected, or specify --client)
-4. Install session hooks into `~/.claude/settings.json`
-5. Add an Cairn block to `~/.claude/CLAUDE.md`
-
-## 60-Second Quickstart
-
-Cairn works through natural language — no API calls, no configuration. Just talk to Claude.
-
-**1. Tell Claude to remember something:**
-> "Remember that the auth system uses JWT tokens, not session cookies"
-
-Claude stores this as a permanent memory with semantic embeddings.
-
-**2. Close the session. Open a new one.**
-
-**3. Ask about it:**
-> "What did I decide about authentication?"
-
-Cairn surfaces the relevant memory automatically:
-```
-Found 1 relevant memory:
-  [decision] "The auth system uses JWT tokens, not session cookies"
-  Stored 2 days ago | accessed 3 times
-```
-
-That's it. Memories persist across sessions, accumulate over time, and are surfaced automatically when relevant — even if you don't explicitly ask.
-
-## Key Features
-
-- **Memory & Learning** — Stores decisions, lessons, error patterns, and preferences with semantic search. Claude recalls what matters without you re-explaining everything each session. 25 memory tools including compaction, consolidation, timeline, graph traversal, and context virtualization (checkpoint/resume).
-
-- **Multi-Agent Coordination** *(cairn-pro)* — File and branch locking, session management, task queues with dependencies, intent broadcasting, and agent-to-agent messaging. 29 coordination tools that prevent agents from overwriting each other's work.
-
-- **Intelligent LLM Routing** *(cairn-pro)* — Classifies tasks and routes to the optimal model. Coding → Claude Sonnet. Quick edit → Llama 8b at 1/60th the cost. 1M token context → Gemini Flash. 5 providers, 4 priority modes, sub-2ms intent classification.
-
-- **Knowledge Base** *(cairn-pro)* — Ingest PDFs, markdown, web pages, and text files into a searchable knowledge base with semantic chunking.
-
-- **Entity Registry** *(cairn-pro)* — Multi-entity corporate memory with relationships, hierarchies, and entity-scoped memories/profiles/documents.
-
-- **Secure Profile** *(cairn-pro)* — AES-256 encrypted personal data storage with macOS Keychain integration.
-
-## How Cairn Compares
-
-| Feature | Cairn | Anthropic Memory | Mem0 | Zep |
-|---------|:-----:|:----------------:|:----:|:---:|
-| Works with any LLM/agent | **Yes** | Claude only | Yes | Yes |
-| Your data stays on your machine | **Yes** | Partial* | No | No |
-| No cloud dependency | **Yes** | No (needs API) | No | No |
-| Semantic search + knowledge graph | **Yes** | No (file CRUD) | $249/mo | Yes |
-| Multi-agent coordination | **Yes** *(pro)* | Research preview | No | No |
-| Works with Claude Code, Cursor, Claw Code | **Yes** | Claude only | Partial | No |
-| Free & open source | **Yes** (Apache 2.0) | No | Freemium | Freemium |
-
-*Anthropic's Memory Tool stores data client-side but requires Claude API calls for all memory operations. Cairn runs entirely on-device, including embeddings (ONNX).*
-
-**Anthropic Memory is for Anthropic. Cairn is for everyone.**
-
-## Architecture
-
-```
-     Claude Code  ·  Cursor  ·  Claw Code  ·  Any MCP Client
-               │         │         │              │
-               └─────────┴─────┬───┴──────────────┘
-                               │ stdio/MCP
-               ┌───────────────▼─────────────┐
-               │   Cairn MCP Server   │
-               │   25 core tools      │
-               └──┬──────────────────┘
-                  │
-         ┌────────▼──────────────┐
-         │ Core Memory Engine    │
-         │ (semantic search,     │
-         │  embeddings, graphs)  │
-         └─────┬─────────────────┘
-               │
-               ▼
-         ┌──────────────────────────────────────┐
-         │         cairn.db (SQLite)             │
-         │  memories | edges | embeddings        │
-         └──────────────────────────────────────┘
-```
-
-Single database, modular handlers. Optional modules (coordination, router, entity, knowledge, profile) are available via [cairn-pro](https://github.com/cairn) and register into the same server process. No separate daemons, no microservices.
-
-## MCP Tools Reference
-
-Cairn runs as an MCP server inside Claude Code. The core package provides 25 memory tools. [cairn-pro](https://github.com/cairn) adds coordination, routing, entity, knowledge, and profile tools.
-
-### Memory (25 tools)
-
-| Tool | What it does |
-|------|-------------|
-| `cairn_store` | Store typed memory (decision, lesson, error, summary) |
-| `cairn_query` | Semantic search with tag filters and contextual re-ranking |
-| `cairn_welcome` | Session briefing with recent memories and profile |
-| `cairn_profile` | Read or update user profile |
-| `cairn_delete_memory` | Delete a specific memory by ID |
-| `cairn_edit_memory` | Edit the content of a memory |
-| `cairn_list_preferences` | List all stored user preferences |
-| `cairn_health` | Detailed health check with memory usage and recommendations |
-| `cairn_backup` | Export or import memories for backup/restore |
-| `cairn_lessons` | Cross-session lessons ranked by access count |
-| `cairn_feedback` | Record feedback on a surfaced memory |
-| `cairn_clear_session` | Clear all memories for a specific session |
-| `cairn_similar` | Find memories similar to a given one |
-| `cairn_timeline` | Memories grouped by day |
-| `cairn_consolidate` | Prune stale memories, cap summaries, clean edges |
-| `cairn_traverse` | Walk the relationship graph |
-| `cairn_compact` | Cluster and summarize related memories |
-| `cairn_checkpoint` | Save task state for cross-session continuity |
-| `cairn_resume_task` | Resume a previously checkpointed task |
-| `cairn_remind` | Set a time-based reminder |
-| `cairn_remind_list` | List active reminders |
-| `cairn_remind_dismiss` | Dismiss a reminder |
-| `cairn_type_stats` | Memory counts grouped by event type |
-| `cairn_session_stats` | Memory counts grouped by session |
-| `cairn_weekly_digest` | Weekly knowledge digest with stats and trends |
-
-### Additional tools with cairn-pro
-
-| Module | Tools | Description |
-|--------|------:|-------------|
-| Coordination | 29 | File/branch locking, sessions, tasks, messaging, audit |
-| Router | 10 | LLM routing, intent classification, model switching |
-| Entity | 8 | Corporate entities, relationships, hierarchies |
-| Knowledge | 5 | Document ingestion, semantic search, RAG |
-| Profile | 3 | AES-256 encrypted personal data storage |
-
-## CLI
-
-| Command | Description |
-|---------|-------------|
-| `cairn setup` | Create dirs, download model, register MCP, install hooks (`--hooks-only` to skip MCP) |
-| `cairn doctor` | Verify installation health |
-| `cairn status` | Memory count, store size, model status |
-| `cairn query <text>` | Search memories by semantic similarity |
-| `cairn store <text>` | Store a memory with a specified type |
-| `cairn timeline` | Show memory timeline grouped by day |
-| `cairn activity` | Show recent session activity overview |
-| `cairn stats` | Memory type distribution and health summary |
-| `cairn consolidate` | Deduplicate, prune, and optimize memory |
-| `cairn compact` | Cluster and summarize related memories |
-| `cairn backup` | Back up cairn.db (keeps last 5) |
-| `cairn validate` | Validate database integrity |
-| `cairn logs` | Show recent hook errors |
-| `cairn migrate-db` | Migrate legacy JSON to SQLite |
-
-<details>
-<summary><strong>Advanced Details</strong></summary>
-
-### Hooks (7 processes, 11 handlers)
-
-All hooks dispatch via `fast_hook.py` → daemon UDS socket, with fail-open semantics.
-
-| Hook | Matcher | Handlers | Purpose |
-|------|---------|----------|---------|
-| SessionStart | all | `session_start` | Welcome briefing, session resume |
-| Stop | all | `session_stop` | Summary |
-| UserPromptSubmit | all | `auto_capture` | Auto-capture lessons/decisions |
-| PostToolUse | Edit/Write/NotebookEdit | `surface_memories` | Surface relevant memories |
-| PostToolUse | Bash/Read | `surface_memories` | Surface relevant memories |
-
-> With cairn-pro, additional coordination handlers register automatically: session lifecycle, file/branch claim guards, heartbeat, and git push guards.
-
-### Storage
-
-| Path | Purpose |
-|------|---------|
-| `~/.cairn/cairn.db` | SQLite database (memories, embeddings, edges) |
-| `~/.cairn/profile.json` | User profile |
-| `~/.cairn/hooks.log` | Hook error log |
-| `~/.cache/cairn/models/bge-small-en-v1.5-onnx/` | ONNX embedding model |
-
-### Search Pipeline
-
-1. **Vector similarity** via sqlite-vec (cosine distance, 384-dim bge-small-en-v1.5)
-2. **Full-text search** via FTS5 (fast keyword matching)
-3. **Type-weighted scoring** (decisions/lessons weighted 2x)
-4. **Contextual re-ranking** (boosts by tag, project, and content match)
-5. **Deduplication** at query time
-
-### Memory Lifecycle
-
-- **Dedup**: SHA256 hash (exact) + embedding similarity 0.85+ (semantic) + Jaccard per-type
-- **Evolution**: Similar content (55-95%) appends new insights to existing memories
-- **TTL**: Session summaries expire after 1 day, lessons/preferences are permanent
-- **Auto-relate**: Creates `related` edges (similarity >= 0.45) to top-3 similar memories
-- **Compaction**: Clusters and summarizes related memories
-
-### Memory Footprint
-
-- Startup: ~31 MB RSS
-- After first query (ONNX model loaded): ~337 MB RSS
-- Database: ~10.5 MB for ~242 memories
-
-### What Gets Modified
-
-`cairn setup` modifies these files outside `~/.cairn/`:
-
-- `~/.claude.json` — Adds `cairn` MCP server entry
-- `~/.claude/settings.json` — Adds hook entries
-- `~/.claude/CLAUDE.md` — Adds a managed `<!-- Cairn:BEGIN -->` block
-
-All changes are idempotent.
-
-</details>
-
-## Troubleshooting
-
-**`cairn doctor` shows FAIL on import:**
-- Ensure `pip install -e ".[server]"` from the repo root
-- Check `python3 -c "import cairn"` works
-
-**MCP server fails to start:**
-- Run `pip install cairn[server]` (the `[server]` extra includes the MCP package)
-
-**MCP server not registered:**
-```bash
-claude mcp add cairn -- python3 -m cairn.server.mcp_server
-```
-
-**Hooks not firing:**
-- Check `~/.claude/settings.json` has Cairn hook entries
-- Check `~/.cairn/hooks.log` for errors
-
-## Development
-
-```bash
-pip install -e ".[server,dev]"
-pytest tests/                # 2198+ tests
-ruff check src/              # Lint
-```
-
-## Uninstall
-
-```bash
-claude mcp remove cairn
-rm -rf ~/.cairn ~/.cache/cairn
-pip uninstall cairn
-```
-
-Manually remove Cairn entries from `~/.claude/settings.json` and the `<!-- Cairn:BEGIN -->` block from `~/.claude/CLAUDE.md`.
-
-## Contributing
-
-- [Contributing Guide](CONTRIBUTING.md)
-- [Security Policy](SECURITY.md)
-- [Changelog](CHANGELOG.md)
-- [Report a Bug](https://github.com/TracqiTechnology/cairn/issues)
+Cairn began as a fork of [omega-memory](https://github.com/omega-memory/omega-memory) v1.5.5 (Apache-2.0 — see `LICENSE` and `NOTICE`, both retained). It is independently maintained and has diverged substantially: the commercial/coordination/cloud/freemium layers were removed (~40% of the upstream tree), the integration layer was rebuilt (modular bridge, derived tool registry, `RetrievalContext` pipeline), and the eval/tuning infrastructure is original. Roughly a third of the current code is post-fork; the retrieval core's bones are upstream's, kept because they audit well against the literature.
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+Apache-2.0. Upstream attribution preserved in `NOTICE`.
