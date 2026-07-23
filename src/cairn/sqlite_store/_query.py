@@ -441,7 +441,7 @@ class QueryMixin:
             try:
                 from cairn.embedding import generate_embedding, is_embedding_degraded
 
-                query_emb = query_embedding or generate_embedding(query_text)
+                query_emb = query_embedding or generate_embedding(query_text, mode="query")
                 if is_embedding_degraded() and not getattr(self, "_hash_fallback_warned", False):
                     logger.warning(
                         "Query using hash-fallback embeddings — vector results will be low quality. "
@@ -679,12 +679,16 @@ class QueryMixin:
                 from cairn.embedding import generate_embeddings_batch
 
                 search_texts = [v for v in vec_variants if v and v.strip() != query_text.strip()]
-                if hyde_passage and include_hyde:
-                    search_texts.append(hyde_passage)
 
-                if search_texts:
+                if search_texts or (hyde_passage and include_hyde):
                     try:
-                        embeddings = generate_embeddings_batch(search_texts)
+                        # Query variants embed as queries; the HyDE passage
+                        # mimics a stored document, so it gets the doc prefix.
+                        embeddings = generate_embeddings_batch(search_texts, mode="query")
+                        if hyde_passage and include_hyde:
+                            embeddings = embeddings + generate_embeddings_batch(
+                                [hyde_passage], mode="document"
+                            )
                     except Exception:
                         embeddings = []
 
@@ -1148,7 +1152,15 @@ class QueryMixin:
                         # Only override rank 1 when the CE is CONFIDENT — an
                         # indifferent CE (tiny margin) must not trample the
                         # metadata knowledge weighting (priority/type order).
-                        if _margin >= 0.10:
+                        # Threshold is env-tunable because it is calibrated to
+                        # a reranker's logit distribution: 0.10 was measured
+                        # for ms-marco and will not transfer to another CE
+                        # without a re-sweep.
+                        try:
+                            _ce_margin = float(os.environ.get("CAIRN_CE_MARGIN", "0.10"))
+                        except ValueError:
+                            _ce_margin = 0.10
+                        if _margin >= _ce_margin:
                             top_score = max(node_scores[n] for n in top_ids_for_rerank)
                             node_scores[top_ids_for_rerank[best_i]] = top_score * 1.01
                     elif _ce_mode == "resort":

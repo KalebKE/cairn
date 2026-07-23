@@ -470,7 +470,7 @@ class SearchMixin:
             try:
                 from cairn.embedding import generate_embedding
 
-                query_emb = generate_embedding(query)
+                query_emb = generate_embedding(query, mode="query")
                 if query_emb:
                     vec_results = self._vec_query(query_emb, limit=limit * 5)
                     # Batch-hydrate all candidates in one SELECT (was N+1)

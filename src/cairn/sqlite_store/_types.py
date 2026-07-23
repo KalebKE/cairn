@@ -1,5 +1,6 @@
 """Data types, enums, and utility functions for SQLiteStore."""
 
+import os
 import re
 import struct
 import unicodedata
@@ -9,7 +10,11 @@ from typing import Any, Dict, List, Optional
 
 from cairn.schema import SCHEMA_VERSION  # noqa: F401 -- re-exported
 
-EMBEDDING_DIM = 384
+# Vector dimension for the sqlite-vec table and all embeddings. Env-overridable
+# (read once at import) so benchmark arms can run ephemeral stores at a
+# candidate model's dimension in their own process. The live store stays at
+# the default unless migrated (the vec table's float[N] is fixed at creation).
+EMBEDDING_DIM = int(os.environ.get("CAIRN_EMBEDDING_DIM", "384"))
 
 # Pre-compiled regex for query deduplication (strip trailing git hashes)
 _TRAILING_HASH_RE = re.compile(r"\s*-\s*[0-9a-f]{6,40}\s*$")
@@ -133,8 +138,15 @@ def _serialize_f32(vector: List[float]) -> bytes:
     return struct.pack(f"{len(vector)}f", *vector)
 
 
-def _deserialize_f32(data: bytes, dim: int = EMBEDDING_DIM) -> List[float]:
-    """Deserialize bytes to a float32 vector."""
+def _deserialize_f32(data: bytes, dim: Optional[int] = None) -> List[float]:
+    """Deserialize bytes to a float32 vector.
+
+    Dimension is inferred from the blob length by default — callers passing
+    the historical EMBEDDING_DIM default would break on stores created at a
+    different dimension (migration/benchmark arms).
+    """
+    if dim is None:
+        dim = len(data) // 4
     return list(struct.unpack(f"{dim}f", data))
 
 

@@ -328,8 +328,11 @@ def _get_embedding_model():
                 from tokenizers import Tokenizer as FastTokenizer
 
                 tokenizer = FastTokenizer.from_file(f"{onnx_dir}/tokenizer.json")
-                tokenizer.enable_padding(pad_id=0, pad_token="[PAD]")
-                tokenizer.enable_truncation(max_length=512)
+                _cfg = _MODEL_SIDECAR or _SIDECAR_DEFAULTS
+                _pad_id = int(_cfg.get("pad_id", 0))
+                _pad_token = _cfg.get("pad_token", "[PAD]")
+                tokenizer.enable_padding(pad_id=_pad_id, pad_token=_pad_token)
+                tokenizer.enable_truncation(max_length=int(_cfg.get("max_length", 512)))
                 sess_opts = ort.SessionOptions()
                 sess_opts.log_severity_level = 4
                 sess_opts.log_verbosity_level = 0
@@ -440,8 +443,32 @@ def get_active_backend() -> Optional[str]:
     return _EMBEDDING_BACKEND
 
 
-def _hash_embedding(text: str, dimension: int = 384) -> List[float]:
+def _default_dim() -> int:
+    """The store's expected embedding dimension (env-overridable, one source)."""
+    from cairn.sqlite_store._types import EMBEDDING_DIM
+
+    return EMBEDDING_DIM
+
+
+def _prefix_for_mode(mode: str) -> str:
+    """Instruction prefix for query vs document embedding, from the sidecar.
+
+    Prefix-trained models (arctic-embed, nomic, gemma) need asymmetric
+    prefixes for fair retrieval; the legacy bge/minilm installs have empty
+    prefixes so behavior is unchanged. Resolving the model dir here is cheap
+    (cached global) and loads no model.
+    """
+    global _MODEL_SIDECAR
+    if _MODEL_SIDECAR is None:
+        _get_onnx_model_dir()
+    cfg = _MODEL_SIDECAR or _SIDECAR_DEFAULTS
+    return cfg.get("query_prefix" if mode == "query" else "doc_prefix") or ""
+
+
+def _hash_embedding(text: str, dimension: Optional[int] = None) -> List[float]:
     """Fallback: deterministic pseudo-embedding from text hash."""
+    if dimension is None:
+        dimension = _default_dim()
     hash_digest = hashlib.md5(text.encode()).digest()
     seed = int.from_bytes(hash_digest[:4], byteorder="big")
 
@@ -462,7 +489,16 @@ def _has_embedding_backend() -> bool:
 
 
 def _onnx_encode(tokenizer, session, texts: List[str]) -> "np.ndarray":
-    """Encode texts using ONNX Runtime. Returns normalized embeddings."""
+    """Encode texts using ONNX Runtime. Returns normalized embeddings.
+
+    Pooling and output selection are driven by the model dir's cairn.json
+    sidecar (see _load_model_sidecar). Without a sidecar this reproduces the
+    historical behavior exactly: output by index, masked mean pooling when
+    3-d, L2-normalize. (Note: bge-small is a CLS-trained model that has
+    always been mean-pooled here — self-consistent, so left untouched for
+    the legacy install; candidates declare their pooling explicitly.)
+    """
+    cfg = _MODEL_SIDECAR or _SIDECAR_DEFAULTS
     batch = tokenizer.encode_batch(texts)
     ids = np.array([b.ids for b in batch], dtype=np.int64)
     mask = np.array([b.attention_mask for b in batch], dtype=np.int64)
@@ -470,13 +506,33 @@ def _onnx_encode(tokenizer, session, texts: List[str]) -> "np.ndarray":
     input_names = {i.name for i in session.get_inputs()}
     if "token_type_ids" in input_names:
         feed["token_type_ids"] = np.zeros_like(ids)
-    outputs = session.run(None, feed)
-    embeddings = outputs[1] if len(outputs) > 1 else outputs[0]
+
+    output_name = cfg.get("output_name")
+    if output_name:
+        # Select by name — index-based selection is fragile across exports
+        # (EmbeddingGemma ships a pre-pooled `sentence_embedding` output).
+        embeddings = session.run([output_name], feed)[0]
+    else:
+        outputs = session.run(None, feed)
+        embeddings = outputs[1] if len(outputs) > 1 else outputs[0]
+
+    pooling = cfg.get("pooling", "mean")
     if embeddings.ndim == 3:
-        mask_expanded = mask[:, :, np.newaxis].astype(np.float32)
-        sum_emb = np.sum(embeddings * mask_expanded, axis=1)
-        sum_mask = np.clip(np.sum(mask_expanded, axis=1), a_min=1e-9, a_max=None)
-        embeddings = sum_emb / sum_mask
+        if pooling == "cls":
+            embeddings = embeddings[:, 0]
+        else:  # mean (default) — masked mean over tokens
+            mask_expanded = mask[:, :, np.newaxis].astype(np.float32)
+            sum_emb = np.sum(embeddings * mask_expanded, axis=1)
+            sum_mask = np.clip(np.sum(mask_expanded, axis=1), a_min=1e-9, a_max=None)
+            embeddings = sum_emb / sum_mask
+    # pooling == "model": output is already pooled (2-d); nothing to do.
+
+    # Matryoshka truncation BEFORE normalization (truncate → renormalize is
+    # the documented order for MRL-trained models).
+    truncate_dim = cfg.get("truncate_dim")
+    if truncate_dim and embeddings.shape[-1] > int(truncate_dim):
+        embeddings = embeddings[:, : int(truncate_dim)]
+
     norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
     return embeddings / np.clip(norms, a_min=1e-9, a_max=None)
 
@@ -489,14 +545,24 @@ def is_embedding_degraded() -> bool:
     return _embedding_degraded
 
 
-def generate_embedding(text: str, dimension: int = 384) -> List[float]:
-    """Generate semantic embedding from text. Returns 384-dim normalized vector.
+def generate_embedding(
+    text: str, dimension: Optional[int] = None, mode: str = "document"
+) -> List[float]:
+    """Generate semantic embedding from text. Returns a normalized vector.
 
     Priority: daemon > in-process ONNX > hash fallback.
+
+    mode selects the sidecar instruction prefix ("document" | "query") for
+    prefix-trained models; the prefix is applied BEFORE the cache key so
+    query and document embeddings of identical text never collide in the LRU.
     """
     global _LAST_EMBED_TIME, _embedding_degraded, _EMBEDDING_BACKEND
     # Check for idle-timeout unloading opportunity
     _maybe_unload_model()
+
+    _prefix = _prefix_for_mode(mode)
+    if _prefix:
+        text = _prefix + text
 
     # Local cache check first (works regardless of backend)
     cache_key = hashlib.md5(text.encode()).hexdigest()
@@ -561,14 +627,20 @@ def generate_embedding(text: str, dimension: int = 384) -> List[float]:
     return _hash_embedding(text, dimension)
 
 
-def generate_embeddings_batch(texts: List[str]) -> List[List[float]]:
+def generate_embeddings_batch(texts: List[str], mode: str = "document") -> List[List[float]]:
     """Generate embeddings for multiple texts in a single batch.
 
     Priority: daemon > in-process ONNX > hash fallback.
+    mode applies the sidecar instruction prefix to every text (see
+    generate_embedding) — mixed-mode batches must be split by the caller.
     """
     global _EMBEDDING_BACKEND
     if not texts:
         return []
+
+    _prefix = _prefix_for_mode(mode)
+    if _prefix:
+        texts = [_prefix + t for t in texts]
 
     # Try shared embedding daemon first
     global _EMBEDDING_CLIENT_UNAVAILABLE
@@ -646,7 +718,7 @@ def get_embedding_info() -> Dict[str, Any]:
         "model_loaded": _EMBEDDING_MODEL is not None,
         "onnx_available": has_onnx,
         "onnx_model_dir": _get_onnx_model_dir() if has_onnx else None,
-        "dimension": 384,
+        "dimension": _default_dim(),
         "cache_size": len(_EMBEDDING_CACHE),
         "lazy_loading": True,
     }
@@ -667,18 +739,26 @@ def _get_embedding_executor() -> ThreadPoolExecutor:
     return _EMBEDDING_EXECUTOR
 
 
-async def generate_embedding_async(text: str, dimension: int = 384) -> List[float]:
+async def generate_embedding_async(
+    text: str, dimension: Optional[int] = None, mode: str = "document"
+) -> List[float]:
     """Generate embedding asynchronously (non-blocking)."""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(_get_embedding_executor(), generate_embedding, text, dimension)
+    return await loop.run_in_executor(
+        _get_embedding_executor(), generate_embedding, text, dimension, mode
+    )
 
 
-async def generate_embeddings_batch_async(texts: List[str]) -> List[List[float]]:
+async def generate_embeddings_batch_async(
+    texts: List[str], mode: str = "document"
+) -> List[List[float]]:
     """Generate batch embeddings asynchronously."""
     if not texts:
         return []
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(_get_embedding_executor(), generate_embeddings_batch, texts)
+    return await loop.run_in_executor(
+        _get_embedding_executor(), generate_embeddings_batch, texts, mode
+    )
 
 
 async def preload_embedding_model_async() -> bool:

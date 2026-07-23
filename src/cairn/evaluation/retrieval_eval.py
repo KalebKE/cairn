@@ -877,6 +877,31 @@ def snapshot_db(src_db: str, dest_dir: Optional[str] = None) -> str:
     return dest
 
 
+def rebuild_snapshot(src_db: str, dest_dir: Optional[str] = None) -> str:
+    """Snapshot the store AND rebuild its vec table with the current model/dim.
+
+    For cross-model probe evals: the snapshot's vectors were produced by the
+    live model at the live dimension; a candidate-model arm must re-embed
+    them (and, for a different dimension, recreate the vec table) or vector
+    search silently compares apples to oranges. Runs in the CALLING process,
+    so the arm's CAIRN_ONNX_MODEL_DIR / CAIRN_EMBEDDING_DIM env is what gets
+    baked in. Returns the snapshot path.
+    """
+    from cairn.sqlite_store import SQLiteStore
+
+    dest = snapshot_db(src_db, dest_dir)
+    store = SQLiteStore(db_path=dest)
+    try:
+        stats = store.rebuild_vec_table()
+        logger.info(
+            "rebuild_snapshot: %s re-embedded at dim=%s (failed=%s)",
+            stats.get("updated"), stats.get("dim"), stats.get("failed"),
+        )
+    finally:
+        store.close()
+    return dest
+
+
 def run_evaluation_v2(
     probe_set_path: str,
     db_path: Optional[str] = None,

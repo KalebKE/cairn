@@ -472,6 +472,27 @@ class MaintenanceMixin:
     # Reembedding
     # ------------------------------------------------------------------
 
+    def rebuild_vec_table(self, batch_size: int = 32) -> Dict[str, int]:
+        """Drop and recreate memories_vec at the current EMBEDDING_DIM, then re-embed.
+
+        Required when changing embedding dimension: init_schema uses CREATE
+        VIRTUAL TABLE IF NOT EXISTS, so an existing table at the old dimension
+        silently survives in a new-dim process and sqlite-vec then rejects
+        every insert. This is the one supported path to a new-dim store.
+        """
+        from cairn.sqlite_store._types import EMBEDDING_DIM
+
+        with self._lock:
+            self._conn.execute("DROP TABLE IF EXISTS memories_vec")
+            self._conn.execute(
+                f"CREATE VIRTUAL TABLE memories_vec "
+                f"USING vec0(embedding float[{EMBEDDING_DIM}] distance_metric=cosine)"
+            )
+            self._commit()
+        stats = self.reembed_all(batch_size=batch_size)
+        stats["dim"] = EMBEDDING_DIM
+        return stats
+
     def reembed_all(self, batch_size: int = 32) -> Dict[str, int]:
         """Regenerate all embeddings using the current ML model.
 

@@ -40,7 +40,14 @@ class TestGetEmbeddingModelInfo:
 
     def test_dict_keys(self):
         info = get_embedding_model_info()
-        expected_keys = {"model_name", "model_version", "model_loaded", "backend"}
+        expected_keys = {
+            "model_name",
+            "model_version",
+            "model_loaded",
+            "backend",
+            "model_dir",
+            "sidecar",
+        }
         assert set(info.keys()) == expected_keys
 
     def test_reflects_backend_state(self, monkeypatch):
