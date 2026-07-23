@@ -9,7 +9,7 @@
 ## What it does
 
 - **Capture**: decisions, lessons, errors, and preferences — stored explicitly (`cairn_store`) or auto-captured by session hooks, with Jaccard dedup, Zettelkasten-style memory *evolution*, contradiction supersession, and noise blocklists.
-- **Retrieve**: hybrid search fusing four channels (vector · BM25/FTS5 · temporal · entity) with canonical Reciprocal Rank Fusion, then a confidence-gated cross-encoder rerank (`bge-reranker-v2-m3`). Embeddings are local ONNX (`bge-small-en-v1.5`, 384-d, cosine).
+- **Retrieve**: hybrid search fusing four channels (vector · BM25/FTS5 · temporal · entity) with canonical Reciprocal Rank Fusion, then a confidence-gated cross-encoder rerank (`ms-marco-MiniLM-L-6-v2` — measured against `bge-reranker-v2-m3`, which added zero MRR at 5-6x the latency). Embeddings are local ONNX (`gte-modernbert-base`, 768-d, CLS-pooled, cosine; chosen over bge-small, arctic-embed, and EmbeddingGemma in a full benchmark sweep).
 - **Forget**: per-type exponential decay (ACT-R style, access-aware), TTLs, strength floors, and an audited `forgetting_log` — protected types (decisions, preferences, constraints) never decay.
 - **Measure**: a built-in eval harness with **non-self-referential judged probe sets**, paired A/B on any config knob, sign tests, and an MRR trend that `cairn doctor` watches for silent degradation. Current baseline on a 2,300-memory live store: **MRR 0.842, nDCG@5 0.71, hit-rate 0.92**. On public LongMemEval (500 questions): **Recall@1 0.88, NDCG@10 0.92**.
 
@@ -22,8 +22,8 @@ Every scoring change in this fork was either proven equivalent or measured on ju
 Cairn is one SQLite database sitting in ~/.cairn (with sqlite-vec and FTS5
 loaded), and every coding session spawns its own little MCP server that talks
 to it. There is no daemon to keep alive and nothing goes to a cloud — the
-embeddings are computed locally with a small ONNX model (bge-small-en-v1.5,
-384 dimensions), so the whole thing runs on whatever machine you're already
+embeddings are computed locally with an ONNX model (gte-modernbert-base,
+768 dimensions), so the whole thing runs on whatever machine you're already
 sitting at. All your sessions across all your repos and worktrees share the
 one store, which is the point — a lesson learned in one project is available
 in the next one.
@@ -69,7 +69,7 @@ ranks it is.
 The fused list then gets reweighted by what Cairn knows about each memory: a
 constraint outranks a session summary, memories you've rated helpful rise and
 unhelpful ones sink, and old unused memories fade. After that a local
-cross-encoder reranker (bge-reranker-v2-m3) reads the top 20 candidates
+cross-encoder reranker (ms-marco-MiniLM-L-6-v2) reads the top 20 candidates
 against the actual query and its favorite takes the top slot — but only when
 it's confident. An indifferent reranker doesn't get to overrule the metadata
 ordering (we measured this one; letting it always win looked great on one
