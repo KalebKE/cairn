@@ -28,7 +28,20 @@ def find_similar_memories(memory_id: str, limit: int = 5) -> str:
         return f"Memory `{memory_id}` not found."
     embedding = db.get_embedding(memory_id)
     if embedding is None:
-        return f"No embedding found for `{memory_id[:12]}`. Vector search unavailable."
+        # A node can be embeddingless when a transient encode failure hit the
+        # degraded-embedding discard path at store time. Regenerate from
+        # content instead of failing, and heal the store so the node is
+        # vector-searchable again.
+        from cairn.embedding import generate_embedding, is_embedding_degraded
+
+        embedding = generate_embedding(node.content)
+        if embedding is None or is_embedding_degraded():
+            return f"No embedding found for `{memory_id[:12]}`. Vector search unavailable."
+        try:
+            # Same content → cache-hit re-embed inside update_node's guarded path.
+            db.update_node(memory_id, content=node.content)
+        except Exception as e:
+            logger.debug("Failed to persist regenerated embedding for %s: %s", memory_id[:12], e)
     # limit+1 because the source memory will be in results
     results = db.find_similar(embedding, limit=limit + 1)
     # Filter out the source memory itself

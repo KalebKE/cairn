@@ -506,3 +506,29 @@ def test_tool_schemas_docstring_count():
             f"Docstring says {match.group(1)} tools, actually has {len(TOOL_SCHEMAS)}"
         )
     assert len(TOOL_SCHEMAS) >= 16  # 15 cairn_* composites plus context_packet
+
+
+@pytest.mark.asyncio
+async def test_cairn_similar_embeddingless_node_regenerates():
+    """A node whose embedding was discarded (degraded-embedding path) must
+    still get similar results — the handler regenerates from content instead
+    of returning 'Vector search unavailable' (intermittent CI failure when a
+    transient encode fallback left one test memory embeddingless)."""
+    node_id = await _store_test_memory("Embeddingless memory about Python asyncio patterns")
+    assert node_id
+    await _store_test_memory("Another memory about Python asyncio event loops")
+
+    from cairn.bridge import _get_store
+    store = _get_store()
+    row = store._conn.execute(
+        "SELECT id FROM memories WHERE node_id = ?", (node_id,)
+    ).fetchone()
+    assert row
+    with store._lock:
+        store._conn.execute("DELETE FROM memories_vec WHERE rowid = ?", (row[0],))
+        store._conn.commit()
+    assert store.get_embedding(node_id) is None  # precondition: no embedding
+
+    result = await HANDLERS["cairn_similar"]({"memory_id": node_id, "limit": 3})
+    assert not result.get("isError")
+    assert "Similar" in result["content"][0]["text"]
