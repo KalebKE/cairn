@@ -89,14 +89,18 @@ def test_concurrent_store_no_sigsegv():
 
 @pytest.mark.timeout(60)
 def test_node_count_never_none_under_concurrent_writes(tmp_path):
-    """Lockless counter reads returned a NULL row under thread contention.
+    """Statement corruption on the shared connection under thread contention.
 
-    Regression: node_count()/edge_count()/get_last_capture_time() executed on
-    the shared connection without self._lock. With concurrent locked writers
-    (executor workers, auto-relate threads) the unprotected COUNT(*) could
-    observe a NULL row — node_count() returned None, which broke
-    bridge.maintenance.consolidate ("NoneType - int") in CI. With the reads
-    unlocked this hammer reproduces None within ~20s; locked, it stays clean.
+    Regression: with one sqlite3 connection shared across threads, ANY
+    statement in flight outside the store lock can be reset mid-fetch by a
+    locked writer's commit — a reset statement yields NULL rows, so COUNT(*)
+    observably returned (None,) and node_count() → None broke consolidate
+    ("NoneType - int") and check_memory_health in CI. Locking individual
+    call sites was NOT enough: an unlocked reader elsewhere on the connection
+    (deferred-init backup, export, raw test reads) still poisoned locked
+    readers. Fixed by _LockedConnection: every statement lock-serialized and
+    materialized at the connection layer. The unlocked_reader thread below
+    reproduces the surviving corruption within ~25s on the pre-proxy build.
     """
     import threading
 
@@ -129,10 +133,23 @@ def test_node_count_never_none_under_concurrent_writes(tmp_path):
                 bad.append(n)
                 stop.set()
 
+    def unlocked_reader():
+        # Mimics deferred-init auto-backup / export / raw test reads: before
+        # the connection-level lock, these poisoned other threads' results.
+        while not stop.is_set():
+            try:
+                store._conn.execute("SELECT COUNT(*) FROM memories").fetchone()
+                store._conn.execute(
+                    "SELECT node_id, content, metadata FROM memories ORDER BY created_at"
+                ).fetchall()
+            except Exception:
+                pass
+
     threads = [
         threading.Thread(target=writer),
         threading.Thread(target=writer),
         threading.Thread(target=reader),
+        threading.Thread(target=unlocked_reader),
     ]
     try:
         for t in threads:

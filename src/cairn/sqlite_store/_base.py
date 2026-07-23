@@ -35,6 +35,105 @@ def _get_effective_max_nodes() -> int:
         return _DEFAULT_MAX_NODES
 
 
+class _BufferedCursor:
+    """Fully-materialized result of a _LockedConnection statement.
+
+    Rows are fetched inside the connection lock, so no prepared statement is
+    ever live outside the critical section. Supports the cursor surface the
+    codebase actually uses: fetchone/fetchmany/fetchall, iteration, rowcount,
+    lastrowid, description.
+    """
+
+    __slots__ = ("_rows", "_idx", "rowcount", "lastrowid", "description")
+
+    def __init__(self, cursor):
+        self.rowcount = cursor.rowcount
+        self.lastrowid = cursor.lastrowid
+        self.description = cursor.description
+        # description is None for non-SELECT statements — nothing to fetch.
+        self._rows = cursor.fetchall() if cursor.description is not None else []
+        self._idx = 0
+
+    def fetchone(self):
+        if self._idx >= len(self._rows):
+            return None
+        row = self._rows[self._idx]
+        self._idx += 1
+        return row
+
+    def fetchmany(self, size=1):
+        rows = self._rows[self._idx : self._idx + size]
+        self._idx += len(rows)
+        return rows
+
+    def fetchall(self):
+        rows = self._rows[self._idx :]
+        self._idx = len(self._rows)
+        return rows
+
+    def __iter__(self):
+        while True:
+            row = self.fetchone()
+            if row is None:
+                return
+            yield row
+
+    def close(self):
+        self._rows = []
+        self._idx = 0
+
+
+class _LockedConnection:
+    """Serialize every statement on the shared sqlite3 connection.
+
+    One connection is shared by many threads (query handlers, the maintain
+    executor, cairn-deferred-init, auto-relate). CPython's sqlite3 resets ALL
+    of a connection's prepared statements on commit/rollback, so ANY statement
+    in flight without the store lock can be reset mid-fetch by a locked
+    writer's commit — and a reset statement yields NULL rows (COUNT(*)
+    observably returned (None,), breaking node_count / consolidate / health
+    in CI). Locking individual call sites proved insufficient: an unlocked
+    reader elsewhere on the connection still corrupts locked readers.
+
+    This proxy centralizes the discipline: execute/executemany/executescript/
+    commit/rollback/close all take the store's RLock (locked callers just
+    re-enter), and results are materialized inside the lock via
+    _BufferedCursor. Every call site — including raw _conn.execute in tests
+    and maintenance code — is safe by construction.
+    """
+
+    def __init__(self, conn, lock):
+        self._raw = conn
+        self._lock = lock
+
+    def execute(self, sql, params=()):
+        with self._lock:
+            return _BufferedCursor(self._raw.execute(sql, params))
+
+    def executemany(self, sql, seq_of_params):
+        with self._lock:
+            return _BufferedCursor(self._raw.executemany(sql, seq_of_params))
+
+    def executescript(self, sql_script):
+        with self._lock:
+            return _BufferedCursor(self._raw.executescript(sql_script))
+
+    def commit(self):
+        with self._lock:
+            self._raw.commit()
+
+    def rollback(self):
+        with self._lock:
+            self._raw.rollback()
+
+    def close(self):
+        with self._lock:
+            self._raw.close()
+
+    def __getattr__(self, name):
+        return getattr(self._raw, name)
+
+
 class SQLiteStoreBase:
     """SQLite-backed memory store with sqlite-vec for vector search.
 
@@ -483,7 +582,9 @@ class SQLiteStoreBase:
             logger.warning(f"sqlite-vec not available, falling back to brute-force: {e}")
             self._vec_available = False
 
-        return conn
+        # Wrap AFTER raw-connection setup (extension loading needs the real
+        # sqlite3.Connection). From here on, every statement is lock-serialized.
+        return _LockedConnection(conn, self._lock)
 
     def _init_schema(self) -> None:
         """Create tables if they don't exist. Delegates to cairn.schema."""
