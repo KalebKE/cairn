@@ -11,7 +11,7 @@
 - **Capture**: decisions, lessons, errors, and preferences — stored explicitly (`cairn_store`) or auto-captured by session hooks, with Jaccard dedup, Zettelkasten-style memory *evolution*, contradiction supersession, and noise blocklists.
 - **Retrieve**: hybrid search fusing four channels (vector · BM25/FTS5 · temporal · entity) with canonical Reciprocal Rank Fusion, then a confidence-gated cross-encoder rerank (`bge-reranker-v2-m3`). Embeddings are local ONNX (`bge-small-en-v1.5`, 384-d, cosine).
 - **Forget**: per-type exponential decay (ACT-R style, access-aware), TTLs, strength floors, and an audited `forgetting_log` — protected types (decisions, preferences, constraints) never decay.
-- **Measure**: a built-in eval harness with **non-self-referential judged probe sets**, paired A/B on any config knob, sign tests, and an MRR trend that `cairn doctor` watches for silent degradation. Current baseline on a 2,300-memory live store: **MRR 0.842, nDCG@5 0.71, hit-rate 0.92**.
+- **Measure**: a built-in eval harness with **non-self-referential judged probe sets**, paired A/B on any config knob, sign tests, and an MRR trend that `cairn doctor` watches for silent degradation. Current baseline on a 2,300-memory live store: **MRR 0.842, nDCG@5 0.71, hit-rate 0.92**. On public LongMemEval (500 questions): **Recall@1 0.88, NDCG@10 0.92**.
 
 Every scoring change in this fork was either proven equivalent or measured on judged probes before it shipped.
 
@@ -116,6 +116,50 @@ sign test, and a running MRR history feeds the doctor command so a silent
 regression shows up in the numbers before you notice it behaviorally. The
 current baseline on a store of about 2,300 memories is 0.84 MRR at top-5.
 
+## Benchmarks
+
+There is a popular open-source memory project whose whole pitch is being the
+best-benchmarked memory system out there, and to their credit they publish
+the harness and the raw results so you can actually check. So I checked. I
+ran their LongMemEval harness on my machine and reproduced their headline
+number exactly (96.6% Recall@5 on the full 500 questions — same digit they
+publish, which honestly earned them some respect). Then I swapped Cairn in
+as the retrieval backend and ran the exact same protocol: same corpus
+construction, same metrics, same fill rule for documents the retriever
+doesn't return.
+
+LongMemEval, full 500 questions, session granularity (each question buries
+the answer in ~53 conversation sessions):
+
+| | Their retriever | Cairn | Cairn (relaxed) |
+|---|---|---|---|
+| Recall@1 | 0.806 | 0.878 | **0.882** |
+| Recall@3 | 0.926 | 0.938 | **0.942** |
+| Recall@5 | **0.966** | 0.950 | 0.956 |
+| NDCG@10 | 0.889 | 0.911 | **0.916** |
+
+Cairn puts the right memory at rank 1 about 7 points more often, and that
+is the number I actually care about. The ambient loop surfaces a small
+handful of memories into a working agent's context, so what sits at rank 1
+matters a lot more than what sits at rank 40.
+
+They do edge Cairn on deeper recall, and the reason is kind of interesting:
+Cairn abstains. Ask it for 50 results and it hands back the two or three it
+actually believes in, and the benchmark's fill rule ranks everything
+unreturned by corpus order, which costs recall points. I'll take that trade
+— an agent that gets fed a plausible-looking wrong memory has no way to
+know it's wrong.
+
+And the honest caveat, because I always leave one in: there is one question
+category where plain cosine similarity beats Cairn's whole pipeline —
+indirect preference questions like "what should I serve for dinner with my
+homegrown ingredients?", where the session you need (the one where the user
+talked about their garden) shares almost no wording with the question.
+Cairn scores 0.733 there against their 0.967. Something to fix.
+
+The harness is `benchmarks/longmemeval_cairn.py` — one command, no API key,
+about 14 minutes on Apple Silicon for the full 500.
+
 ## Quick start
 
 ```bash
@@ -134,6 +178,7 @@ cairn eval-retrieval --build-probes --sample-size 30   # LLM-judged probe set (f
 cairn eval-retrieval --probes <set.json>               # provider-free scored run
 cairn eval-retrieval --probes <set.json> --ab CAIRN_CE_MODE=boost|hybrid
 cairn eval-retrieval --build-probes --from-query-log   # replay real logged queries
+python benchmarks/longmemeval_cairn.py <longmemeval_s_cleaned.json>  # public LongMemEval benchmark
 ```
 
 Evals always run against a snapshot copy — never the live store (queries mutate access counts, which feed decay).
