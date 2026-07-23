@@ -227,3 +227,22 @@ class TestConstraintConstants:
     def test_constraint_in_evolution_types(self):
         from cairn.bridge import EVOLUTION_TYPES
         assert AutoCaptureEventType.CONSTRAINT in EVOLUTION_TYPES
+
+
+class TestWelcomeCacheInvalidation:
+    def test_welcome_reflects_constraint_stored_after_cached_welcome(self, tmp_cairn_dir):
+        """A constraint stored within the welcome-cache TTL must appear in the
+        next welcome() — the 30s cache must not serve a brief that predates
+        new memories (stale-cache bug: CI test_welcome_includes_active_constraints
+        failed whenever another test's welcome() primed the cache <30s earlier).
+        """
+        import cairn.bridge as bridge
+        bridge._store_instance = None
+
+        bridge.welcome()  # primes the cache (no constraints yet)
+        bridge.store(
+            "Never deploy to production on Fridays without approval.",
+            event_type="constraint",
+        )
+        result = bridge.welcome()
+        assert "Active Constraints" in result["observation_prefix"]

@@ -52,6 +52,12 @@ os.environ["CAIRN_HOME"] = sys.argv[1]
 os.environ.setdefault("CAIRN_SKIP_EMBEDDINGS", "1")
 from cairn.sqlite_store import SQLiteStore
 s = SQLiteStore()
+# __init__ spawns cairn-deferred-init, which runs its own integrity_check /
+# WAL checkpoint on the shared connection (under s._lock). Raw _conn.execute
+# below bypasses that lock, and two interleaved PRAGMA integrity_check
+# statements on one connection can yield a garbage row (observed as
+# INTEGRITY= empty on CI). Join it so the reads have the connection alone.
+s._deferred_thread.join(timeout=60)
 n = s._conn.execute(
     "SELECT COUNT(*) FROM memories WHERE event_type='observation'").fetchone()[0]
 integ = s._conn.execute("PRAGMA integrity_check").fetchone()[0]

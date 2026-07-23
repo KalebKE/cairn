@@ -491,6 +491,11 @@ def auto_capture(
         agent_type=agent_type,
     )
 
+    # The welcome cache exists to absorb near-simultaneous session starts; a
+    # brief that predates this write (e.g. a just-stored constraint) must not
+    # be served for the rest of the 30s TTL.
+    _bridge._welcome_cache.clear()
+
     ttl_str = _bridge._human_ttl(ttl)
     output = f"Stored {node_id} ({event_type}, {ttl_str})"
 
