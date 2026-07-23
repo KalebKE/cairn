@@ -508,6 +508,7 @@ def test_tool_schemas_docstring_count():
     assert len(TOOL_SCHEMAS) >= 16  # 15 cairn_* composites plus context_packet
 
 
+@requires_vec
 @pytest.mark.asyncio
 async def test_cairn_similar_embeddingless_node_regenerates():
     """A node whose embedding was discarded (degraded-embedding path) must
