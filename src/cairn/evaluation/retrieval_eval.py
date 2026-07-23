@@ -847,6 +847,12 @@ class EvalReportV2:
     pool_coverage: float = 0.0      # judged_returned / returned, averaged
     per_probe: List[Dict[str, Any]] = field(default_factory=list)
     duration_seconds: float = 0.0
+    # Model provenance — the models that actually served this run, resolved at
+    # runtime. (bge-reranker-v2-m3 was documented for months while the
+    # resolver silently served ms-marco; never trust a run without these.)
+    embedding_model: str = ""
+    embedding_dim: int = 0
+    reranker_model: str = ""
 
 
 def snapshot_db(src_db: str, dest_dir: Optional[str] = None) -> str:
@@ -970,6 +976,19 @@ def run_evaluation_v2(
             per_probe=[asdict(p) for p in per],
             duration_seconds=round(time.time() - start, 2),
         )
+        # Model provenance: read AFTER the probes ran, so lazy-loaded models
+        # report what actually served the queries.
+        try:
+            from cairn.embedding import get_embedding_model_info
+            from cairn.reranker import _RERANKER_MODEL_NAME
+            from cairn.sqlite_store import EMBEDDING_DIM
+
+            _mi = get_embedding_model_info()
+            report.embedding_model = _mi.get("model_name") or ""
+            report.embedding_dim = EMBEDDING_DIM
+            report.reranker_model = _RERANKER_MODEL_NAME
+        except Exception:
+            pass
         return report
     finally:
         for k, v in saved.items():

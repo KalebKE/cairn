@@ -73,6 +73,36 @@ _ONNX_MODEL_DIR = None
 _ONNX_DEFAULT_DIR = "~/.cache/cairn/models/bge-small-en-v1.5-onnx"
 _ONNX_FALLBACK_DIR = "~/.cache/cairn/models/all-MiniLM-L6-v2-onnx"
 
+# Per-model config sidecar (cairn.json in the model dir). Written by
+# scripts/fetch_embedder.py for alternative models; absent for the legacy
+# bge/minilm installs, where the historical defaults below apply.
+_MODEL_SIDECAR: Optional[Dict[str, Any]] = None
+_SIDECAR_DEFAULTS: Dict[str, Any] = {
+    "pooling": "mean",       # historical behavior — see _onnx_encode
+    "output_name": None,      # None → legacy index-based selection
+    "query_prefix": "",
+    "doc_prefix": "",
+    "truncate_dim": None,
+    "max_length": 512,
+}
+
+
+def _load_model_sidecar(model_dir: str) -> Dict[str, Any]:
+    """Read cairn.json from a model dir, falling back to legacy defaults."""
+    import json as _json
+    from pathlib import Path as _Path
+
+    cfg = dict(_SIDECAR_DEFAULTS)
+    cfg["source"] = "defaults"
+    sidecar = _Path(model_dir) / "cairn.json"
+    if sidecar.exists():
+        try:
+            cfg.update(_json.loads(sidecar.read_text()))
+            cfg["source"] = "sidecar"
+        except Exception as e:
+            logger.warning("Unreadable model sidecar %s: %s — using defaults", sidecar, e)
+    return cfg
+
 # Availability checks (cached)
 _ONNX_CHECKED = False
 _ONNX_AVAILABLE = False
@@ -85,6 +115,8 @@ def get_embedding_model_info() -> Dict[str, Any]:
         "model_version": _EMBEDDING_MODEL_VERSION,
         "model_loaded": _EMBEDDING_MODEL is not None,
         "backend": _EMBEDDING_BACKEND,
+        "model_dir": _ONNX_MODEL_DIR,
+        "sidecar": dict(_MODEL_SIDECAR) if _MODEL_SIDECAR else None,
     }
 
 
@@ -109,11 +141,12 @@ def reset_embedding_state():
     """
     global _EMBEDDING_MODEL, _EMBEDDING_BACKEND, _LOAD_ATTEMPTED
     global _ONNX_MODEL_DIR, _EMBEDDING_MODEL_NAME, _EMBEDDING_MODEL_VERSION
-    global _FIRST_FAILURE_TIME
+    global _FIRST_FAILURE_TIME, _MODEL_SIDECAR
     _EMBEDDING_MODEL = None
     _EMBEDDING_BACKEND = None
     _LOAD_ATTEMPTED = False
     _ONNX_MODEL_DIR = None
+    _MODEL_SIDECAR = None
     _EMBEDDING_MODEL_NAME = "bge-small-en-v1.5"
     _EMBEDDING_MODEL_VERSION = "v1.5"
     _FIRST_FAILURE_TIME = 0.0
@@ -187,33 +220,47 @@ def _get_onnx_model_dir() -> Optional[str]:
 
     Checks in order: bge-small-en-v1.5 (primary), env override, all-MiniLM-L6-v2 (fallback).
     """
-    global _ONNX_MODEL_DIR, _EMBEDDING_MODEL_NAME, _EMBEDDING_MODEL_VERSION
+    global _ONNX_MODEL_DIR, _EMBEDDING_MODEL_NAME, _EMBEDDING_MODEL_VERSION, _MODEL_SIDECAR
     if _ONNX_MODEL_DIR is not None:
         return _ONNX_MODEL_DIR
 
     import os
     from pathlib import Path
 
+    # Environment override FIRST — explicit intent must beat the default
+    # install. (It used to be checked second, which meant it could never take
+    # effect on a machine with bge-small installed — and it never updated the
+    # model identity, so benchmark arms stamped results as bge-small.)
+    env_dir = os.environ.get("CAIRN_ONNX_MODEL_DIR")
+    if env_dir:
+        env_path = Path(os.path.expanduser(env_dir)) / "model.onnx"
+        if env_path.exists():
+            _ONNX_MODEL_DIR = str(env_path.parent)
+            _MODEL_SIDECAR = _load_model_sidecar(_ONNX_MODEL_DIR)
+            _EMBEDDING_MODEL_NAME = _MODEL_SIDECAR.get("model_name") or Path(
+                _ONNX_MODEL_DIR
+            ).name.removesuffix("-onnx")
+            _EMBEDDING_MODEL_VERSION = _MODEL_SIDECAR.get("model_version") or "env"
+            return _ONNX_MODEL_DIR
+        logger.warning(
+            "CAIRN_ONNX_MODEL_DIR=%s set but model.onnx missing — ignoring override",
+            env_dir,
+        )
+
     # Primary: bge-small-en-v1.5
     model_dir = Path(os.path.expanduser(_ONNX_DEFAULT_DIR))
     model_path = model_dir / "model.onnx"
     if model_path.exists():
         _ONNX_MODEL_DIR = str(model_dir)
+        _MODEL_SIDECAR = _load_model_sidecar(_ONNX_MODEL_DIR)
         return _ONNX_MODEL_DIR
-
-    # Environment override
-    env_dir = os.environ.get("CAIRN_ONNX_MODEL_DIR")
-    if env_dir:
-        env_path = Path(env_dir) / "model.onnx"
-        if env_path.exists():
-            _ONNX_MODEL_DIR = env_dir
-            return _ONNX_MODEL_DIR
 
     # Fallback: all-MiniLM-L6-v2 (existing installs)
     fallback_dir = Path(os.path.expanduser(_ONNX_FALLBACK_DIR))
     fallback_path = fallback_dir / "model.onnx"
     if fallback_path.exists():
         _ONNX_MODEL_DIR = str(fallback_dir)
+        _MODEL_SIDECAR = _load_model_sidecar(_ONNX_MODEL_DIR)
         _EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
         _EMBEDDING_MODEL_VERSION = "v2"
         logger.info("Using fallback model all-MiniLM-L6-v2. Run 'cairn setup --download-model' to upgrade.")

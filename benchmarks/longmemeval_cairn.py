@@ -210,6 +210,22 @@ def run(data_file, limit=0, tag="", out_dir=None, relaxed=False):
     stamp = datetime.now().strftime("%Y%m%d_%H%M")
     suffix = f"_{tag}" if tag else ""
     out_file = out_dir / f"results_cairn_session_top10{suffix}_{stamp}.json"
+    # Model provenance — resolved AFTER the run so lazy loads are reflected.
+    try:
+        from cairn.embedding import get_embedding_model_info
+        from cairn.reranker import _RERANKER_MODEL_NAME
+        from cairn.sqlite_store import EMBEDDING_DIM
+
+        _mi = get_embedding_model_info()
+        provenance = {
+            "embedding_model": _mi.get("model_name"),
+            "embedding_backend": _mi.get("backend"),
+            "embedding_dim": EMBEDDING_DIM,
+            "reranker_model": _RERANKER_MODEL_NAME,
+        }
+    except Exception:
+        provenance = {}
+
     with open(out_file, "w") as f:
         json.dump(
             {
@@ -217,6 +233,7 @@ def run(data_file, limit=0, tag="", out_dir=None, relaxed=False):
                 "protocol": "mempalace-raw-session",
                 "ce_mode": ce_mode,
                 "relaxed_abstention": relaxed,
+                "provenance": provenance,
                 "n": n,
                 "elapsed_s": round(elapsed, 1),
                 "summary": {
@@ -230,6 +247,12 @@ def run(data_file, limit=0, tag="", out_dir=None, relaxed=False):
             },
             f,
             indent=1,
+        )
+    if provenance:
+        print(
+            f"\n  Models: embed={provenance.get('embedding_model')} "
+            f"({provenance.get('embedding_dim')}d, {provenance.get('embedding_backend')}) "
+            f"rerank={provenance.get('reranker_model')}"
         )
     print(f"\n  Results → {out_file}")
 

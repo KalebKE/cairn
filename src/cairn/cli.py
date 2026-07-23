@@ -2225,28 +2225,45 @@ def _doctor_check_imports(report) -> bool:
 
 
 def _doctor_check_model(report) -> None:
-    """Embedding model files + a live 384-dim generation probe."""
+    """Embedding model identity/files + a live generation probe at the expected dim."""
+    from cairn.sqlite_store import EMBEDDING_DIM
+
     report.section("Embedding Model")
-    bge_path = BGE_MODEL_DIR / "model.onnx"
-    minilm_path = MINILM_MODEL_DIR / "model.onnx"
-    if bge_path.exists():
-        model_mb = bge_path.stat().st_size / (1024 * 1024)
-        report.ok(f"bge-small-en-v1.5 model.onnx present ({model_mb:.0f} MB)")
-        active_model_dir = BGE_MODEL_DIR
-    elif minilm_path.exists():
-        model_mb = minilm_path.stat().st_size / (1024 * 1024)
-        report.ok(f"all-MiniLM-L6-v2 model.onnx present ({model_mb:.0f} MB)")
-        report.warn("Using legacy model. Run 'cairn setup --download-model' to upgrade to bge-small-en-v1.5")
-        active_model_dir = MINILM_MODEL_DIR
+    # Resolve identity through the same path the runtime uses (honors
+    # CAIRN_ONNX_MODEL_DIR overrides and cairn.json sidecars) rather than
+    # hard-coding the two legacy directories.
+    try:
+        from cairn.embedding import _get_onnx_model_dir, get_embedding_model_info
+
+        resolved_dir = _get_onnx_model_dir()
+        minfo = get_embedding_model_info()
+    except Exception as e:
+        report.fail(f"Model resolution failed: {e}")
+        resolved_dir = None
+        minfo = {}
+
+    if resolved_dir:
+        model_path = Path(resolved_dir) / "model.onnx"
+        model_mb = model_path.stat().st_size / (1024 * 1024) if model_path.exists() else 0
+        report.ok(
+            f"Resolved model: {minfo.get('model_name', '?')} "
+            f"({model_mb:.0f} MB at {resolved_dir})"
+        )
+        sc = minfo.get("sidecar") or {}
+        if sc.get("source") == "sidecar":
+            report.ok(
+                f"Sidecar config: dim={sc.get('dim', '?')} pooling={sc.get('pooling')} "
+                f"prefixes={'yes' if sc.get('query_prefix') or sc.get('doc_prefix') else 'no'}"
+            )
+        if minfo.get("model_name") == "all-MiniLM-L6-v2":
+            report.warn("Using legacy fallback model. Run 'cairn setup --download-model' to upgrade")
+        tokenizer_path = Path(resolved_dir) / "tokenizer.json"
+        if tokenizer_path.exists():
+            report.ok("tokenizer.json present")
+        else:
+            report.fail(f"tokenizer.json not found at {resolved_dir}")
     else:
         report.fail(f"model.onnx not found at {BGE_MODEL_DIR} or {MINILM_MODEL_DIR}")
-        active_model_dir = BGE_MODEL_DIR
-
-    tokenizer_path = active_model_dir / "tokenizer.json"
-    if tokenizer_path.exists():
-        report.ok("tokenizer.json present")
-    else:
-        report.fail(f"tokenizer.json not found at {active_model_dir}")
 
     try:
         from cairn.embedding import generate_embedding, get_embedding_info
@@ -2260,8 +2277,8 @@ def _doctor_check_model(report) -> None:
         emb = generate_embedding("test embedding")
         from cairn.embedding import is_embedding_degraded, get_active_backend
         backend = get_active_backend() or "hash-fallback"
-        if len(emb) != 384:
-            report.fail(f"Embedding dimension wrong: {len(emb)} (expected 384)")
+        if len(emb) != EMBEDDING_DIM:
+            report.fail(f"Embedding dimension wrong: {len(emb)} (expected {EMBEDDING_DIM})")
         elif is_embedding_degraded() or backend in ("hash", "hash-fallback"):
             # Do NOT report this as OK — a hash-fallback backend means semantic
             # search is silently broken: stored ONNX vectors won't match hashed
@@ -2271,9 +2288,33 @@ def _doctor_check_model(report) -> None:
                         f"The ONNX model failed to load; queries and stored vectors will "
                         f"not match. Install the model and re-embed the store.")
         else:
-            report.ok(f"Embedding generation works (384-dim, backend={backend})")
+            report.ok(f"Embedding generation works ({EMBEDDING_DIM}-dim, backend={backend})")
     except Exception as e:
         report.fail(f"Embedding generation failed: {e}")
+
+    # Reranker identity — the model that actually resolves, not the one we
+    # assume. (bge-reranker-v2-m3 was documented as the reranker for months
+    # while the resolver silently fell back to ms-marco-MiniLM-L-6-v2.)
+    report.section("Reranker Model")
+    try:
+        import cairn.reranker as _rr
+
+        rr_name, rr_default_dir = _rr._resolve_reranker_model()
+        rr_dir = _rr._get_model_dir()  # None when files absent (pre-download)
+        rr_onnx = Path(rr_dir) / "model.onnx" if rr_dir else None
+        if rr_onnx and rr_onnx.exists():
+            rr_mb = rr_onnx.stat().st_size / (1024 * 1024)
+            report.ok(f"Resolved reranker: {rr_name} ({rr_mb:.0f} MB at {rr_dir})")
+        else:
+            report.warn(
+                f"Resolved reranker: {rr_name} — model files not on disk at "
+                f"{rr_default_dir} (downloads on first use unless "
+                f"CAIRN_RERANKER_AUTODOWNLOAD=0)"
+            )
+        if os.environ.get("CAIRN_CROSS_ENCODER", "1") == "0":
+            report.warn("Cross-encoder disabled via CAIRN_CROSS_ENCODER=0")
+    except Exception as e:
+        report.warn(f"Reranker identity check failed: {e}")
 
 
 def _doctor_check_database(report):
