@@ -8,8 +8,9 @@ Provides:
 - LRU cache for repeated queries
 - Hash-based fallback when no ML model available
 
-Uses bge-small-en-v1.5 via ONNX Runtime (~90MB RAM, ~170MB with arena disabled).
-Falls back to all-MiniLM-L6-v2 if bge model not downloaded, or hash-based pseudo-embeddings if ONNX unavailable.
+Uses gte-modernbert-base (768-dim, CLS-pooled) via ONNX Runtime. Falls back to
+legacy bge-small-en-v1.5 / all-MiniLM-L6-v2 for existing 384-dim installs, or
+hash-based pseudo-embeddings if ONNX is unavailable.
 """
 
 from collections import OrderedDict
@@ -50,8 +51,8 @@ except ImportError:
 _EMBEDDING_MODEL = None
 _EMBEDDING_BACKEND = None  # "onnx" only (sentence-transformers removed to prevent 7.5GB PyTorch blowup)
 _LOAD_ATTEMPTED = False  # Circuit breaker: don't retry after first failure
-_EMBEDDING_MODEL_NAME = "bge-small-en-v1.5"
-_EMBEDDING_MODEL_VERSION = "v1.5"
+_EMBEDDING_MODEL_NAME = "gte-modernbert-base"
+_EMBEDDING_MODEL_VERSION = "v1"
 _EMBEDDING_CACHE: OrderedDict = OrderedDict()
 _CACHE_MAX = int(os.environ.get("CAIRN_EMBEDDING_CACHE_MAX", "512"))
 _EMBEDDING_CACHE_MAX = _CACHE_MAX
@@ -68,10 +69,32 @@ _UNLOAD_CHECK_INTERVAL_S = 60  # check at most once per 60s
 _FIRST_FAILURE_TIME: float = 0.0  # monotonic timestamp of first failure in current window
 _CIRCUIT_BREAKER_COOLDOWN_S = 300  # 5 minutes
 
-# ONNX model paths (bge-small-en-v1.5 primary, all-MiniLM-L6-v2 fallback)
+# ONNX model paths. gte-modernbert-base is the default since the 2026-07
+# model sweep (beats bge-small on LongMemEval and judged probes at p50
+# ~11ms); bge-small-en-v1.5 and all-MiniLM-L6-v2 remain supported legacy
+# fallbacks for existing 384-dim stores.
 _ONNX_MODEL_DIR = None
-_ONNX_DEFAULT_DIR = "~/.cache/cairn/models/bge-small-en-v1.5-onnx"
+_ONNX_DEFAULT_DIR = "~/.cache/cairn/models/gte-modernbert-base-onnx"
+_ONNX_LEGACY_BGE_DIR = "~/.cache/cairn/models/bge-small-en-v1.5-onnx"
 _ONNX_FALLBACK_DIR = "~/.cache/cairn/models/all-MiniLM-L6-v2-onnx"
+
+# Built-in config for the default model, used when its dir has no cairn.json
+# (e.g. hand-copied installs). gte-modernbert is CLS-pooled — mean pooling
+# would silently degrade it, so this must never fall back to the legacy
+# mean-pooling defaults.
+GTE_SIDECAR = {
+    "model_name": "gte-modernbert-base",
+    "model_version": "v1",
+    "dim": 768,
+    "pooling": "cls",
+    "output_name": None,
+    "query_prefix": "",
+    "doc_prefix": "",
+    "max_length": 512,
+    "pad_id": 50283,
+    "pad_token": "[PAD]",
+    "source": "builtin",
+}
 
 # Per-model config sidecar (cairn.json in the model dir). Written by
 # scripts/fetch_embedder.py for alternative models; absent for the legacy
@@ -147,8 +170,8 @@ def reset_embedding_state():
     _LOAD_ATTEMPTED = False
     _ONNX_MODEL_DIR = None
     _MODEL_SIDECAR = None
-    _EMBEDDING_MODEL_NAME = "bge-small-en-v1.5"
-    _EMBEDDING_MODEL_VERSION = "v1.5"
+    _EMBEDDING_MODEL_NAME = "gte-modernbert-base"
+    _EMBEDDING_MODEL_VERSION = "v1"
     _FIRST_FAILURE_TIME = 0.0
     _EMBEDDING_CACHE.clear()
     if hasattr(_get_embedding_model, "_attempt_count"):
@@ -218,7 +241,8 @@ def has_onnx_runtime() -> bool:
 def _get_onnx_model_dir() -> Optional[str]:
     """Get the ONNX model directory path, checking if model exists.
 
-    Checks in order: bge-small-en-v1.5 (primary), env override, all-MiniLM-L6-v2 (fallback).
+    Checks in order: env override, gte-modernbert-base (primary),
+    bge-small-en-v1.5 (legacy), all-MiniLM-L6-v2 (fallback).
     """
     global _ONNX_MODEL_DIR, _EMBEDDING_MODEL_NAME, _EMBEDDING_MODEL_VERSION, _MODEL_SIDECAR
     if _ONNX_MODEL_DIR is not None:
@@ -247,12 +271,30 @@ def _get_onnx_model_dir() -> Optional[str]:
             env_dir,
         )
 
-    # Primary: bge-small-en-v1.5
+    # Primary: gte-modernbert-base
     model_dir = Path(os.path.expanduser(_ONNX_DEFAULT_DIR))
     model_path = model_dir / "model.onnx"
     if model_path.exists():
         _ONNX_MODEL_DIR = str(model_dir)
         _MODEL_SIDECAR = _load_model_sidecar(_ONNX_MODEL_DIR)
+        if _MODEL_SIDECAR.get("source") == "defaults":
+            # No cairn.json in the default dir: apply the built-in gte config
+            # (the legacy mean-pooling defaults would silently degrade a
+            # CLS-pooled model).
+            _MODEL_SIDECAR = dict(GTE_SIDECAR)
+        return _ONNX_MODEL_DIR
+
+    # Legacy: bge-small-en-v1.5 (existing 384-dim installs)
+    legacy_dir = Path(os.path.expanduser(_ONNX_LEGACY_BGE_DIR))
+    if (legacy_dir / "model.onnx").exists():
+        _ONNX_MODEL_DIR = str(legacy_dir)
+        _MODEL_SIDECAR = _load_model_sidecar(_ONNX_MODEL_DIR)
+        _EMBEDDING_MODEL_NAME = "bge-small-en-v1.5"
+        _EMBEDDING_MODEL_VERSION = "v1.5"
+        logger.info(
+            "Using legacy model bge-small-en-v1.5 (384-dim). Run "
+            "'cairn setup --download-model' then 'cairn migrate-embeddings' to upgrade."
+        )
         return _ONNX_MODEL_DIR
 
     # Fallback: all-MiniLM-L6-v2 (existing installs)
@@ -374,7 +416,7 @@ def _get_embedding_model():
             if importlib.util.find_spec("sentence_transformers") is not None:
                 from sentence_transformers import SentenceTransformer
 
-                _EMBEDDING_MODEL = SentenceTransformer("BAAI/bge-small-en-v1.5")
+                _EMBEDDING_MODEL = SentenceTransformer("Alibaba-NLP/gte-modernbert-base")
                 _EMBEDDING_BACKEND = "sentence-transformers"
                 _get_embedding_model._attempt_count = 0
                 _FIRST_FAILURE_TIME = 0.0

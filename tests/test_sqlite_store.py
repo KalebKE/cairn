@@ -4,6 +4,7 @@ import json
 import os
 import pytest
 from _vec import requires_vec
+from cairn.sqlite_store import EMBEDDING_DIM
 from cairn.exceptions import StorageError
 from cairn.sqlite_store import SQLiteStore
 
@@ -878,14 +879,18 @@ class TestCRUDComprehensive:
         assert store.node_count() == 3
 
     def test_batch_store_with_metadata(self, store):
+        # Contents must be semantically DISTINCT: template-y near-identical
+        # strings ("batch one xyz" / "batch two abc") legitimately cross the
+        # 0.88 embedding-dedup threshold under gte-modernbert and merge —
+        # this test is about batch CRUD, not dedup.
         items = [
             {
-                "content": "batch with meta one xyz",
+                "content": "Chose PostgreSQL over MongoDB for transactional integrity",
                 "session_id": "batch-sess",
                 "metadata": {"event_type": "decision"},
             },
             {
-                "content": "batch with meta two abc",
+                "content": "Kotlin coroutines swallow exceptions without a handler",
                 "session_id": "batch-sess",
                 "metadata": {"event_type": "lesson_learned"},
             },
@@ -1307,7 +1312,7 @@ class TestComputeClusterBoosts:
             pass  # Table may already exist
 
         # Centroid: unit vector along first axis
-        centroid = [1.0] + [0.0] * 383
+        centroid = [1.0] + [0.0] * (EMBEDDING_DIM - 1)
         centroid_bytes = struct.pack(f"{384}f", *centroid)
         store._conn.execute(
             """INSERT INTO memory_clusters
@@ -1320,7 +1325,7 @@ class TestComputeClusterBoosts:
         store._conn.commit()
 
         # Query embedding very close to centroid (sim > 0.5)
-        query_emb = [0.95] + [0.05] * 383
+        query_emb = [0.95] + [0.05] * (EMBEDDING_DIM - 1)
         boosts, clusters = store._compute_cluster_boosts(query_emb)
 
         assert 0 in boosts
@@ -1349,7 +1354,7 @@ class TestComputeClusterBoosts:
         except Exception:
             pass
 
-        centroid = [1.0] + [0.0] * 383
+        centroid = [1.0] + [0.0] * (EMBEDDING_DIM - 1)
         centroid_bytes = struct.pack(f"{384}f", *centroid)
         store._conn.execute(
             """INSERT INTO memory_clusters
@@ -1386,7 +1391,7 @@ class TestComputeClusterBoosts:
         except Exception:
             pass
 
-        query_emb = [1.0] + [0.0] * 383
+        query_emb = [1.0] + [0.0] * (EMBEDDING_DIM - 1)
         boosts, clusters = store._compute_cluster_boosts(query_emb)
         assert boosts == {}
         assert clusters == []
@@ -1413,7 +1418,7 @@ class TestComputeClusterBoosts:
             pass
 
         # Two clusters at different angles
-        c1 = [1.0] + [0.0] * 383
+        c1 = [1.0] + [0.0] * (EMBEDDING_DIM - 1)
         c2 = [0.7, 0.7] + [0.0] * 382
         store._conn.execute(
             """INSERT INTO memory_clusters

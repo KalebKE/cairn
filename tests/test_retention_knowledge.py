@@ -20,6 +20,8 @@ import json
 import pytest
 from _vec import requires_vec
 
+from cairn.sqlite_store import EMBEDDING_DIM
+
 
 def _backdate(store, node_id: str, days: int) -> None:
     store._conn.execute(
@@ -158,7 +160,7 @@ class TestSupersedesEdge:
 class TestHashEmbeddingRecovery:
     def _degrade(self, monkeypatch):
         import cairn.embedding as E
-        monkeypatch.setattr(E, "generate_embedding", lambda text, dimension=384: [0.1] * 384)
+        monkeypatch.setattr(E, "generate_embedding", lambda text, dimension=None, mode="document": [0.1] * EMBEDDING_DIM)
         monkeypatch.setattr(E, "is_embedding_degraded", lambda: True)
         monkeypatch.setattr(E, "get_active_backend", lambda: None)
 

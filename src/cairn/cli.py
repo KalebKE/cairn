@@ -32,10 +32,11 @@ def _parse_event_types_arg(value) -> list[str] | None:
 
 CAIRN_DIR = cairn_home()
 CAIRN_CACHE = Path.home() / ".cache" / "cairn"
+GTE_MODEL_DIR = CAIRN_CACHE / "models" / "gte-modernbert-base-onnx"
 BGE_MODEL_DIR = CAIRN_CACHE / "models" / "bge-small-en-v1.5-onnx"
 MINILM_MODEL_DIR = CAIRN_CACHE / "models" / "all-MiniLM-L6-v2-onnx"
-# Primary model dir — bge-small-en-v1.5, falls back to all-MiniLM-L6-v2
-ONNX_MODEL_DIR = BGE_MODEL_DIR
+# Primary model dir — gte-modernbert-base; bge/minilm are legacy fallbacks
+ONNX_MODEL_DIR = GTE_MODEL_DIR
 
 
 CLAUDE_MD_PATH = Path.home() / ".claude" / "CLAUDE.md"
@@ -289,38 +290,52 @@ def _download_file(url: str, target: Path) -> None:
 
 
 def _download_bge_model(target_dir: Path, errors_ref: list) -> bool:
-    """Download bge-small-en-v1.5 ONNX model from HuggingFace. Returns True on success."""
+    """Download the default embedding model (gte-modernbert-base) from HuggingFace.
+
+    Name kept for call-site compatibility; the default flipped to
+    gte-modernbert-base after the 2026-07 model sweep. Writes the cairn.json
+    sidecar so the loader uses CLS pooling (mean pooling silently degrades
+    this model).
+    """
+    import json as _json
+
     target_dir.mkdir(parents=True, exist_ok=True)
     required = ["model.onnx", "tokenizer.json", "config.json"]
     if all((target_dir / f).exists() for f in required):
-        print(f"  bge-small-en-v1.5 model already present at {target_dir}")
-        return True
-
-    print("  Downloading bge-small-en-v1.5 ONNX model (~130MB)...")
-    try:
-        hf_repo = "https://huggingface.co/BAAI/bge-small-en-v1.5/resolve/main"
-        # model.onnx lives in onnx/ subdir, tokenizer files at repo root
-        files = {
-            "model.onnx": f"{hf_repo}/onnx/model.onnx",
-            "tokenizer.json": f"{hf_repo}/tokenizer.json",
-            "config.json": f"{hf_repo}/config.json",
-            "tokenizer_config.json": f"{hf_repo}/tokenizer_config.json",
-        }
-        for fname, url in files.items():
-            target = target_dir / fname
-            if not target.exists():
-                _download_file(url, target)
-    except Exception as e:
-        errors_ref.append(e)
-        print(f"  ERROR: bge model download failed: {e}")
-        print(f"  Manually place model files in {target_dir}")
-        return False
+        print(f"  gte-modernbert-base model already present at {target_dir}")
+    else:
+        print("  Downloading gte-modernbert-base ONNX model (~600MB)...")
+        try:
+            hf_repo = "https://huggingface.co/Alibaba-NLP/gte-modernbert-base/resolve/main"
+            # model.onnx lives in onnx/ subdir, tokenizer files at repo root
+            files = {
+                "model.onnx": f"{hf_repo}/onnx/model.onnx",
+                "tokenizer.json": f"{hf_repo}/tokenizer.json",
+                "config.json": f"{hf_repo}/config.json",
+                "tokenizer_config.json": f"{hf_repo}/tokenizer_config.json",
+            }
+            for fname, url in files.items():
+                target = target_dir / fname
+                if not target.exists():
+                    _download_file(url, target)
+        except Exception as e:
+            errors_ref.append(e)
+            print(f"  ERROR: model download failed: {e}")
+            print(f"  Manually place model files in {target_dir}")
+            return False
 
     if not (target_dir / "model.onnx").exists():
         errors_ref.append("model.onnx not present after download")
         print("  ERROR: model.onnx still not present after download attempt")
         return False
-    print(f"  bge-small-en-v1.5 model downloaded to {target_dir}")
+
+    sidecar = target_dir / "cairn.json"
+    if not sidecar.exists():
+        from cairn.embedding import GTE_SIDECAR
+
+        cfg = {k: v for k, v in GTE_SIDECAR.items() if k != "source"}
+        sidecar.write_text(_json.dumps(cfg, indent=1))
+    print(f"  gte-modernbert-base model ready at {target_dir}")
     return True
 
 
@@ -989,17 +1004,22 @@ def cmd_setup(args):
 
     # 2. Download ONNX model
     if download_model:
-        _download_bge_model(BGE_MODEL_DIR, errors)
-        steps_done.append("Embedding model (bge-small-en-v1.5)")
+        _download_bge_model(GTE_MODEL_DIR, errors)
+        steps_done.append("Embedding model (gte-modernbert-base)")
     else:
+        gte_model = GTE_MODEL_DIR / "model.onnx"
         bge_model = BGE_MODEL_DIR / "model.onnx"
         minilm_model = MINILM_MODEL_DIR / "model.onnx"
-        if bge_model.exists():
-            print(f"  ONNX model: bge-small-en-v1.5 at {BGE_MODEL_DIR}")
+        if gte_model.exists():
+            print(f"  ONNX model: gte-modernbert-base at {GTE_MODEL_DIR}")
+            steps_done.append("Embedding model (already present)")
+        elif bge_model.exists():
+            print(f"  ONNX model: bge-small-en-v1.5 (legacy 384-dim) at {BGE_MODEL_DIR}")
+            print("  TIP: Run 'cairn setup --download-model' then 'cairn migrate-embeddings' to upgrade")
             steps_done.append("Embedding model (already present)")
         elif minilm_model.exists():
             print(f"  ONNX model: all-MiniLM-L6-v2 at {MINILM_MODEL_DIR}")
-            print("  TIP: Run 'cairn setup --download-model' to upgrade to bge-small-en-v1.5")
+            print("  TIP: Run 'cairn setup --download-model' to upgrade to gte-modernbert-base")
             steps_done.append("Embedding model (already present)")
         else:
             MINILM_MODEL_DIR.mkdir(parents=True, exist_ok=True)
@@ -1023,7 +1043,7 @@ def cmd_setup(args):
                 errors.append("model.onnx not present")
                 print("  ERROR: model.onnx still not present after download attempt")
             else:
-                print("  TIP: Run 'cairn setup --download-model' to upgrade to bge-small-en-v1.5")
+                print("  TIP: Run 'cairn setup --download-model' to upgrade to gte-modernbert-base")
                 steps_done.append("Embedding model (downloaded)")
 
     # 4. Create default config
@@ -1226,7 +1246,7 @@ def cmd_status(args):
             model_label += f" ONNX ({data['model_size_mb']:.0f} MB)"
         kv.append(("Model", model_label))
         if data["model"] == "all-MiniLM-L6-v2":
-            kv.append(("Tip", "Run 'cairn setup --download-model' to upgrade to bge-small-en-v1.5"))
+            kv.append(("Tip", "Run 'cairn setup --download-model' to upgrade to gte-modernbert-base"))
     else:
         kv.append(("Model", "not downloaded"))
         kv.append(("Tip", "Run 'cairn setup' to download"))
@@ -1397,6 +1417,86 @@ def cmd_migrate_home(args):
     print("Migrating ~/.omega -> ~/.cairn ...")
     migrate_home(verbose=True)
     print("Done. Verify with `cairn status`, then remove ~/.omega when satisfied.")
+
+
+def cmd_migrate_embeddings(args):
+    """Rebuild the vec table + all embeddings for the current model/dimension.
+
+    Safe by construction: backs up the DB first, refuses to run while MCP
+    servers are live (their in-process model would write old-dim vectors),
+    and verifies count parity before declaring success.
+    """
+    import sqlite3 as _sqlite3
+    from datetime import datetime as _dt
+
+    db_path = CAIRN_DIR / "cairn.db"
+    if not db_path.exists():
+        print(f"No store at {db_path} — nothing to migrate.")
+        return 1
+
+    # 1. No live writers: a running server holds the OLD model and would
+    #    produce wrong-dim vectors the rebuilt table rejects.
+    from cairn.server.pid_registry import list_registered_pids
+
+    live = list_registered_pids()
+    if live and not getattr(args, "force", False):
+        print(f"Refusing: {len(live)} live Cairn server(s) registered "
+              f"(pids: {[e.get('pid') for e in live]}).")
+        print("Close those sessions (or pass --force if you know they are stale) and retry.")
+        return 1
+
+    from cairn.embedding import get_embedding_model_info
+    from cairn.sqlite_store import EMBEDDING_DIM
+
+    print(f"Target: dim={EMBEDDING_DIM}")
+
+    # 2. Backup via the online-backup API (consistent even mid-WAL).
+    backups_dir = CAIRN_DIR / "backups"
+    backups_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    ts = _dt.now().strftime("%Y%m%d-%H%M%S")
+    backup_path = backups_dir / f"pre-migrate-embeddings-{ts}.db"
+    src = _sqlite3.connect(str(db_path))
+    dst = _sqlite3.connect(str(backup_path))
+    try:
+        src.backup(dst)
+    finally:
+        dst.close()
+        src.close()
+    print(f"Backup: {backup_path}")
+
+    # 3. Rebuild under the mismatch bypass (the guard would refuse the open).
+    os.environ["CAIRN_ALLOW_DIM_MISMATCH"] = "1"
+    try:
+        from cairn.sqlite_store import SQLiteStore
+
+        store = SQLiteStore(db_path=db_path)
+        try:
+            before = store.node_count()
+            info = get_embedding_model_info()
+            stats = store.rebuild_vec_table()
+            vec_count = store._conn.execute(
+                "SELECT COUNT(*) FROM memories_vec"
+            ).fetchone()[0]
+            after = store.node_count()
+        finally:
+            store.close()
+    finally:
+        os.environ.pop("CAIRN_ALLOW_DIM_MISMATCH", None)
+
+    print(f"Model: {info.get('model_name')} | memories: {before} -> {after} | "
+          f"re-embedded: {stats.get('updated')} (failed: {stats.get('failed')}) | "
+          f"vec rows: {vec_count}")
+    if after != before or stats.get("failed"):
+        print("WARNING: count parity or re-embed failures — inspect before trusting. "
+              f"Backup retained at {backup_path}")
+        return 1
+
+    # 4. Reopen WITHOUT the bypass: the guard itself verifies the new dim.
+    store = SQLiteStore(db_path=db_path)
+    store.close()
+    print(f"Migration complete: store is {EMBEDDING_DIM}-dim. Restart any Cairn "
+          f"sessions so servers pick up the new model.")
+    return 0
 
 
 def cmd_migrate_db(args):
@@ -2263,7 +2363,9 @@ def _doctor_check_model(report) -> None:
         else:
             report.fail(f"tokenizer.json not found at {resolved_dir}")
     else:
-        report.fail(f"model.onnx not found at {BGE_MODEL_DIR} or {MINILM_MODEL_DIR}")
+        report.fail(
+            f"model.onnx not found at {GTE_MODEL_DIR}, {BGE_MODEL_DIR}, or {MINILM_MODEL_DIR}"
+        )
 
     try:
         from cairn.embedding import generate_embedding, get_embedding_info
@@ -3021,6 +3123,14 @@ def main():
     doctor_parser.add_argument("--json", action="store_true", help="Output as JSON (also: CAIRN_JSON=1)")
 
     subparsers.add_parser("migrate-home", help="Migrate legacy ~/.omega data dir to ~/.cairn (non-destructive)")
+    migrate_emb_parser = subparsers.add_parser(
+        "migrate-embeddings",
+        help="Rebuild vec table + re-embed the store for the current model/dimension",
+    )
+    migrate_emb_parser.add_argument(
+        "--force", action="store_true",
+        help="proceed even if live Cairn servers are registered",
+    )
     migrate_db_parser = subparsers.add_parser("migrate-db", help="Migrate JSON graphs to SQLite backend")
     migrate_db_parser.add_argument("--force", action="store_true", help="Overwrite existing SQLite database")
     subparsers.add_parser("reingest", help="Load store.jsonl entries into graph system")
@@ -3193,6 +3303,7 @@ def main():
         "status": cmd_status,
         "doctor": cmd_doctor,
         "migrate-home": cmd_migrate_home,
+        "migrate-embeddings": cmd_migrate_embeddings,
         "migrate-db": cmd_migrate_db,
         "reingest": cmd_reingest,
         "consolidate": cmd_consolidate,

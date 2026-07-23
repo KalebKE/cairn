@@ -14,7 +14,7 @@ from cairn.schema import SCHEMA_VERSION  # noqa: F401 -- re-exported
 # (read once at import) so benchmark arms can run ephemeral stores at a
 # candidate model's dimension in their own process. The live store stays at
 # the default unless migrated (the vec table's float[N] is fixed at creation).
-EMBEDDING_DIM = int(os.environ.get("CAIRN_EMBEDDING_DIM", "384"))
+EMBEDDING_DIM = int(os.environ.get("CAIRN_EMBEDDING_DIM", "768"))
 
 # Pre-compiled regex for query deduplication (strip trailing git hashes)
 _TRAILING_HASH_RE = re.compile(r"\s*-\s*[0-9a-f]{6,40}\s*$")

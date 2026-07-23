@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pytest
 
+from cairn.sqlite_store import EMBEDDING_DIM
+
 
 STRESS_SCRIPT = r"""
 import os
@@ -111,7 +113,7 @@ def test_node_count_never_none_under_concurrent_writes(tmp_path):
     bad = []
     stop = threading.Event()
     store = SQLiteStore(db_path=Path(tmp_path) / "race.db")
-    emb = [1.0] + [0.0] * 383
+    emb = [1.0] + [0.0] * (EMBEDDING_DIM - 1)
 
     def writer():
         i = 0

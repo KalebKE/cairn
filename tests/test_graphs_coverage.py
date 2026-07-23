@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import cairn.embedding as graphs
+from cairn.sqlite_store import EMBEDDING_DIM
 from cairn.embedding import (
     get_embedding_model_info,
     reset_embedding_state,
@@ -33,8 +34,8 @@ class TestGetEmbeddingModelInfo:
 
     def test_default_values(self):
         info = get_embedding_model_info()
-        assert info["model_name"] == "bge-small-en-v1.5"
-        assert info["model_version"] == "v1.5"
+        assert info["model_name"] == "gte-modernbert-base"
+        assert info["model_version"] == "v1"
         assert info["model_loaded"] is False
         assert info["backend"] is None
 
@@ -79,8 +80,8 @@ class TestResetEmbeddingState:
         monkeypatch.setattr(graphs, "_EMBEDDING_MODEL_NAME", "custom-model")
         monkeypatch.setattr(graphs, "_EMBEDDING_MODEL_VERSION", "v99")
         reset_embedding_state()
-        assert graphs._EMBEDDING_MODEL_NAME == "bge-small-en-v1.5"
-        assert graphs._EMBEDDING_MODEL_VERSION == "v1.5"
+        assert graphs._EMBEDDING_MODEL_NAME == "gte-modernbert-base"
+        assert graphs._EMBEDDING_MODEL_VERSION == "v1"
 
     def test_resets_onnx_model_dir(self, monkeypatch):
         monkeypatch.setattr(graphs, "_ONNX_MODEL_DIR", "/some/path")
@@ -202,7 +203,7 @@ class TestHashEmbedding:
 
     def test_correct_dimension(self):
         emb = _hash_embedding("hello world")
-        assert len(emb) == 384
+        assert len(emb) == EMBEDDING_DIM
 
     def test_custom_dimension(self):
         emb = _hash_embedding("hello world", dimension=128)
@@ -225,14 +226,14 @@ class TestHashEmbedding:
 
     def test_empty_string(self):
         emb = _hash_embedding("")
-        assert len(emb) == 384
+        assert len(emb) == EMBEDDING_DIM
         magnitude = math.sqrt(sum(x * x for x in emb))
         assert abs(magnitude - 1.0) < 1e-6
 
     def test_very_long_string(self):
         long_text = "x" * 100_000
         emb = _hash_embedding(long_text)
-        assert len(emb) == 384
+        assert len(emb) == EMBEDDING_DIM
         magnitude = math.sqrt(sum(x * x for x in emb))
         assert abs(magnitude - 1.0) < 1e-6
 
@@ -256,7 +257,7 @@ class TestGenerateEmbedding:
         monkeypatch.setattr(graphs, "_ONNX_AVAILABLE", False)
 
         emb = generate_embedding("test text")
-        assert len(emb) == 384
+        assert len(emb) == EMBEDDING_DIM
         # Should match the hash fallback output
         expected = _hash_embedding("test text")
         assert emb == expected
@@ -289,7 +290,7 @@ class TestGenerateEmbedding:
         monkeypatch.setattr(graphs, "_ONNX_AVAILABLE", False)
 
         emb = generate_embedding("")
-        assert len(emb) == 384
+        assert len(emb) == EMBEDDING_DIM
 
 
 # ---------------------------------------------------------------------------
@@ -314,7 +315,7 @@ class TestGenerateEmbeddingsBatch:
         results = generate_embeddings_batch(texts)
         assert len(results) == 3
         for emb in results:
-            assert len(emb) == 384
+            assert len(emb) == EMBEDDING_DIM
         # Each text should produce a different embedding
         assert results[0] != results[1]
         assert results[1] != results[2]
@@ -339,7 +340,7 @@ class TestGenerateEmbeddingsBatch:
 
         results = generate_embeddings_batch(["only one"])
         assert len(results) == 1
-        assert len(results[0]) == 384
+        assert len(results[0]) == EMBEDDING_DIM
 
 
 # ---------------------------------------------------------------------------
@@ -367,6 +368,7 @@ class TestGetOnnxModelDir:
         # Make primary non-existent
         monkeypatch.setattr(graphs, "_ONNX_MODEL_DIR", None)
         monkeypatch.setattr(graphs, "_ONNX_DEFAULT_DIR", str(tmp_path / "nonexistent"))
+        monkeypatch.setattr(graphs, "_ONNX_LEGACY_BGE_DIR", str(tmp_path / "no-legacy"))
         monkeypatch.setenv("CAIRN_ONNX_MODEL_DIR", str(env_dir))
         result = _get_onnx_model_dir()
         assert result == str(env_dir)
@@ -378,6 +380,7 @@ class TestGetOnnxModelDir:
         (fallback_dir / "model.onnx").write_text("fake")
         monkeypatch.setattr(graphs, "_ONNX_MODEL_DIR", None)
         monkeypatch.setattr(graphs, "_ONNX_DEFAULT_DIR", str(tmp_path / "nonexistent"))
+        monkeypatch.setattr(graphs, "_ONNX_LEGACY_BGE_DIR", str(tmp_path / "no-legacy"))
         monkeypatch.setattr(graphs, "_ONNX_FALLBACK_DIR", str(fallback_dir))
         monkeypatch.delenv("CAIRN_ONNX_MODEL_DIR", raising=False)
         result = _get_onnx_model_dir()
@@ -390,6 +393,7 @@ class TestGetOnnxModelDir:
         """If no model dir exists anywhere, return None."""
         monkeypatch.setattr(graphs, "_ONNX_MODEL_DIR", None)
         monkeypatch.setattr(graphs, "_ONNX_DEFAULT_DIR", str(tmp_path / "nope1"))
+        monkeypatch.setattr(graphs, "_ONNX_LEGACY_BGE_DIR", str(tmp_path / "nope-legacy"))
         monkeypatch.setattr(graphs, "_ONNX_FALLBACK_DIR", str(tmp_path / "nope2"))
         monkeypatch.delenv("CAIRN_ONNX_MODEL_DIR", raising=False)
         result = _get_onnx_model_dir()
@@ -471,10 +475,10 @@ class TestGetEmbeddingInfo:
         }
         assert set(info.keys()) == expected_keys
 
-    def test_dimension_is_384(self):
+    def test_dimension_matches_embedding_dim(self):
         from cairn.embedding import get_embedding_info
         info = get_embedding_info()
-        assert info["dimension"] == 384
+        assert info["dimension"] == EMBEDDING_DIM
 
     def test_lazy_loading_true(self):
         from cairn.embedding import get_embedding_info

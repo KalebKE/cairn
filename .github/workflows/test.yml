@@ -32,20 +32,23 @@ jobs:
       - name: Cache embedding model
         uses: actions/cache@v4
         with:
-          path: ~/.cache/cairn/models/bge-small-en-v1.5-onnx
-          key: bge-small-en-v1.5-onnx
+          path: ~/.cache/cairn/models/gte-modernbert-base-onnx
+          key: gte-modernbert-base-onnx
 
       - name: Download embedding model
         run: |
-          MODEL_DIR=~/.cache/cairn/models/bge-small-en-v1.5-onnx
+          MODEL_DIR=~/.cache/cairn/models/gte-modernbert-base-onnx
           if [ ! -f "$MODEL_DIR/model.onnx" ]; then
             mkdir -p "$MODEL_DIR"
-            HF=https://huggingface.co/BAAI/bge-small-en-v1.5/resolve/main
-            curl -sL "$HF/onnx/model.onnx" -o "$MODEL_DIR/model.onnx"
-            curl -sL "$HF/tokenizer.json" -o "$MODEL_DIR/tokenizer.json"
-            curl -sL "$HF/tokenizer_config.json" -o "$MODEL_DIR/tokenizer_config.json"
-            curl -sL "$HF/config.json" -o "$MODEL_DIR/config.json"
+            HF=https://huggingface.co/Alibaba-NLP/gte-modernbert-base/resolve/main
+            curl -fsSL "$HF/onnx/model.onnx" -o "$MODEL_DIR/model.onnx"
+            curl -fsSL "$HF/tokenizer.json" -o "$MODEL_DIR/tokenizer.json"
+            curl -fsSL "$HF/tokenizer_config.json" -o "$MODEL_DIR/tokenizer_config.json"
+            curl -fsSL "$HF/config.json" -o "$MODEL_DIR/config.json"
           fi
+          # Sidecar: gte is CLS-pooled; without this the loader would fall
+          # back to legacy mean pooling and silently degrade every embedding.
+          printf '%s' '{"model_name": "gte-modernbert-base", "model_version": "v1", "dim": 768, "pooling": "cls", "output_name": null, "query_prefix": "", "doc_prefix": "", "max_length": 512, "pad_id": 50283, "pad_token": "[PAD]"}' > "$MODEL_DIR/cairn.json"
 
       - name: Lint
         run: ruff check src/

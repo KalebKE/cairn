@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 import sqlite3
 import threading
 import time as _time
@@ -379,6 +380,7 @@ class SQLiteStoreBase:
         self._query_cache: OrderedDict = OrderedDict()  # key -> (timestamp, results)
         self._conn = self._connect()
         self._init_schema()
+        self._check_vec_dimension()
 
         # Merged retrieval profiles: built-in + plugin overrides
         self._retrieval_profiles_merged: Dict[str, tuple] = dict(self._RETRIEVAL_PROFILES)
@@ -591,6 +593,40 @@ class SQLiteStoreBase:
         self._vec_available, self._fts_available = _init_schema_fn(
             self._conn, self._vec_available, EMBEDDING_DIM
         )
+
+    def _check_vec_dimension(self) -> None:
+        """Refuse to open a store whose vec table dimension mismatches EMBEDDING_DIM.
+
+        init_schema uses CREATE VIRTUAL TABLE IF NOT EXISTS, so an existing
+        table at a different dimension silently survives — and then every
+        vector insert fails while queries silently compare wrong-dim spaces.
+        Never auto-drop user vectors: refuse with instructions instead.
+        migrate-embeddings sets CAIRN_ALLOW_DIM_MISMATCH=1 to open the store
+        for the rebuild.
+        """
+        if not self._vec_available:
+            return
+        if os.environ.get("CAIRN_ALLOW_DIM_MISMATCH") == "1":
+            return
+        try:
+            row = self._conn.execute(
+                "SELECT sql FROM sqlite_master WHERE name = 'memories_vec'"
+            ).fetchone()
+        except Exception:
+            return
+        if not row or not row[0]:
+            return
+        m = re.search(r"float\[(\d+)\]", row[0])
+        if m and int(m.group(1)) != EMBEDDING_DIM:
+            raise RuntimeError(
+                f"Embedding dimension mismatch: store {self.db_path} has a "
+                f"float[{m.group(1)}] vector table but this process expects "
+                f"{EMBEDDING_DIM} dims. Refusing to open (vectors are never "
+                f"auto-dropped). Either run 'cairn migrate-embeddings' to "
+                f"rebuild the store at {EMBEDDING_DIM} dims, or set "
+                f"CAIRN_EMBEDDING_DIM={m.group(1)} (with the matching model "
+                f"via CAIRN_ONNX_MODEL_DIR) to keep the existing space."
+            )
 
     def _emergency_backup(self) -> None:
         """Create an emergency backup of the DB file when integrity check fails."""

@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import pytest
 
+from cairn.sqlite_store import EMBEDDING_DIM
 from cairn.sqlite_store import SQLiteStore
 
 
@@ -109,7 +110,7 @@ class TestCheckContradictionsReturnType:
 
         # Call _check_contradictions with a dummy embedding
         # Since there's only one memory, there are no candidates to contradict
-        embedding = [0.0] * 384
+        embedding = [0.0] * EMBEDDING_DIM
         result = store._check_contradictions(node_id, "something unrelated", embedding)
         assert isinstance(result, list)
 
