@@ -459,7 +459,7 @@ class SQLiteStoreBase:
                 break
             except sqlite3.OperationalError as e:
                 if "locked" in str(e).lower() or "busy" in str(e).lower():
-                    time.sleep(0.05)
+                    _time.sleep(0.05)
                     continue
                 raise
         conn.execute("PRAGMA synchronous=NORMAL")

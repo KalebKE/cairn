@@ -86,3 +86,48 @@ def test_multiprocess_shared_store_all_writes_land_and_db_intact():
             f"expected {N_WORKERS * WRITES_PER_WORKER} writes, found {count} "
             f"(lost writes under multi-process contention)"
         )
+
+
+def test_wal_retry_survives_locked_first_attempts(monkeypatch, tmp_path):
+    """The journal_mode=WAL switch retry loop must actually retry on
+    "database is locked" instead of crashing.
+
+    Regression: the retry branch called time.sleep() but the module imports
+    the alias _time, so the first contended WAL switch killed the whole
+    worker process with NameError — surfacing in CI as a rare
+    test_multiprocess_shared_store flake whenever concurrent first-openers
+    actually contended.
+    """
+    import sqlite3
+
+    import cairn.crypto as crypto
+    from cairn.sqlite_store import SQLiteStore
+
+    real_connect = crypto.secure_connect
+    locked_remaining = {"n": 2}
+
+    class _FlakyConn:
+        def __init__(self, conn):
+            object.__setattr__(self, "_conn", conn)
+
+        def execute(self, sql, *args, **kwargs):
+            if "journal_mode=WAL" in str(sql) and locked_remaining["n"] > 0:
+                locked_remaining["n"] -= 1
+                raise sqlite3.OperationalError("database is locked")
+            return self._conn.execute(sql, *args, **kwargs)
+
+        def __getattr__(self, name):
+            return getattr(self._conn, name)
+
+    def flaky_connect(db_path, **kwargs):
+        return _FlakyConn(real_connect(db_path, **kwargs))
+
+    monkeypatch.setattr(crypto, "secure_connect", flaky_connect)
+
+    store = SQLiteStore(db_path=tmp_path / "retry.db")  # must not raise
+    try:
+        assert locked_remaining["n"] == 0, "locked branch never exercised"
+        node_id = store.store(content="wal retry path exercised", session_id="s1")
+        assert node_id
+    finally:
+        store.close()
