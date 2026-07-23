@@ -447,19 +447,27 @@ class StoreMixin:
             self._commit()
         return True
 
+    # These small reads MUST hold self._lock: a concurrent writer's
+    # commit/rollback on the shared connection resets in-flight cursors, and a
+    # statement reset between step and column extraction yields a NULL row —
+    # COUNT(*) observably returned (None,) under thread contention (executor
+    # workers + auto-relate threads share one connection).
     def node_count(self) -> int:
         """Return total number of memories."""
-        row = self._conn.execute("SELECT COUNT(*) FROM memories").fetchone()
+        with self._lock:
+            row = self._conn.execute("SELECT COUNT(*) FROM memories").fetchone()
         return row[0] if row else 0
 
     def edge_count(self) -> int:
         """Return total number of edges."""
-        row = self._conn.execute("SELECT COUNT(*) FROM edges").fetchone()
+        with self._lock:
+            row = self._conn.execute("SELECT COUNT(*) FROM edges").fetchone()
         return row[0] if row else 0
 
     def get_last_capture_time(self) -> Optional[str]:
         """Return ISO timestamp of the most recent memory, or None."""
-        row = self._conn.execute("SELECT created_at FROM memories ORDER BY created_at DESC LIMIT 1").fetchone()
+        with self._lock:
+            row = self._conn.execute("SELECT created_at FROM memories ORDER BY created_at DESC LIMIT 1").fetchone()
         return row[0] if row else None
 
     def get_session_event_counts(self, session_id: str) -> Dict[str, int]:

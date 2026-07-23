@@ -11,7 +11,6 @@ Test strategy: SIGSEGV is uncatchable in-process — the test worker dies and
 pytest gets an opaque worker-crash report. Run the stress in a subprocess
 and assert clean exit instead.
 """
-import os
 import subprocess
 import sys
 import tempfile
@@ -86,3 +85,64 @@ def test_concurrent_store_no_sigsegv():
         f"stderr: {result.stderr!r}"
     )
     assert "OK:" in result.stdout, f"Expected OK marker; got: {result.stdout!r}"
+
+
+@pytest.mark.timeout(60)
+def test_node_count_never_none_under_concurrent_writes(tmp_path):
+    """Lockless counter reads returned a NULL row under thread contention.
+
+    Regression: node_count()/edge_count()/get_last_capture_time() executed on
+    the shared connection without self._lock. With concurrent locked writers
+    (executor workers, auto-relate threads) the unprotected COUNT(*) could
+    observe a NULL row — node_count() returned None, which broke
+    bridge.maintenance.consolidate ("NoneType - int") in CI. With the reads
+    unlocked this hammer reproduces None within ~20s; locked, it stays clean.
+    """
+    import threading
+
+    from cairn.sqlite_store import SQLiteStore
+
+    old_interval = sys.getswitchinterval()
+    sys.setswitchinterval(0.000005)  # force aggressive thread interleaving
+    bad = []
+    stop = threading.Event()
+    store = SQLiteStore(db_path=Path(tmp_path) / "race.db")
+    emb = [1.0] + [0.0] * 383
+
+    def writer():
+        i = 0
+        while not stop.is_set():
+            nid = store.store(
+                content=f"race doc {i} with some content",
+                session_id="s",
+                metadata={"event_type": "memory"},
+                embedding=emb,
+                skip_inference=True,
+            )
+            store.delete_node(nid)
+            i += 1
+
+    def reader():
+        while not stop.is_set():
+            n = store.node_count()
+            if not isinstance(n, int):
+                bad.append(n)
+                stop.set()
+
+    threads = [
+        threading.Thread(target=writer),
+        threading.Thread(target=writer),
+        threading.Thread(target=reader),
+    ]
+    try:
+        for t in threads:
+            t.start()
+        stop.wait(8)
+        stop.set()
+        for t in threads:
+            t.join(timeout=10)
+    finally:
+        sys.setswitchinterval(old_interval)
+        store.close()
+
+    assert not bad, f"node_count returned non-int under concurrency: {bad!r}"
