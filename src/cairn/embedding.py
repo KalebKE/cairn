@@ -360,6 +360,29 @@ def _get_embedding_model():
         logger.info("Skipping embedding model load (CAIRN_SKIP_EMBEDDINGS=1)")
         return None
 
+    # Auto-download on first use: if the intended model isn't on disk (fresh
+    # install), fetch + verify it now with a clear notice, rather than silently
+    # degrading to hash embeddings. Opt out with CAIRN_NO_MODEL_DOWNLOAD=1.
+    # Only fires when no model is resolvable and no explicit override is set.
+    if (
+        _get_onnx_model_dir() is None
+        and not os.environ.get("CAIRN_ONNX_MODEL_DIR")
+        and os.environ.get("CAIRN_NO_MODEL_DOWNLOAD") != "1"
+    ):
+        try:
+            from cairn.model_download import ensure_model
+
+            logger.warning(
+                "Embedding model not found — downloading %s on first use "
+                "(set CAIRN_NO_MODEL_DOWNLOAD=1 to disable).",
+                INTENDED_EMBEDDING_MODEL,
+            )
+            # A failed resolution above did not memoize _ONNX_MODEL_DIR, so once
+            # the files land the fail-fast/load below re-resolves and finds them.
+            ensure_model(INTENDED_EMBEDDING_MODEL)
+        except Exception as e:
+            logger.warning("Auto-download of embedding model failed: %s", e)
+
     # Fail-fast: if no model directory exists, skip retries entirely
     if _check_onnx_runtime():
         from pathlib import Path as _Path

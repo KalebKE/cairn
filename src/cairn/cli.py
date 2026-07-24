@@ -254,91 +254,6 @@ def _inject_settings_hooks(hooks_src: Path):
         print("  settings.json: hooks configured")
 
 
-def _download_file(url: str, target: Path) -> None:
-    """Download a file with a progress bar showing bytes and percentage."""
-    import urllib.request
-
-    req = urllib.request.Request(url, headers={"User-Agent": "cairn/1.0"})
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        total = int(resp.headers.get("Content-Length", 0))
-        downloaded = 0
-        chunk_size = 64 * 1024  # 64 KB chunks
-
-        # Write to a temp file, rename on success (no partial files left behind)
-        tmp = target.with_suffix(target.suffix + ".tmp")
-        try:
-            with open(tmp, "wb") as f:
-                while True:
-                    chunk = resp.read(chunk_size)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    if total > 0:
-                        pct = downloaded * 100 // total
-                        mb_done = downloaded / (1024 * 1024)
-                        mb_total = total / (1024 * 1024)
-                        print(f"\r    {target.name}: {mb_done:.1f}/{mb_total:.1f} MB ({pct}%)", end="", flush=True)
-                    else:
-                        mb_done = downloaded / (1024 * 1024)
-                        print(f"\r    {target.name}: {mb_done:.1f} MB", end="", flush=True)
-            tmp.rename(target)
-            print()  # newline after progress
-        except BaseException:
-            tmp.unlink(missing_ok=True)
-            raise
-
-
-def _download_bge_model(target_dir: Path, errors_ref: list) -> bool:
-    """Download the default embedding model (gte-modernbert-base) from HuggingFace.
-
-    Name kept for call-site compatibility; the default flipped to
-    gte-modernbert-base after the 2026-07 model sweep. Writes the cairn.json
-    sidecar so the loader uses CLS pooling (mean pooling silently degrades
-    this model).
-    """
-    import json as _json
-
-    target_dir.mkdir(parents=True, exist_ok=True)
-    required = ["model.onnx", "tokenizer.json", "config.json"]
-    if all((target_dir / f).exists() for f in required):
-        print(f"  gte-modernbert-base model already present at {target_dir}")
-    else:
-        print("  Downloading gte-modernbert-base ONNX model (~600MB)...")
-        try:
-            hf_repo = "https://huggingface.co/Alibaba-NLP/gte-modernbert-base/resolve/main"
-            # model.onnx lives in onnx/ subdir, tokenizer files at repo root
-            files = {
-                "model.onnx": f"{hf_repo}/onnx/model.onnx",
-                "tokenizer.json": f"{hf_repo}/tokenizer.json",
-                "config.json": f"{hf_repo}/config.json",
-                "tokenizer_config.json": f"{hf_repo}/tokenizer_config.json",
-            }
-            for fname, url in files.items():
-                target = target_dir / fname
-                if not target.exists():
-                    _download_file(url, target)
-        except Exception as e:
-            errors_ref.append(e)
-            print(f"  ERROR: model download failed: {e}")
-            print(f"  Manually place model files in {target_dir}")
-            return False
-
-    if not (target_dir / "model.onnx").exists():
-        errors_ref.append("model.onnx not present after download")
-        print("  ERROR: model.onnx still not present after download attempt")
-        return False
-
-    sidecar = target_dir / "cairn.json"
-    if not sidecar.exists():
-        from cairn.embedding import GTE_SIDECAR
-
-        cfg = {k: v for k, v in GTE_SIDECAR.items() if k != "source"}
-        sidecar.write_text(_json.dumps(cfg, indent=1))
-    print(f"  gte-modernbert-base model ready at {target_dir}")
-    return True
-
-
 # ---------------------------------------------------------------------------
 # CLI Memory Commands — direct terminal access to Cairn
 # ---------------------------------------------------------------------------
@@ -1002,49 +917,36 @@ def cmd_setup(args):
     print(f"  Created {CAIRN_DIR}")
     steps_done.append("Storage directory")
 
-    # 2. Download ONNX model
+    # 2. Models. --download-model eagerly fetches the intended embedder +
+    # reranker now (verified). Without it, setup does NOT download a fallback
+    # (the old all-MiniLM default was exactly the silent-wrong-model footgun) —
+    # the intended model auto-downloads on first use instead.
+    from cairn.embedding import INTENDED_EMBEDDING_MODEL
+    from cairn.model_download import download_model as _dl_model
+    from cairn.model_download import is_model_present
+    from cairn.reranker import INTENDED_RERANKER_MODEL
+
     if download_model:
-        _download_bge_model(GTE_MODEL_DIR, errors)
-        steps_done.append("Embedding model (gte-modernbert-base)")
+        try:
+            _dl_model(INTENDED_EMBEDDING_MODEL)
+            _dl_model(INTENDED_RERANKER_MODEL)
+            steps_done.append(f"Models ({INTENDED_EMBEDDING_MODEL} + {INTENDED_RERANKER_MODEL})")
+        except Exception as e:
+            errors.append(e)
+            print(f"  ERROR: model download failed: {e}")
     else:
-        gte_model = GTE_MODEL_DIR / "model.onnx"
-        bge_model = BGE_MODEL_DIR / "model.onnx"
-        minilm_model = MINILM_MODEL_DIR / "model.onnx"
-        if gte_model.exists():
-            print(f"  ONNX model: gte-modernbert-base at {GTE_MODEL_DIR}")
+        if is_model_present(INTENDED_EMBEDDING_MODEL):
+            print(f"  ONNX model: {INTENDED_EMBEDDING_MODEL} already present")
             steps_done.append("Embedding model (already present)")
-        elif bge_model.exists():
+        elif (BGE_MODEL_DIR / "model.onnx").exists():
             print(f"  ONNX model: bge-small-en-v1.5 (legacy 384-dim) at {BGE_MODEL_DIR}")
-            print("  TIP: Run 'cairn setup --download-model' then 'cairn migrate-embeddings' to upgrade")
-            steps_done.append("Embedding model (already present)")
-        elif minilm_model.exists():
-            print(f"  ONNX model: all-MiniLM-L6-v2 at {MINILM_MODEL_DIR}")
-            print("  TIP: Run 'cairn setup --download-model' to upgrade to gte-modernbert-base")
-            steps_done.append("Embedding model (already present)")
+            print("  TIP: 'cairn setup --download-model' then 'cairn migrate-embeddings' to upgrade")
+            steps_done.append("Embedding model (already present, legacy)")
         else:
-            MINILM_MODEL_DIR.mkdir(parents=True, exist_ok=True)
-            model_path = MINILM_MODEL_DIR / "model.onnx"
-            print("  Downloading ONNX embedding model (all-MiniLM-L6-v2, ~90MB)...")
-            script = Path(__file__).parent.parent.parent / "scripts" / "download_model.py"
-            if script.exists():
-                subprocess.run([sys.executable, str(script), str(MINILM_MODEL_DIR)], check=True)
-            else:
-                try:
-                    hf_base = "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx"
-                    for fname in ["model.onnx", "tokenizer.json", "config.json", "tokenizer_config.json", "vocab.txt"]:
-                        target = MINILM_MODEL_DIR / fname
-                        if not target.exists():
-                            _download_file(f"{hf_base}/{fname}", target)
-                except Exception as e:
-                    errors.append(e)
-                    print(f"  ERROR: Model download failed: {e}")
-                    print(f"  Manually place model files in {MINILM_MODEL_DIR}")
-            if not model_path.exists():
-                errors.append("model.onnx not present")
-                print("  ERROR: model.onnx still not present after download attempt")
-            else:
-                print("  TIP: Run 'cairn setup --download-model' to upgrade to gte-modernbert-base")
-                steps_done.append("Embedding model (downloaded)")
+            print(f"  Embedding model ({INTENDED_EMBEDDING_MODEL}, ~570MB) will download "
+                  "automatically on first use.")
+            print("  TIP: run 'cairn setup --download-model' to fetch it now.")
+            steps_done.append("Embedding model (deferred to first use)")
 
     # 4. Create default config
     config_path = CAIRN_DIR / "config.json"
@@ -3128,7 +3030,8 @@ def main():
     setup_parser.add_argument(
         "--download-model",
         action="store_true",
-        help="Download bge-small-en-v1.5 ONNX model (upgrade from all-MiniLM-L6-v2)",
+        help="Eagerly download the intended embedder + reranker now (verified). "
+        "Without this, the embedder auto-downloads on first use.",
     )
     setup_parser.add_argument(
         "--client", choices=["claude-code", "claude-desktop", "cursor", "windsurf", "cline", "codex", "antigravity", "venv"], help="Configure a specific client (MCP registration, hooks)"

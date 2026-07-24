@@ -387,14 +387,36 @@ def _get_reranker_model():
                 "Run `python -m cairn --download-model` or call cairn.reranker.download_model()."
             )
             return None
-        precision = os.environ.get("CAIRN_RERANKER_PRECISION", "fp32")
-        size_hint = "~2.3 GB" if precision == "fp32" else "~571 MB"
-        logger.info(
-            "Cross-encoder model not found, downloading %s (%s, precision=%s). "
-            "Set CAIRN_RERANKER_AUTODOWNLOAD=0 to disable auto-download.",
-            _RERANKER_MODEL_NAME, size_hint, precision,
-        )
-        downloaded = download_model()
+        # Prefer the verified, version-pinned downloader for models in the
+        # manifest (ms-marco). It downloads from the pinned GitHub release and
+        # sha256-verifies every file. bge-reranker (opt-in, not in the manifest)
+        # falls back to the legacy hf_hub download path below.
+        downloaded = None
+        try:
+            from cairn.models_manifest import MODELS as _MANIFEST
+
+            if _RERANKER_MODEL_NAME in _MANIFEST:
+                from cairn.model_download import ensure_model
+
+                logger.warning(
+                    "Cross-encoder model not found — downloading %s on first use "
+                    "(verified). Set CAIRN_RERANKER_AUTODOWNLOAD=0 to disable.",
+                    _RERANKER_MODEL_NAME,
+                )
+                d = ensure_model(_RERANKER_MODEL_NAME)
+                downloaded = str(d) if d else None
+        except Exception as e:
+            logger.debug("Verified reranker download unavailable, using legacy path: %s", e)
+
+        if downloaded is None:
+            precision = os.environ.get("CAIRN_RERANKER_PRECISION", "fp32")
+            size_hint = "~2.3 GB" if precision == "fp32" else "~571 MB"
+            logger.info(
+                "Cross-encoder model not found, downloading %s (%s, precision=%s). "
+                "Set CAIRN_RERANKER_AUTODOWNLOAD=0 to disable auto-download.",
+                _RERANKER_MODEL_NAME, size_hint, precision,
+            )
+            downloaded = download_model()
         if downloaded is None:
             logger.warning(
                 "Cross-encoder auto-download failed. "
