@@ -109,6 +109,13 @@ def main():
         else:
             graph_info = ""
         print(f"Health: {health_label} | Last capture: {ago}{graph_info}")
+
+        # Surface health warnings (model drift, degraded embeddings, etc.) at
+        # the top of every session. The status() dict already carries them but
+        # this line used to print only the label — so a wrong/missing model was
+        # invisible here, which is how the reranker swap went unnoticed.
+        for w in health.get("warnings", []):
+            print(w if w.lstrip().startswith(("⚠️", "ℹ️")) else f"⚠️ {w}")
     except Exception:
         pass
 

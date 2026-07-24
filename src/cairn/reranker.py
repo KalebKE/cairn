@@ -104,24 +104,28 @@ def _resolve_model_config(model_name: str, precision: str | None = None) -> tupl
     return model["repo_id"], model["dir"], model["files"]
 
 
-# Auto-detect best available model: prefer bge-reranker-v2-m3 (general-purpose,
-# better on conversational memory) over ms-marco (web-search-specific).
-# Override with CAIRN_RERANKER_MODEL env var.
+# The intended default reranker. Chosen by measurement in the 2026-07 model
+# sweep: bge-reranker-v2-m3 added ZERO MRR over ms-marco in Cairn's pipeline at
+# ~7x the latency, so ms-marco is the deliberate default, not a fallback.
+INTENDED_RERANKER_MODEL = "ms-marco-MiniLM-L-6-v2"
+
+
 def _resolve_reranker_model() -> tuple:
+    """Resolve the reranker to run: the intended default, unless explicitly
+    overridden via CAIRN_RERANKER_MODEL.
+
+    Deliberately does NOT auto-detect by scanning disk for a "better" model.
+    That silent disk-probe is exactly how Cairn ran ms-marco for months while
+    everyone believed it ran bge-reranker-v2-m3: the preferred model was never
+    on disk, resolution fell through with no warning, and nothing ever
+    re-checked. bge-reranker-v2-m3 is now opt-in ONLY, via the env var.
+    """
     env = os.environ.get("CAIRN_RERANKER_MODEL")
     if env:
         _, model_dir, _ = _resolve_model_config(env)
         return env, model_dir
-    # Auto-detect: prefer bge-reranker-v2-m3 if ONNX model exists on disk.
-    # Check the precision-specific dir first (env var or default), then any variant.
-    _, preferred_dir, _ = _resolve_model_config("bge-reranker-v2-m3")
-    if (Path(os.path.expanduser(preferred_dir)) / "model.onnx").exists():
-        return "bge-reranker-v2-m3", preferred_dir
-    for variant in _AVAILABLE_MODELS["bge-reranker-v2-m3"]["precisions"].values():
-        d = variant["dir"]
-        if (Path(os.path.expanduser(d)) / "model.onnx").exists():
-            return "bge-reranker-v2-m3", d
-    return "ms-marco-MiniLM-L-6-v2", _AVAILABLE_MODELS["ms-marco-MiniLM-L-6-v2"]["dir"]
+    return INTENDED_RERANKER_MODEL, _AVAILABLE_MODELS[INTENDED_RERANKER_MODEL]["dir"]
+
 
 _RERANKER_MODEL_NAME, _RERANKER_DEFAULT_DIR = _resolve_reranker_model()
 
@@ -427,15 +431,12 @@ def _get_reranker_model():
         _RERANKER_MODEL = (tokenizer, session)
         _get_reranker_model._attempt_count = 0
         _FIRST_FAILURE_TIME = 0.0
-        if _RERANKER_MODEL_NAME != "bge-reranker-v2-m3":
-            logger.info(
-                "Loaded cross-encoder ONNX model (%s). "
-                "For better quality on conversational queries (at +2GB RAM cost), run: "
-                "python3 scripts/convert_bge_reranker.py",
-                _RERANKER_MODEL_NAME,
-            )
-        else:
-            logger.info("Loaded cross-encoder ONNX model (%s)", _RERANKER_MODEL_NAME)
+        # Plain load line. The old "run convert_bge_reranker.py for better
+        # quality" upsell was removed: the 2026-07 sweep measured bge adding
+        # zero MRR at ~7x latency, so ms-marco is the intended default, not a
+        # thing to upgrade away from. Drift (running a NON-intended reranker
+        # without an explicit override) is surfaced by model_health_warnings().
+        logger.info("Loaded cross-encoder ONNX model (%s)", _RERANKER_MODEL_NAME)
         return _RERANKER_MODEL
 
     except Exception as e:

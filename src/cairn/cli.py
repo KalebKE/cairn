@@ -1049,9 +1049,16 @@ def cmd_setup(args):
     # 4. Create default config
     config_path = CAIRN_DIR / "config.json"
     if not config_path.exists():
+        from cairn.embedding import INTENDED_EMBEDDING_MODEL
+        from cairn.reranker import INTENDED_RERANKER_MODEL
+
         config = {
             "storage_path": str(CAIRN_DIR),
             "model_dir": str(ONNX_MODEL_DIR),
+            # Intended models recorded at store creation — a secondary anchor
+            # so drift ("running X, this store expects Y") is auditable.
+            "embedding_model": INTENDED_EMBEDDING_MODEL,
+            "reranker_model": INTENDED_RERANKER_MODEL,
             "version": "0.1.0",
             "entity_scoping": {"enabled": False},
         }
@@ -1184,17 +1191,33 @@ def cmd_status(args):
             data["backend"] = None
             data["memories"] = 0
 
-    # Model
-    bge_path = BGE_MODEL_DIR / "model.onnx"
-    minilm_path = MINILM_MODEL_DIR / "model.onnx"
-    if bge_path.exists():
-        data["model"] = "bge-small-en-v1.5"
-        data["model_size_mb"] = round(bge_path.stat().st_size / (1024 * 1024), 0)
-    elif minilm_path.exists():
-        data["model"] = "all-MiniLM-L6-v2"
-        data["model_size_mb"] = round(minilm_path.stat().st_size / (1024 * 1024), 0)
-    else:
+    # Model — resolve through the runtime path (honors CAIRN_ONNX_MODEL_DIR and
+    # picks up gte/legacy/fallback correctly) instead of hard-probing two dirs.
+    try:
+        from cairn.embedding import _get_onnx_model_dir, get_embedding_model_info
+
+        resolved_dir = _get_onnx_model_dir()
+        data["model"] = get_embedding_model_info().get("model_name") if resolved_dir else None
+        if resolved_dir:
+            mp = Path(resolved_dir) / "model.onnx"
+            if mp.exists():
+                data["model_size_mb"] = round(mp.stat().st_size / (1024 * 1024), 0)
+    except Exception:
         data["model"] = None
+    try:
+        import cairn.reranker as _rr
+
+        data["reranker"] = _rr._resolve_reranker_model()[0]
+    except Exception:
+        pass
+    try:
+        from cairn.model_health import model_health_warnings
+
+        mw = model_health_warnings()
+        if mw:
+            data["model_warnings"] = mw
+    except Exception:
+        pass
 
     # Profile
     profile_path = CAIRN_DIR / "profile.json"
@@ -2412,6 +2435,12 @@ def _doctor_check_model(report) -> None:
                 f"Resolved reranker: {rr_name} — model files not on disk at "
                 f"{rr_default_dir} (downloads on first use unless "
                 f"CAIRN_RERANKER_AUTODOWNLOAD=0)"
+            )
+        # Drift: running a non-intended reranker without an explicit override.
+        if rr_name != _rr.INTENDED_RERANKER_MODEL and not os.environ.get("CAIRN_RERANKER_MODEL"):
+            report.warn(
+                f"Reranker '{rr_name}' is not the intended "
+                f"'{_rr.INTENDED_RERANKER_MODEL}' (and no CAIRN_RERANKER_MODEL override)"
             )
         if os.environ.get("CAIRN_CROSS_ENCODER", "1") == "0":
             report.warn("Cross-encoder disabled via CAIRN_CROSS_ENCODER=0")

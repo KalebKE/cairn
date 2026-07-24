@@ -824,19 +824,25 @@ class MaintenanceMixin:
             warnings.append(f"{never_accessed_pct:.0f}% of memories never accessed")
             recommendations.append("Run cairn_maintain(action='consolidate') to prune stale memories")
 
-        # Embedding quality check — detect silent hash fallback
+        # Model-drift check — detect a hash fallback OR a silently-substituted
+        # embedder/reranker (running something other than the intended model).
+        # Single source of truth: cairn.model_health. This is what routes the
+        # drift warning to the session-start briefing, `cairn status`, and the
+        # `check_health` markdown, so a wrong/missing model can't stay silent.
         embedding_degraded = False
         try:
             from cairn.embedding import is_embedding_degraded
+            from cairn.model_health import model_health_warnings
+
             embedding_degraded = is_embedding_degraded()
-            if embedding_degraded:
-                if status != "critical":
-                    status = "warning"
-                warnings.append(
-                    "Embedding model degraded — using hash fallback. "
-                    "Vector search returns meaningless results. "
-                    "Restart the server or check ONNX model installation."
-                )
+            model_warnings = model_health_warnings()
+            if model_warnings:
+                # ℹ️-prefixed lines are informational (e.g. not-downloaded-yet)
+                # and shouldn't flip health to "warning".
+                if any(not w.lstrip().startswith("ℹ️") for w in model_warnings):
+                    if status != "critical":
+                        status = "warning"
+                warnings.extend(model_warnings)
                 recommendations.append("Run: cairn setup --download-model")
         except ImportError:
             pass

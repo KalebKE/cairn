@@ -47,6 +47,12 @@ try:
 except ImportError:
     np = None  # type: ignore[assignment]  # ONNX path won't be entered
 
+# The intended default embedder. This is the anchor drift is measured against.
+# It is deliberately SEPARATE from _EMBEDDING_MODEL_NAME below, which the
+# resolver mutates to the *resolved* model on fallback — comparing the two is
+# how we detect "running something other than intended".
+INTENDED_EMBEDDING_MODEL = "gte-modernbert-base"
+
 # Embedding model state
 _EMBEDDING_MODEL = None
 _EMBEDDING_BACKEND = None  # "onnx" only (sentence-transformers removed to prevent 7.5GB PyTorch blowup)
@@ -291,9 +297,14 @@ def _get_onnx_model_dir() -> Optional[str]:
         _MODEL_SIDECAR = _load_model_sidecar(_ONNX_MODEL_DIR)
         _EMBEDDING_MODEL_NAME = "bge-small-en-v1.5"
         _EMBEDDING_MODEL_VERSION = "v1.5"
-        logger.info(
-            "Using legacy model bge-small-en-v1.5 (384-dim). Run "
-            "'cairn setup --download-model' then 'cairn migrate-embeddings' to upgrade."
+        # WARNING, not INFO: a silent substitution below the only visible log
+        # threshold is exactly how the wrong model ran unnoticed for months.
+        # This runs inside the memoized _get_onnx_model_dir, so it fires once.
+        logger.warning(
+            "Embedding model: running LEGACY bge-small-en-v1.5 (384-dim), not the "
+            "intended %s. Run 'cairn setup --download-model' then "
+            "'cairn migrate-embeddings' to upgrade.",
+            INTENDED_EMBEDDING_MODEL,
         )
         return _ONNX_MODEL_DIR
 
@@ -305,7 +316,11 @@ def _get_onnx_model_dir() -> Optional[str]:
         _MODEL_SIDECAR = _load_model_sidecar(_ONNX_MODEL_DIR)
         _EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
         _EMBEDDING_MODEL_VERSION = "v2"
-        logger.info("Using fallback model all-MiniLM-L6-v2. Run 'cairn setup --download-model' to upgrade.")
+        logger.warning(
+            "Embedding model: running FALLBACK all-MiniLM-L6-v2, not the intended "
+            "%s. Run 'cairn setup --download-model' to upgrade.",
+            INTENDED_EMBEDDING_MODEL,
+        )
         return _ONNX_MODEL_DIR
 
     return None
