@@ -64,9 +64,11 @@ _PROVIDERS: dict[str, dict] = {
                   "fast": "claude-haiku-4-5-20251001", "standard": "claude-sonnet-4-6"},
     "openai": {"sdk": "openai", "key_env": "OPENAI_API_KEY", "base_url": None,
                "fast": "gpt-4o-mini", "standard": "gpt-4o"},
-    "gemini": {"sdk": "openai", "key_env": "GEMINI_API_KEY",
+    "gemini": {"sdk": "openai", "key_env": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
                "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-               "fast": "gemini-2.5-flash", "standard": "gemini-2.5-pro"},
+               # flash-lite is the measured best fit for Cairn's terse LLM jobs
+               # (2026-07 judge bench); flash for the longer standard-tier synthesis.
+               "fast": "gemini-2.5-flash-lite", "standard": "gemini-2.5-flash"},
     "mistral": {"sdk": "openai", "key_env": "MISTRAL_API_KEY",
                 "base_url": "https://api.mistral.ai/v1",
                 "fast": "mistral-small-latest", "standard": "mistral-large-latest"},
@@ -116,9 +118,10 @@ def _get_api_key(provider: str) -> str:
 
     Natives (anthropic/openai) use only their own key env. openai_compat uses
     CAIRN_LLM_API_KEY (default 'none'). The named OpenAI-compatible providers
-    use their own key env, then fall back to the generic CAIRN_LLM_API_KEY, so
-    a single key var works for any of them. Keyless local servers (ollama) get
-    a harmless placeholder.
+    use their own key env(s), then fall back to the generic CAIRN_LLM_API_KEY,
+    so a single key var works for any of them. key_env may be a tuple to accept
+    aliases (e.g. gemini honors GEMINI_API_KEY or GOOGLE_API_KEY). Keyless local
+    servers (ollama) get a harmless placeholder.
     """
     if provider == "openai_compat":
         return os.environ.get("CAIRN_LLM_API_KEY", "none")
@@ -126,8 +129,9 @@ def _get_api_key(provider: str) -> str:
     if not spec:
         return ""
     key_env = spec.get("key_env")
-    if key_env:
-        key = os.environ.get(key_env, "")
+    envs = [key_env] if isinstance(key_env, str) else list(key_env or ())
+    for e in envs:
+        key = os.environ.get(e, "")
         if key:
             return key
     if provider in ("anthropic", "openai"):

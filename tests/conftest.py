@@ -51,6 +51,18 @@ def _reset_embeddings_after_test():
     reset_embedding_state()
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_llm_env(monkeypatch):
+    """Clear ambient LLM config so the developer's local hookup (e.g. a
+    CAIRN_LLM_PROVIDER=gemini + GOOGLE_API_KEY exported in ~/.zshenv) can't make
+    tests hit a real provider. Tests that exercise the LLM set what they need."""
+    for v in ("CAIRN_LLM_PROVIDER", "CAIRN_LLM_MODEL_FAST", "CAIRN_LLM_MODEL_STANDARD",
+              "CAIRN_LLM_BASE_URL", "CAIRN_LLM_API_KEY", "OPENROUTER_API_KEY",
+              "GEMINI_API_KEY", "GOOGLE_API_KEY", "MISTRAL_API_KEY", "ANTHROPIC_API_KEY",
+              "OPENAI_API_KEY"):
+        monkeypatch.delenv(v, raising=False)
+
+
 @pytest.fixture
 def _reset_bridge(tmp_cairn_dir):
     """Reset the bridge singleton so each test gets a fresh store.

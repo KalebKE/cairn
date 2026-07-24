@@ -13,6 +13,15 @@ def _reset_llm_clients():
     reset_clients()
 
 
+@pytest.fixture(autouse=True)
+def _clear_llm_env(monkeypatch):
+    """Make tests hermetic against the developer's ambient CAIRN_LLM_* config
+    (e.g. a local hookup exported in ~/.zshenv). Tests set what they need."""
+    for v in ("CAIRN_LLM_PROVIDER", "CAIRN_LLM_MODEL_FAST", "CAIRN_LLM_MODEL_STANDARD",
+              "CAIRN_LLM_BASE_URL", "CAIRN_LLM_API_KEY"):
+        monkeypatch.delenv(v, raising=False)
+
+
 class TestLlmComplete:
     """Test llm_complete() with mocked providers."""
 
@@ -207,7 +216,7 @@ class TestRegistryProviders:
         assert kw["base_url"] == "https://generativelanguage.googleapis.com/v1beta/openai/"
         assert kw["api_key"] == "gk-1"
         model = mock_openai.OpenAI.return_value.chat.completions.create.call_args.kwargs["model"]
-        assert model == "gemini-2.5-flash"
+        assert model == "gemini-2.5-flash-lite"
 
     def test_generic_key_fallback_for_named_provider(self, monkeypatch):
         """A named provider works with only the generic CAIRN_LLM_API_KEY set."""
@@ -276,3 +285,12 @@ def test_usage_capture_openai(monkeypatch):
         llm_complete("hi", "sys")
         u = get_last_usage()
     assert u["input_tokens"] == 123 and u["output_tokens"] == 4
+
+
+def test_gemini_key_alias_google(monkeypatch):
+    """gemini honors GOOGLE_API_KEY when GEMINI_API_KEY is unset."""
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("CAIRN_LLM_API_KEY", raising=False)
+    monkeypatch.setenv("GOOGLE_API_KEY", "goog-1")
+    from cairn.llm import _get_api_key
+    assert _get_api_key("gemini") == "goog-1"
