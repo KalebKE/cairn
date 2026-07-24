@@ -254,3 +254,25 @@ class TestRegistryProviders:
         names = set(list_providers())
         assert {"anthropic", "openai", "gemini", "mistral", "deepinfra",
                 "groq", "openrouter", "openai_compat"} <= names
+
+
+def test_usage_capture_openai(monkeypatch):
+    """get_last_usage() reflects the last completion's token counts."""
+    monkeypatch.setenv("CAIRN_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    mock_choice = MagicMock()
+    mock_choice.message.content = "2"
+    mock_response = MagicMock()
+    mock_response.choices = [mock_choice]
+    mock_response.usage.prompt_tokens = 123
+    mock_response.usage.completion_tokens = 4
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = mock_response
+    mock_openai = MagicMock()
+    mock_openai.OpenAI.return_value = mock_client
+    with patch.dict("sys.modules", {"openai": mock_openai}):
+        from cairn.llm import get_last_usage, llm_complete, reset_usage
+        reset_usage()
+        llm_complete("hi", "sys")
+        u = get_last_usage()
+    assert u["input_tokens"] == 123 and u["output_tokens"] == 4

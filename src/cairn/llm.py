@@ -33,6 +33,21 @@ _anthropic_client = None
 _openai_clients: dict[str, object] = {}  # keyed by (base_url, api_key)
 _client_lock = threading.Lock()
 
+# Token usage from the most recent completion, for callers that want it (e.g.
+# the provider benchmark). The shared completion path otherwise discards
+# response.usage. This only stores a small dict; nothing on the hot path reads
+# it, so it adds no cost to normal operation.
+_last_usage: dict = {}
+
+
+def get_last_usage() -> dict:
+    """Return {input_tokens, output_tokens, model} from the last completion, or {}."""
+    return dict(_last_usage)
+
+
+def reset_usage() -> None:
+    _last_usage.clear()
+
 
 def reset_clients():
     """Reset all singleton LLM clients. Used by tests."""
@@ -169,6 +184,14 @@ def _complete_anthropic(
         system=system,
         messages=[{"role": "user", "content": prompt}],
     )
+    try:
+        _last_usage.update({
+            "input_tokens": response.usage.input_tokens,
+            "output_tokens": response.usage.output_tokens,
+            "model": model,
+        })
+    except Exception:
+        pass
     return response.content[0].text
 
 
@@ -204,6 +227,14 @@ def _complete_openai(
             {"role": "user", "content": prompt},
         ],
     )
+    try:
+        _last_usage.update({
+            "input_tokens": response.usage.prompt_tokens,
+            "output_tokens": response.usage.completion_tokens,
+            "model": model,
+        })
+    except Exception:
+        pass
     return response.choices[0].message.content or ""
 
 
