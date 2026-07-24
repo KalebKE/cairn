@@ -44,7 +44,7 @@ full = [
 ]
 benchmark = ["openai>=1.0.0", "sentence-transformers>=2.2.0"]
 docs = ["mkdocs-material>=9.0.0"]
-dev = ["pytest", "pytest-asyncio", "pytest-cov", "pytest-randomly", "hypothesis", "ruff", "commitizen>=4.1", "mypy>=1.8.0"]
+dev = ["pytest", "pytest-asyncio", "pytest-cov", "pytest-randomly", "hypothesis", "ruff==0.15.22", "commitizen>=4.1", "mypy>=1.8.0"]
 
 [project.scripts]
 cairn = "cairn.cli:main"
