@@ -1,9 +1,11 @@
 #!/usr/bin/env python3.11
-"""Release cairn to PyPI.
+"""Cut a cairn release: bump the version, commit, tag, and push.
 
-Alternative path to the GH Actions publish.yml workflow on cairn-public.
-The script pushes a git tag but does not create a GitHub release, so the
-auto-publish workflow does not fire — no double-publish risk.
+The tag push triggers .github/workflows/release.yml, which builds the wheel +
+sdist, publishes to PyPI via OIDC trusted publishing, and creates the GitHub
+Release. This script does NOT publish or create the release itself, so there is
+exactly one publisher and no double-publish risk. Use `git tag`/push directly
+if you prefer; this just automates the bump + preflight checks.
 
 Use when you don't want to wait for or trust GitHub Actions runners.
 
@@ -13,15 +15,13 @@ Usage:
     python3.11 scripts/release.py <version> --skip-confirm  # CI-like, no prompts
 
 Pre-flight:
-    - PYPI_TOKEN_CAIRN in ~/.cairn/secrets.json
     - Working tree clean on main, up to date with origin
     - Version not already tagged
+(PyPI credentials are not needed here — the workflow publishes via OIDC.)
 """
 from __future__ import annotations
 
 import argparse
-import json
-import os
 import re
 import subprocess
 import sys
@@ -32,7 +32,6 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO / "pyproject.toml"
 INIT_PY = REPO / "src" / "cairn" / "__init__.py"
-SECRETS = Path.home() / ".cairn" / "secrets.json"
 
 
 def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
@@ -57,11 +56,8 @@ def preflight(version: str) -> None:
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         sys.exit(f"Version must be X.Y.Z, got {version!r}")
 
-    if not SECRETS.exists():
-        sys.exit(f"Missing {SECRETS}")
-    secrets = json.loads(SECRETS.read_text())
-    if not secrets.get("PYPI_TOKEN_CAIRN"):
-        sys.exit("PYPI_TOKEN_CAIRN not in ~/.cairn/secrets.json")
+    # No PyPI token needed here anymore: publishing is done by the release
+    # workflow via OIDC trusted publishing, triggered by the tag this pushes.
 
     # Only block on uncommitted changes to files this script will modify.
     tracked_targets = ["pyproject.toml", "src/cairn/__init__.py"]
@@ -119,8 +115,9 @@ def build() -> tuple[Path, Path]:
         for f in dist.iterdir():
             f.unlink()
     run([sys.executable, "-m", "build", "--wheel", "--sdist"])
-    wheels = list(dist.glob("cairn_memory-*.whl"))
-    sdists = list(dist.glob("cairn_memory-*.tar.gz"))
+    # Package builds as cairn-*, not cairn_memory-* (a former name).
+    wheels = list(dist.glob("cairn-*.whl"))
+    sdists = list(dist.glob("cairn-*.tar.gz"))
     if len(wheels) != 1 or len(sdists) != 1:
         sys.exit(f"Expected 1 wheel + 1 sdist, got {wheels=} {sdists=}")
     return wheels[0], sdists[0]
@@ -143,17 +140,6 @@ def verify(wheel: Path, expected_version: str) -> None:
         if installed != expected_version:
             sys.exit(f"Wheel reports {installed!r}, expected {expected_version!r}")
         print(f"  OK: installed and reported version={installed}")
-
-
-def publish_pypi(wheel: Path, sdist: Path) -> None:
-    step("Publishing to PyPI")
-    secrets = json.loads(SECRETS.read_text())
-    env = {**os.environ, "TWINE_USERNAME": "__token__", "TWINE_PASSWORD": secrets["PYPI_TOKEN_CAIRN"]}
-    subprocess.run(
-        [sys.executable, "-m", "twine", "upload", "--non-interactive", str(wheel), str(sdist)],
-        env=env, check=True,
-    )
-    print(f"  Published: https://pypi.org/project/cairn/{wheel.stem.split('-')[1]}/")
 
 
 def git_commit_tag_push(version: str) -> None:
@@ -188,21 +174,22 @@ def main() -> int:
     verify(wheel, args.version)
 
     if args.dry_run:
-        print(f"\nDRY RUN: would publish {wheel.name} + {sdist.name} and push v{args.version}")
+        print(f"\nDRY RUN: built {wheel.name} + {sdist.name}; would commit + push v{args.version}")
         print("Reverting version bump...")
         run(["git", "checkout", "--", "pyproject.toml", "src/cairn/__init__.py"])
         return 0
 
-    confirm(f"Publish cairn {args.version} to PyPI?", args.skip_confirm)
-    publish_pypi(wheel, sdist)
-
-    confirm(f"Commit + tag v{args.version} + push to origin/main?", args.skip_confirm)
+    # PyPI publish + GitHub release are done by .github/workflows/release.yml,
+    # triggered by the tag push below. This script only bumps + tags + pushes,
+    # so there is exactly one publisher (no double-publish).
+    confirm(f"Commit + tag v{args.version} + push (triggers PyPI publish workflow)?", args.skip_confirm)
     git_commit_tag_push(args.version)
 
     step("Done")
-    print(f"cairn {args.version} released.")
-    print(f"  PyPI:   https://pypi.org/project/cairn/{args.version}/")
-    print(f"  GitHub: https://github.com/TracqiTechnology/cairn/releases/tag/v{args.version}")
+    print(f"cairn {args.version} tagged + pushed. The release workflow now builds,")
+    print("publishes to PyPI, and creates the GitHub release.")
+    print("  Actions: https://github.com/KalebKE/cairn/actions")
+    print(f"  PyPI:    https://pypi.org/project/cairn/{args.version}/ (after the workflow)")
     return 0
 
 

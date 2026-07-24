@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-07-23
+
+First public release on PyPI + GitHub Releases. The default embedding model
+changed dimension (384 → 768), which is why this is a major version.
+
+### Changed (breaking)
+- **Default embedder is now `gte-modernbert-base` (768-dim), replacing
+  `bge-small-en-v1.5` (384-dim).** Chosen in a full model sweep against
+  LongMemEval + judged probes (only candidate to beat the old model on both,
+  at ~11ms/embed). Existing 384-dim stores keep working but should upgrade:
+  run `cairn setup --download-model` then **`cairn migrate-embeddings`** (backs
+  up, rebuilds the vec table at the new dimension, re-embeds, verifies parity).
+  Opening a store whose dimension mismatches the running model now refuses with
+  instructions instead of silently corrupting retrieval.
+
+### Added
+- **Reliable, verified model provisioning.** Models download from
+  version-pinned GitHub Release assets and are **sha256-verified** — a wrong or
+  corrupt download fails loudly instead of installing. HuggingFace is a
+  secondary mirror (still checksum-gated). The embedder **auto-downloads on
+  first use** (opt out with `CAIRN_NO_MODEL_DOWNLOAD=1`).
+- **Model-drift detection.** Cairn declares an intended embedder and reranker
+  and warns loudly — at session start, in `cairn status`, and in `cairn doctor`
+  — whenever it is running anything else, with the exact fix. `cairn doctor`
+  reports the resolved model identities.
+- **`cairn migrate-embeddings`** command for the dimension upgrade above.
+
+### Fixed
+- **The reranker ran silently wrong for months.** Resolution was a silent
+  import-time disk-probe that fell back to `ms-marco-MiniLM-L-6-v2` while
+  everything reported `bge-reranker-v2-m3`, logged only at INFO (below the
+  visible threshold). The measured truth: ms-marco is as good as bge in Cairn's
+  pipeline at a fraction of the cost, so it is now the **intended** default;
+  bge-reranker is opt-in via `CAIRN_RERANKER_MODEL`. The silent-fallback path
+  is deleted — the bug is gone by construction.
+- Several CI/concurrency fixes (WAL-switch retry crash, shared-connection
+  statement corruption, stale welcome cache) shipped in 1.5.3–1.5.5.
+
 ## [1.5.2] - 2026-06-11
 
 ### Fixed

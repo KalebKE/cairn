@@ -1,0 +1,71 @@
+name: Release
+
+# Tag-driven release: on a v* tag, build the wheel + sdist, publish to PyPI via
+# trusted publishing (OIDC — no API token stored), and create/attach to the
+# GitHub Release. The installer workflows (build-macos/windows-installer.yml)
+# also fire on v* and attach their .pkg/.exe to the SAME release.
+#
+# One-time PyPI setup (owner): pypi.org/manage/project/cairn → Publishing →
+# add a GitHub trusted publisher: repo KalebKE/cairn, workflow release.yml,
+# environment "pypi". Until that exists, the publish step will fail (nothing
+# leaks). To use an API token instead, replace the publish step with
+# `password: ${{ secrets.PYPI_API_TOKEN }}` and drop the id-token permission.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write # OIDC for PyPI trusted publishing
+      contents: write # create/attach the GitHub release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build wheel + sdist
+        run: |
+          python -m pip install --upgrade build
+          python -m build --wheel --sdist
+
+      - name: Verify package version matches the tag
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(python -c "import cairn, sys; sys.stdout.write(cairn.__version__)")
+          echo "tag=$TAG package=$PKG"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::Tag v$TAG does not match package version $PKG"
+            exit 1
+          fi
+
+      - name: Extract changelog section for release notes
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          awk -v v="$TAG" '
+            $0 ~ "^## \\[" v "\\]" {grab=1; next}
+            grab && /^## \[/ {exit}
+            grab {print}
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          if [ ! -s RELEASE_NOTES.md ]; then echo "Release $TAG" > RELEASE_NOTES.md; fi
+          cat RELEASE_NOTES.md
+
+      - name: Publish to PyPI (trusted publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Create/attach GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: RELEASE_NOTES.md
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
