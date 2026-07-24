@@ -1,12 +1,24 @@
 """Cairn LLM Provider Abstraction.
 
-Thin wrapper over LLM APIs for text completion. Supports swappable
-providers via CAIRN_LLM_PROVIDER env var.
+Thin wrapper over LLM APIs for the optional LLM-assisted features (rollup,
+distillation, query expansion). Bring a key from any major provider — set
+CAIRN_LLM_PROVIDER to a name below and provide that provider's key (or the
+generic CAIRN_LLM_API_KEY).
 
-Providers:
-  - anthropic (default): Uses anthropic SDK
-  - openai: Uses openai SDK
-  - openai_compat: Uses openai SDK with custom base_url (for vLLM, MiniMax, etc.)
+    CAIRN_LLM_PROVIDER=gemini    GEMINI_API_KEY=...
+    CAIRN_LLM_PROVIDER=groq      GROQ_API_KEY=...
+    CAIRN_LLM_PROVIDER=deepinfra DEEPINFRA_API_KEY=...
+
+Native SDK providers: anthropic (default), openai. Everything else is
+OpenAI-compatible and routed through the openai SDK with a baked-in base_url:
+gemini, mistral, deepinfra, groq, together, fireworks, openrouter, xai, ollama
+(local, no key). `openai_compat` is the manual escape hatch for anything not
+listed — set CAIRN_LLM_BASE_URL + CAIRN_LLM_API_KEY.
+
+Pick a specific model on any provider with CAIRN_LLM_MODEL_FAST /
+CAIRN_LLM_MODEL_STANDARD; CAIRN_LLM_BASE_URL overrides the base URL for any
+provider. The whole layer is optional — with no key, these features no-op and
+Cairn's core memory works unchanged.
 """
 
 import concurrent.futures
@@ -29,37 +41,86 @@ def reset_clients():
         _anthropic_client = None
         _openai_clients.clear()
 
-# Model tier -> provider-specific model name
-_MODEL_MAP: dict[str, dict[str, str]] = {
-    "anthropic": {
-        "fast": "claude-haiku-4-5-20251001",
-        "standard": "claude-sonnet-4-6",
-    },
-    "openai": {
-        "fast": os.environ.get("CAIRN_LLM_MODEL_FAST", "gpt-4o-mini"),
-        "standard": os.environ.get("CAIRN_LLM_MODEL_STANDARD", "gpt-4o"),
-    },
-    "openai_compat": {
-        "fast": os.environ.get("CAIRN_LLM_MODEL_FAST", "default"),
-        "standard": os.environ.get("CAIRN_LLM_MODEL_STANDARD", "default"),
-    },
+# Provider registry. `sdk` selects the client; OpenAI-compatible providers carry
+# a base_url. Default model tiers are sensible starting points — override any of
+# them with CAIRN_LLM_MODEL_FAST / CAIRN_LLM_MODEL_STANDARD (model IDs move fast).
+_PROVIDERS: dict[str, dict] = {
+    "anthropic": {"sdk": "anthropic", "key_env": "ANTHROPIC_API_KEY",
+                  "fast": "claude-haiku-4-5-20251001", "standard": "claude-sonnet-4-6"},
+    "openai": {"sdk": "openai", "key_env": "OPENAI_API_KEY", "base_url": None,
+               "fast": "gpt-4o-mini", "standard": "gpt-4o"},
+    "gemini": {"sdk": "openai", "key_env": "GEMINI_API_KEY",
+               "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+               "fast": "gemini-2.5-flash", "standard": "gemini-2.5-pro"},
+    "mistral": {"sdk": "openai", "key_env": "MISTRAL_API_KEY",
+                "base_url": "https://api.mistral.ai/v1",
+                "fast": "mistral-small-latest", "standard": "mistral-large-latest"},
+    "deepinfra": {"sdk": "openai", "key_env": "DEEPINFRA_API_KEY",
+                  "base_url": "https://api.deepinfra.com/v1/openai",
+                  "fast": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+                  "standard": "meta-llama/Llama-3.3-70B-Instruct"},
+    "groq": {"sdk": "openai", "key_env": "GROQ_API_KEY",
+             "base_url": "https://api.groq.com/openai/v1",
+             "fast": "llama-3.1-8b-instant", "standard": "llama-3.3-70b-versatile"},
+    "together": {"sdk": "openai", "key_env": "TOGETHER_API_KEY",
+                 "base_url": "https://api.together.xyz/v1",
+                 "fast": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+                 "standard": "meta-llama/Llama-3.3-70B-Instruct-Turbo"},
+    "fireworks": {"sdk": "openai", "key_env": "FIREWORKS_API_KEY",
+                  "base_url": "https://api.fireworks.ai/inference/v1",
+                  "fast": "accounts/fireworks/models/llama-v3p1-8b-instruct",
+                  "standard": "accounts/fireworks/models/llama-v3p3-70b-instruct"},
+    "openrouter": {"sdk": "openai", "key_env": "OPENROUTER_API_KEY",
+                   "base_url": "https://openrouter.ai/api/v1",
+                   "fast": "openai/gpt-4o-mini", "standard": "openai/gpt-4o"},
+    "xai": {"sdk": "openai", "key_env": "XAI_API_KEY",
+            "base_url": "https://api.x.ai/v1",
+            "fast": "grok-3-mini", "standard": "grok-3"},
+    "ollama": {"sdk": "openai", "key_env": None,  # local server, no key
+               "base_url": "http://localhost:11434/v1",
+               "fast": "llama3.2", "standard": "llama3.1:70b"},
+    # Manual escape hatch: point at any OpenAI-compatible endpoint.
+    "openai_compat": {"sdk": "openai", "key_env": "CAIRN_LLM_API_KEY", "base_url": None,
+                      "fast": "default", "standard": "default"},
 }
 
 
 def get_model_map() -> dict[str, dict[str, str]]:
     """Return the provider -> model tier mapping (public API)."""
-    return _MODEL_MAP
+    return {name: {"fast": s.get("fast", ""), "standard": s.get("standard", "")}
+            for name, s in _PROVIDERS.items()}
+
+
+def list_providers() -> list[str]:
+    """Names of all known providers."""
+    return list(_PROVIDERS)
 
 
 def _get_api_key(provider: str) -> str:
-    """Resolve API key for the given provider."""
-    if provider == "anthropic":
-        return os.environ.get("ANTHROPIC_API_KEY", "")
-    if provider == "openai":
-        return os.environ.get("OPENAI_API_KEY", "")
+    """Resolve the API key for a provider.
+
+    Natives (anthropic/openai) use only their own key env. openai_compat uses
+    CAIRN_LLM_API_KEY (default 'none'). The named OpenAI-compatible providers
+    use their own key env, then fall back to the generic CAIRN_LLM_API_KEY, so
+    a single key var works for any of them. Keyless local servers (ollama) get
+    a harmless placeholder.
+    """
     if provider == "openai_compat":
         return os.environ.get("CAIRN_LLM_API_KEY", "none")
-    return ""
+    spec = _PROVIDERS.get(provider)
+    if not spec:
+        return ""
+    key_env = spec.get("key_env")
+    if key_env:
+        key = os.environ.get(key_env, "")
+        if key:
+            return key
+    if provider in ("anthropic", "openai"):
+        return ""  # natives: no generic fallback (preserves explicit behavior)
+    generic = os.environ.get("CAIRN_LLM_API_KEY", "")
+    if generic:
+        return generic
+    return "ollama" if key_env is None else ""
 
 
 def _get_anthropic_client(api_key: str, timeout: float = 30.0):
@@ -170,38 +231,30 @@ def llm_complete(
     """
     provider = os.environ.get("CAIRN_LLM_PROVIDER", "anthropic")
 
-    models = _MODEL_MAP.get(provider)
-    if not models:
-        logger.warning("Unknown LLM provider: %s", provider)
+    spec = _PROVIDERS.get(provider)
+    if not spec:
+        logger.warning("Unknown LLM provider: %s (known: %s)", provider, ", ".join(_PROVIDERS))
         return ""
 
-    model = models.get(model_tier, models["fast"])
-    if provider == "openai_compat":
-        # Resolve at call time: _MODEL_MAP snapshots env at import, which goes
-        # stale when CAIRN_LLM_MODEL_* is set after cairn.llm is imported.
-        _env_key = f"CAIRN_LLM_MODEL_{'STANDARD' if model_tier == 'standard' else 'FAST'}"
-        model = os.environ.get(_env_key, model)
+    # Model: registry default for the tier, overridable per tier via env for
+    # ANY provider. Resolved at call time (no stale import-snapshot).
+    override_env = "CAIRN_LLM_MODEL_STANDARD" if model_tier == "standard" else "CAIRN_LLM_MODEL_FAST"
+    model = os.environ.get(override_env) or spec.get(model_tier) or spec.get("fast", "")
 
     def _do_complete() -> str:
-        if provider == "anthropic":
+        if spec["sdk"] == "anthropic":
             return _complete_anthropic(
                 prompt, system, model=model, max_tokens=max_tokens,
                 temperature=temperature, timeout=timeout,
             )
-        if provider == "openai":
-            return _complete_openai(
-                prompt, system, model=model, max_tokens=max_tokens,
-                temperature=temperature, timeout=timeout,
-            )
-        if provider == "openai_compat":
-            base_url = os.environ.get("CAIRN_LLM_BASE_URL", "")
-            compat_key = _get_api_key("openai_compat")
-            return _complete_openai(
-                prompt, system, model=model, max_tokens=max_tokens,
-                temperature=temperature, timeout=timeout,
-                base_url=base_url or None, api_key=compat_key,
-            )
-        return ""
+        # All OpenAI-compatible providers: base_url from the registry, but
+        # CAIRN_LLM_BASE_URL overrides it (and supplies openai_compat's).
+        base_url = os.environ.get("CAIRN_LLM_BASE_URL") or spec.get("base_url")
+        return _complete_openai(
+            prompt, system, model=model, max_tokens=max_tokens,
+            temperature=temperature, timeout=timeout,
+            base_url=base_url or None, api_key=_get_api_key(provider),
+        )
 
     # Hard timeout wrapper: ensures we never block longer than timeout,
     # even if the SDK's own timeout handling is slow or broken.

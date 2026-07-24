@@ -2349,6 +2349,35 @@ def _doctor_check_model(report) -> None:
     except Exception as e:
         report.warn(f"Reranker identity check failed: {e}")
 
+    # LLM provider — used by the optional rollup / distillation / query-expansion
+    # features. Bring a key from any major provider (see cairn.llm). Optional:
+    # with no key these features no-op and core memory is unaffected.
+    report.section("LLM Provider (optional)")
+    try:
+        import cairn.llm as _llm
+
+        provider = os.environ.get("CAIRN_LLM_PROVIDER", "anthropic")
+        if provider not in _llm.list_providers():
+            report.warn(
+                f"CAIRN_LLM_PROVIDER='{provider}' is unknown. Known: "
+                f"{', '.join(_llm.list_providers())}"
+            )
+        else:
+            key = _llm._get_api_key(provider)
+            has_key = bool(key) and key not in ("none", "ollama")
+            keyless_ok = provider == "ollama"
+            fast = os.environ.get("CAIRN_LLM_MODEL_FAST") or _llm.get_model_map()[provider]["fast"]
+            if has_key or keyless_ok:
+                report.ok(f"LLM provider: {provider} (fast model: {fast})")
+            else:
+                report.warn(
+                    f"LLM provider '{provider}' has no API key configured — "
+                    f"rollup/distillation/query-expansion will no-op. Set the "
+                    f"provider's key env or CAIRN_LLM_API_KEY."
+                )
+    except Exception as e:
+        report.warn(f"LLM provider check failed: {e}")
+
 
 def _doctor_check_database(report):
     """Open a read-only probe connection; returns it (or None) for later checks."""

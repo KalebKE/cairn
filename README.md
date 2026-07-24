@@ -187,6 +187,18 @@ Evals always run against a snapshot copy — never the live store (queries mutat
 
 Per-session stdio servers over one WAL-mode SQLite store: N sessions across N repos/worktrees share memory safely (single-writer with busy-timeout retries; cross-session dedup keeps parallel sessions from storing the same fact twice). There is deliberately **no** inter-agent coordination layer — one agent per worktree is the intended pattern; git is the isolation.
 
+## LLM provider (optional)
+
+Retrieval, embeddings, and reranking are fully local. A few *optional* features (episodic rollup, trajectory distillation, LLM-judged eval probes) call a text LLM, and you can bring a key from any major provider — set `CAIRN_LLM_PROVIDER` and that provider's key:
+
+```bash
+CAIRN_LLM_PROVIDER=gemini    GEMINI_API_KEY=...
+CAIRN_LLM_PROVIDER=groq      GROQ_API_KEY=...        # or the generic CAIRN_LLM_API_KEY
+CAIRN_LLM_PROVIDER=deepinfra DEEPINFRA_API_KEY=...
+```
+
+Built-in: `anthropic` (default), `openai`, `gemini`, `mistral`, `deepinfra`, `groq`, `together`, `fireworks`, `openrouter`, `xai`, `ollama` (local), plus `openai_compat` (set `CAIRN_LLM_BASE_URL`) for anything else. Pick a specific model with `CAIRN_LLM_MODEL_FAST`/`_STANDARD`. With no key these features simply no-op — core memory is unaffected, and nothing about your store leaves the machine. `cairn doctor` shows the resolved provider and whether a key is set.
+
 ## Provenance
 
 Cairn began as a fork of [omega-memory](https://github.com/omega-memory/omega-memory) v1.5.5 (Apache-2.0 — see `LICENSE` and `NOTICE`, both retained). It is independently maintained and has diverged substantially.
