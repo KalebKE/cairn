@@ -44,9 +44,18 @@ Rules:
 def is_expansion_enabled() -> bool:
     """Check if query expansion is enabled.
 
-    Default is True (auto-enabled). Set CAIRN_QUERY_EXPANSION=0 to disable.
+    Default is False (opt-in): set CAIRN_QUERY_EXPANSION=1 to enable.
+
+    Expansion is a synchronous cloud-LLM call (temperature 0.3, 3s timeout)
+    inside store.query(), so enabling it with a provider key present makes
+    retrieval nondeterministic, latency-coupled to the provider, and sends
+    query text off-machine. The 2026-07 paired A/B on LongMemEval (500
+    questions) measured its benefit as inside noise: R@5 0.966 vs 0.958
+    overall (McNemar p=0.29). The vocabulary-bridging idea lives on in the
+    async enrichment path (doc2query-style, write-time) where it is
+    deterministic at query time.
     """
-    return os.environ.get("CAIRN_QUERY_EXPANSION", "1") != "0"
+    return os.environ.get("CAIRN_QUERY_EXPANSION", "0") == "1"
 
 
 def expand_query(

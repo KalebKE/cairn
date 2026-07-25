@@ -17,9 +17,14 @@ from cairn.query_expansion import (
 class TestExpansionEnabled:
     """Test the gating env var."""
 
-    def test_enabled_by_default(self):
+    def test_disabled_by_default(self):
+        """Opt-in since the 2026-07 A/B: expansion is a synchronous cloud LLM
+        call inside query() (temperature 0.3), so with a provider key present
+        it made retrieval nondeterministic — while its LongMemEval delta was
+        inside noise (paired McNemar over 500 questions: p=0.29 overall,
+        p=0.63 on single-session-preference). Off unless explicitly enabled."""
         os.environ.pop("CAIRN_QUERY_EXPANSION", None)
-        assert is_expansion_enabled()
+        assert not is_expansion_enabled()
 
     def test_enabled_when_set(self):
         os.environ["CAIRN_QUERY_EXPANSION"] = "1"

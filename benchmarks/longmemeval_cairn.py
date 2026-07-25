@@ -36,6 +36,13 @@ import os
 # Must be set before importing cairn: read at class-definition / module time.
 os.environ.setdefault("CAIRN_MAX_CONTENT_SIZE", "2000000")
 os.environ.setdefault("CAIRN_QUERY_LOG", "0")
+# Hermetic by default: LLM query expansion samples a cloud model at
+# temperature 0.3 inside query(), so with a provider key in the shell the
+# SAME benchmark run gives different rankings run-to-run (±1-3 questions
+# per 30 measured). Pin it off so results are reproducible and keyless
+# reproductions run the same pipeline. Explicitly set
+# CAIRN_QUERY_EXPANSION=1 to A/B expansion.
+os.environ.setdefault("CAIRN_QUERY_EXPANSION", "0")
 
 import argparse
 import json
@@ -138,6 +145,7 @@ def run(data_file, limit=0, tag="", out_dir=None, relaxed=False):
         data = data[:limit]
 
     ce_mode = os.environ.get("CAIRN_CE_MODE", "hybrid (default)")
+    expansion_on = os.environ.get("CAIRN_QUERY_EXPANSION", "0") != "0"
     print(f"\n{'=' * 62}")
     print("  Cairn × LongMemEval  (MemPalace raw-mode protocol, session)")
     print(f"{'=' * 62}")
@@ -145,6 +153,7 @@ def run(data_file, limit=0, tag="", out_dir=None, relaxed=False):
     print(f"  Questions: {len(data)}")
     print(f"  CE mode:   {ce_mode}")
     print(f"  Abstain:   {'relaxed (adaptive-retry thresholds)' if relaxed else 'default'}")
+    print(f"  Expansion: {'ON (LLM, non-hermetic!)' if expansion_on else 'off (hermetic)'}")
     print(f"{'─' * 62}\n")
 
     metrics = {f"recall_any@{k}": [] for k in KS}
@@ -232,6 +241,7 @@ def run(data_file, limit=0, tag="", out_dir=None, relaxed=False):
                 "harness": "longmemeval_cairn",
                 "protocol": "mempalace-raw-session",
                 "ce_mode": ce_mode,
+                "query_expansion": expansion_on,
                 "relaxed_abstention": relaxed,
                 "provenance": provenance,
                 "n": n,

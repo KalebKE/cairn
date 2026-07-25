@@ -615,9 +615,13 @@ def run_evaluation(
         return report
 
     # --- Run probes through retrieval pipeline ---
+    # expand_query=False: LLM query expansion samples a cloud model at
+    # temperature 0.3, so scores would vary run-to-run whenever a provider
+    # key is present. Evals must be hermetic (the v2 probe path forces
+    # CAIRN_QUERY_EXPANSION=0 for the same reason).
     probe_results: List[ProbeResult] = []
     for probe in probes:
-        results = store.query(probe.query_text, limit=top_k)
+        results = store.query(probe.query_text, limit=top_k, expand_query=False)
 
         judged: list = []
         source_rank: Optional[int] = None

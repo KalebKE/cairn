@@ -189,7 +189,7 @@ Per-session stdio servers over one WAL-mode SQLite store: N sessions across N re
 
 ## LLM provider (optional)
 
-Retrieval, embeddings, and reranking are fully local. A few *optional* features (episodic rollup, trajectory distillation, LLM-judged eval probes) call a text LLM, and you can bring a key from any major provider — set `CAIRN_LLM_PROVIDER` and that provider's key:
+Retrieval, embeddings, and reranking are fully local — with a key present, LLM usage is async and eventual (write/maintenance time), never in the query path. A few *optional* features (episodic rollup, trajectory distillation, LLM-judged eval probes, and opt-in LLM query expansion via `CAIRN_QUERY_EXPANSION=1`) call a text LLM, and you can bring a key from any major provider — set `CAIRN_LLM_PROVIDER` and that provider's key:
 
 ```bash
 CAIRN_LLM_PROVIDER=gemini    GEMINI_API_KEY=...
