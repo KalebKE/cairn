@@ -457,11 +457,11 @@ class TestEngramIntegration:
 
     def test_schema_version_is_5(self, store):
         """SCHEMA_VERSION should be 8 after retrieval improvements."""
-        assert SCHEMA_VERSION == 15
+        assert SCHEMA_VERSION == 16
         row = store._conn.execute(
             "SELECT version FROM schema_version LIMIT 1"
         ).fetchone()
-        assert row[0] == 15
+        assert row[0] == 16
 
     def test_stats_tracking(self, store):
         """Engram stats should be tracked."""
@@ -471,3 +471,36 @@ class TestEngramIntegration:
         # Stats dict should exist and have standard keys
         assert "queries" in store.stats
         assert "stores" in store.stats
+
+
+# ============================================================================
+# Vec-top guard (channel-complementarity fusion fix, 2026-07-25)
+# ============================================================================
+
+
+class TestVecTopGuard:
+    """max(cosine, fused) oracle showed the channels fail on different
+    questions; the guard hoists the vec channel's winner into the top 3."""
+
+    def test_buried_vec_top_moves_to_index_2(self, store):
+        ids = [f"n{i}" for i in range(8)]
+        scores = {n: 1.0 - i * 0.1 for i, n in enumerate(ids)}
+        order = sorted(ids, key=lambda n: scores[n], reverse=True)
+        store._apply_vec_top_guard(order, {"n6": 0.9, "n0": 0.5}, scores)
+        assert order.index("n6") == 2
+        assert order[:2] == ["n0", "n1"]  # fused top-2 untouched
+
+    def test_vec_top_already_high_is_untouched(self, store):
+        order = ["a", "b", "c", "d"]
+        store._apply_vec_top_guard(order, {"b": 0.9}, {n: 1.0 for n in order})
+        assert order == ["a", "b", "c", "d"]
+
+    def test_vec_top_not_scored_is_ignored(self, store):
+        order = ["a", "b", "c"]
+        store._apply_vec_top_guard(order, {"zz": 0.99}, {n: 1.0 for n in order})
+        assert order == ["a", "b", "c"]
+
+    def test_empty_vec_channel_noop(self, store):
+        order = ["a", "b", "c"]
+        store._apply_vec_top_guard(order, {}, {n: 1.0 for n in order})
+        assert order == ["a", "b", "c"]

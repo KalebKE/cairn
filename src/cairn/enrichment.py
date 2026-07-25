@@ -98,24 +98,6 @@ def generate_anticipated_queries(content: str, event_type: str = "") -> List[str
     return queries[:MAX_QUERIES]
 
 
-def _fts_resync(store, row_id: int, content: str, old_kw: str, new_kw: str) -> None:
-    """Mirror the trigger-maintained FTS row after an extracted_keywords change.
-
-    The memories_au trigger fires only on UPDATE OF content, so keyword-only
-    updates must maintain the external-content FTS index by hand: 'delete'
-    with the OLD indexed text, insert with the NEW (exactly what the
-    triggers do — see schema.py).
-    """
-    store._conn.execute(
-        "INSERT INTO memories_fts(memories_fts, rowid, content) VALUES ('delete', ?, ?)",
-        (row_id, f"{content} {old_kw}".rstrip()),
-    )
-    store._conn.execute(
-        "INSERT INTO memories_fts(rowid, content) VALUES (?, ?)",
-        (row_id, f"{content} {new_kw}".rstrip()),
-    )
-
-
 def enrich_pending(store, limit: int = 50, min_age_hours: float = MIN_AGE_HOURS) -> Dict[str, Any]:
     """Enrich up to ``limit`` un-enriched knowledge memories.
 
@@ -194,11 +176,8 @@ def enrich_pending(store, limit: int = 50, min_age_hours: float = MIN_AGE_HOURS)
                 logger.debug("enrichment: re-embed failed for %s: %s", node_id, e)
 
         with store._lock:
-            if getattr(store, "_fts_available", False):
-                try:
-                    _fts_resync(store, row_id, content, old_kw or "", new_kw)
-                except Exception as e:
-                    logger.debug("enrichment: FTS resync failed for %s: %s", node_id, e)
+            # FTS sync is trigger-maintained: memories_au fires on
+            # extracted_keywords updates (schema v16).
             store._conn.execute(
                 "UPDATE memories SET metadata = ?, extracted_keywords = ? WHERE id = ?",
                 (json.dumps(meta), new_kw, row_id),

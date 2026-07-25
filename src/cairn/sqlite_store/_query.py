@@ -1306,6 +1306,18 @@ class QueryMixin:
         # Sort and dedup
         sorted_ids = sorted(node_scores.keys(), key=lambda x: node_scores[x], reverse=True)
 
+        # Vec-top guard: the fused ranking can bury the vector channel's
+        # clear winner under text-channel pile-on — the LongMemEval
+        # preference oracle showed max(cosine, fused) R@5 0.933 vs fused
+        # 0.800, i.e. the channels fail on DIFFERENT questions. Guarantee
+        # the vec channel's top candidate survives into the final top-3
+        # (never above the fused top-2, so exact-match rank-1 wins are
+        # preserved). Abstention still applies downstream. Default ON:
+        # +5/-0 on the 113-probe set (MRR 0.870 -> 0.888, hit rate 0.965
+        # -> 0.991, 2026-07-25); CAIRN_VEC_TOP_GUARD=0 to disable.
+        if os.environ.get("CAIRN_VEC_TOP_GUARD", "1") == "1":
+            self._apply_vec_top_guard(sorted_ids, raw_vec_sims, node_scores)
+
         seen_content: Set[str] = set()
         deduped: List[MemoryResult] = []
         for nid in sorted_ids:
@@ -1889,6 +1901,29 @@ class QueryMixin:
         r"|did (?:we|i)|was there|is there|decision about|preference for"
         r"|error with|bug in|remind me|remember)\b"
     )
+    # Bare single-word signals (which/who/where) were A/B'd against a
+    # multiword-only variant on the 113-probe set (2026-07-25): zero probes
+    # changed outcome (+0/-0). Kept as-is — no evidence either way.
+
+    @staticmethod
+    def _apply_vec_top_guard(
+        sorted_ids: List[str],
+        raw_vec_sims: Dict[str, float],
+        node_scores: Dict[str, float],
+    ) -> None:
+        """Splice the vector channel's top candidate into position 3 (index 2)
+        of the fused ranking if fusion buried it deeper. In-place; no-op when
+        the vec channel is empty, the candidate didn't survive scoring, or it
+        already sits in the top 3."""
+        if not raw_vec_sims:
+            return
+        vec_top = max(raw_vec_sims, key=lambda n: raw_vec_sims[n])
+        if vec_top not in node_scores or vec_top not in sorted_ids:
+            return
+        pos = sorted_ids.index(vec_top)
+        if pos > 2:
+            sorted_ids.remove(vec_top)
+            sorted_ids.insert(2, vec_top)
 
     def _classify_query_intent(self, query_text: str) -> Optional[QueryIntent]:
         """Classify query intent for adaptive retrieval budget (#3)."""

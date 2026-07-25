@@ -550,13 +550,13 @@ class TestGraphMultiHop:
 class TestSchemaMigration:
     """Test v7 -> v8 schema migration."""
 
-    def test_schema_version_is_8(self, store):
-        """SCHEMA_VERSION should be 8."""
-        assert SCHEMA_VERSION == 15
+    def test_schema_version_current(self, store):
+        """SCHEMA_VERSION matches what a fresh store reports (v16: two-column FTS)."""
+        assert SCHEMA_VERSION == 16
         row = store._conn.execute(
             "SELECT version FROM schema_version LIMIT 1"
         ).fetchone()
-        assert row[0] == 15
+        assert row[0] == 16
 
     def test_end_date_column_exists(self, store):
         """The memories table should have an end_date column."""

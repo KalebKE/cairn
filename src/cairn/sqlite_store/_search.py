@@ -1,6 +1,7 @@
 """Search, retrieval, and caching mixin for SQLiteStore."""
 
 import logging
+import os
 import time as _time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -113,28 +114,38 @@ class SearchMixin:
                 if len(fts_words) >= 3:
                     bigrams = [f'"{fts_words[i]} {fts_words[i+1]}"' for i in range(len(fts_words) - 1)]
                     fts_terms = fts_terms + " OR " + " OR ".join(bigrams)
+                # Column-weighted BM25 over (content, extracted_keywords).
+                # Default 1.0 is MEASURED, not assumed: the 2026-07-25 sweep
+                # on the 113-probe set showed every down-weight loses more on
+                # hard probes than it saves on rank-1 collisions (0.25 was
+                # significantly worse, p=0.031). The knob stays because the
+                # optimum may shift with a different embedder or store shape.
+                try:
+                    kw_weight = float(os.environ.get("CAIRN_FTS_KW_WEIGHT", "1.0"))
+                except ValueError:
+                    kw_weight = 1.0
                 if entity_id:
                     rows = self._conn.execute(
                         """SELECT m.node_id, m.content, m.metadata, m.created_at,
                                    m.access_count, m.last_accessed, m.ttl_seconds,
-                                   f.rank
+                                   bm25(memories_fts, 1.0, ?) AS w_rank
                             FROM memories_fts f
                             JOIN memories m ON f.rowid = m.id
                             WHERE memories_fts MATCH ?
                             AND (m.entity_id = ? OR m.entity_id IS NULL)
-                            ORDER BY f.rank LIMIT ?""",
-                        (fts_terms, entity_id, limit * 3),
+                            ORDER BY w_rank LIMIT ?""",
+                        (kw_weight, fts_terms, entity_id, limit * 3),
                     ).fetchall()
                 else:
                     rows = self._conn.execute(
                         """SELECT m.node_id, m.content, m.metadata, m.created_at,
                                    m.access_count, m.last_accessed, m.ttl_seconds,
-                                   f.rank
+                                   bm25(memories_fts, 1.0, ?) AS w_rank
                             FROM memories_fts f
                             JOIN memories m ON f.rowid = m.id
                             WHERE memories_fts MATCH ?
-                            ORDER BY f.rank LIMIT ?""",
-                        (fts_terms, limit * 3),
+                            ORDER BY w_rank LIMIT ?""",
+                        (kw_weight, fts_terms, limit * 3),
                     ).fetchall()
 
                 if not rows:

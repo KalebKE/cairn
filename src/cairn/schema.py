@@ -9,7 +9,7 @@ from typing import Tuple
 
 logger = logging.getLogger("cairn.schema")
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 
 def init_schema(
@@ -308,6 +308,36 @@ def init_schema(
         c.commit()
         logger.info("Schema migrated v14 -> v15: added query_log table")
 
+    # v15 -> v16: two-column FTS — extracted_keywords becomes its own FTS5
+    # column so doc2query anticipated-query terms can carry a LOWER bm25
+    # weight than real content (CAIRN_FTS_KW_WEIGHT). With everything in one
+    # column, enriched neighbors' anticipated terms could outrank another
+    # memory's actual content at rank 1 (4/86 rank-1 regressions in the
+    # 2026-07-25 probe eval). Drop table + triggers here; the idempotent
+    # sections below recreate the two-column versions and repopulate.
+    current_version = c.execute("SELECT version FROM schema_version LIMIT 1").fetchone()
+    if current_version and current_version[0] < 16:
+        try:
+            c.execute("DROP TABLE IF EXISTS memories_fts")
+            c.execute("DROP TRIGGER IF EXISTS memories_ai")
+            c.execute("DROP TRIGGER IF EXISTS memories_ad")
+            c.execute("DROP TRIGGER IF EXISTS memories_au")
+            # Recreate + reindex HERE, not in the idempotent section below:
+            # its populate-if-empty guard uses SELECT COUNT(*), which on an
+            # external-content FTS table proxies the content table and never
+            # reads 0 — the canonical 'rebuild' command is the only reliable
+            # way to reindex after a drop.
+            c.execute("""
+                CREATE VIRTUAL TABLE memories_fts
+                USING fts5(content, extracted_keywords, content='memories', content_rowid='id')
+            """)
+            c.execute("INSERT INTO memories_fts(memories_fts) VALUES('rebuild')")
+        except sqlite3.OperationalError as e:
+            logger.debug("v16 FTS rebuild skipped (FTS5 unavailable?): %s", e)
+        c.execute("UPDATE schema_version SET version = 16")
+        c.commit()
+        logger.info("Schema migrated v15 -> v16: two-column FTS (content, extracted_keywords)")
+
     # ----------------------------------------------------------------
     # Table definitions (idempotent CREATE IF NOT EXISTS)
     # ----------------------------------------------------------------
@@ -389,11 +419,13 @@ def init_schema(
             logger.warning(f"Failed to create vec table: {e}")
             vec_available = False
 
-    # FTS5 full-text search index
+    # FTS5 full-text search index — two columns so anticipated-query terms
+    # (doc2query enrichment lands in extracted_keywords) can carry a lower
+    # bm25 weight than real content at query time (CAIRN_FTS_KW_WEIGHT).
     try:
         c.execute("""
             CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts
-            USING fts5(content, content='memories', content_rowid='id')
+            USING fts5(content, extracted_keywords, content='memories', content_rowid='id')
         """)
         fts_available = True
     except Exception as e:
@@ -476,27 +508,30 @@ def init_schema(
     c.execute("CREATE INDEX IF NOT EXISTS idx_entity_index_score ON entity_index(contradiction_score)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_entity_index_updated ON entity_index(last_updated)")
 
-    # FTS5 sync triggers (include extracted_keywords for enriched BM25)
+    # FTS5 sync triggers. AU fires on extracted_keywords updates too, so
+    # keyword-only writers (doc2query enrichment) stay in sync without a
+    # manual external-content resync.
     if fts_available:
         try:
             c.execute("""
                 CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
-                    INSERT INTO memories_fts(rowid, content)
-                    VALUES (new.id, new.content || ' ' || COALESCE(new.extracted_keywords, ''));
+                    INSERT INTO memories_fts(rowid, content, extracted_keywords)
+                    VALUES (new.id, new.content, COALESCE(new.extracted_keywords, ''));
                 END
             """)
             c.execute("""
                 CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
-                    INSERT INTO memories_fts(memories_fts, rowid, content)
-                    VALUES ('delete', old.id, old.content || ' ' || COALESCE(old.extracted_keywords, ''));
+                    INSERT INTO memories_fts(memories_fts, rowid, content, extracted_keywords)
+                    VALUES ('delete', old.id, old.content, COALESCE(old.extracted_keywords, ''));
                 END
             """)
             c.execute("""
-                CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE OF content ON memories BEGIN
-                    INSERT INTO memories_fts(memories_fts, rowid, content)
-                    VALUES ('delete', old.id, old.content || ' ' || COALESCE(old.extracted_keywords, ''));
-                    INSERT INTO memories_fts(rowid, content)
-                    VALUES (new.id, new.content || ' ' || COALESCE(new.extracted_keywords, ''));
+                CREATE TRIGGER IF NOT EXISTS memories_au
+                AFTER UPDATE OF content, extracted_keywords ON memories BEGIN
+                    INSERT INTO memories_fts(memories_fts, rowid, content, extracted_keywords)
+                    VALUES ('delete', old.id, old.content, COALESCE(old.extracted_keywords, ''));
+                    INSERT INTO memories_fts(rowid, content, extracted_keywords)
+                    VALUES (new.id, new.content, COALESCE(new.extracted_keywords, ''));
                 END
             """)
             # Populate FTS from existing data if empty
@@ -504,8 +539,8 @@ def init_schema(
             mem_count = c.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
             if fts_count == 0 and mem_count > 0:
                 c.execute(
-                    "INSERT INTO memories_fts(rowid, content) "
-                    "SELECT id, content || ' ' || COALESCE(extracted_keywords, '') FROM memories"
+                    "INSERT INTO memories_fts(rowid, content, extracted_keywords) "
+                    "SELECT id, content, COALESCE(extracted_keywords, '') FROM memories"
                 )
                 logger.info(f"Populated FTS5 index with {mem_count} existing memories")
         except Exception as e:
