@@ -194,6 +194,25 @@ class TestAdaptiveRetrievalBudget:
         assert store._classify_query_intent("what was the decision about caching") == QueryIntent.FACTUAL
         assert store._classify_query_intent("when did we add the entity system") == QueryIntent.FACTUAL
 
+    def test_factual_signals_match_whole_words_only(self, store):
+        """Factual signal words must not match inside other words.
+
+        Bare substring matching classified "the whole pipeline broke" as
+        FACTUAL ("who" in "whole") and "somewhere to store the config" as
+        FACTUAL ("where" in "somewhere"). FACTUAL weights (0.21 vec / 2.25
+        text) all but disable semantic retrieval, so a false positive here
+        silently degrades recall for ordinary status/description queries.
+        """
+        # Substring false positives — must NOT be FACTUAL
+        assert store._classify_query_intent("the whole pipeline broke") != QueryIntent.FACTUAL
+        assert store._classify_query_intent("I need somewhere to store the config") != QueryIntent.FACTUAL
+        assert store._classify_query_intent("nowhere in the docs does it mention this") != QueryIntent.FACTUAL
+        assert store._classify_query_intent("wholesale replacement of the parser") != QueryIntent.FACTUAL
+        # Whole-word positives — must stay FACTUAL
+        assert store._classify_query_intent("who owns the deploy script") == QueryIntent.FACTUAL
+        assert store._classify_query_intent("where is the config file") == QueryIntent.FACTUAL
+        assert store._classify_query_intent("which database did we choose") == QueryIntent.FACTUAL
+
     def test_conceptual_intent(self, store):
         """Conceptual questions should classify as CONCEPTUAL."""
         assert store._classify_query_intent("how does the query pipeline work") == QueryIntent.CONCEPTUAL

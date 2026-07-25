@@ -348,7 +348,12 @@ class QueryMixin:
             self._record_timing("read", (_time.monotonic() - _t0_agency) * 1000)
             return _result
 
-        # Phase 2.7: LLM-based query expansion (opt-in, QMD-inspired)
+        # Phase 2.7: LLM-based query expansion (QMD-inspired). OPT-IN via
+        # CAIRN_QUERY_EXPANSION=1; no-ops keyless. It is a synchronous
+        # cloud-LLM call at temperature 0.3 inside the read path, which
+        # makes retrieval nondeterministic and latency-coupled to the
+        # provider — and the 2026-07 paired LongMemEval A/B measured its
+        # recall benefit as inside noise (McNemar p=0.29 over 500 qs).
         # Generates semantic variants for vague queries to improve recall.
         # Skipped for ambient surfacing (surfacing_context set): the surfacing
         # hook runs on every file edit and must stay in the tens-of-ms range —
@@ -1874,18 +1879,23 @@ class QueryMixin:
             logger.debug("Thompson sampling boost skipped: %s", e)
             return 1.0
 
+    # Factual signals match WHOLE WORDS only. Bare substring matching
+    # classified "the whole pipeline broke" as FACTUAL ("who" in "whole")
+    # and "somewhere to store X" as FACTUAL ("where" in "somewhere") —
+    # and FACTUAL weights (0.3 vec / 1.5 text) all but disable semantic
+    # retrieval for the misclassified query.
+    _FACTUAL_SIGNAL_RE = re.compile(
+        r"\b(?:what (?:was|is|are)|which|when (?:did|was)|who|where"
+        r"|did (?:we|i)|was there|is there|decision about|preference for"
+        r"|error with|bug in|remind me|remember)\b"
+    )
+
     def _classify_query_intent(self, query_text: str) -> Optional[QueryIntent]:
         """Classify query intent for adaptive retrieval budget (#3)."""
         if self._is_keyword_sufficient(query_text):
             return QueryIntent.NAVIGATIONAL
         query_lower = query_text.lower()
-        _FACTUAL_SIGNALS = (
-            "what was", "what is", "what are", "which", "when did", "when was",
-            "who", "where", "did we", "did i", "was there", "is there",
-            "decision about", "preference for", "error with", "bug in",
-            "remind me", "remember",
-        )
-        if any(query_lower.startswith(sig) or sig in query_lower for sig in _FACTUAL_SIGNALS):
+        if self._FACTUAL_SIGNAL_RE.search(query_lower):
             return QueryIntent.FACTUAL
         _CONCEPTUAL_SIGNALS = (
             "how does", "how do", "how to", "why does", "why do", "why is",
