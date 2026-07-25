@@ -109,6 +109,27 @@ def _job_rollup() -> None:
                 result.get("skipped_llm", 0))
 
 
+def _job_enrich() -> None:
+    """doc2query enrichment: store anticipated-query terms with knowledge
+    memories (write-time vocabulary bridging) so retrieval stays 100% local
+    and deterministic at query time. Keyless installs no-op. Never with
+    degraded embeddings: the re-embed would write an unqueryable hash vector."""
+    from cairn.embedding import generate_embedding, is_embedding_degraded
+    generate_embedding("enrichment health probe")
+    if is_embedding_degraded():
+        raise RuntimeError("embedding backend degraded — enrichment deferred")
+
+    from cairn.bridge import _get_store
+    from cairn.enrichment import enrich_pending
+    result = enrich_pending(_get_store(), limit=50)
+    logger.info(
+        "enrich: %s — %d updated, %d empty, %d young, %d candidates",
+        result.get("status"), result.get("updated", 0),
+        result.get("skipped_empty", 0), result.get("skipped_young", 0),
+        result.get("candidates", 0),
+    )
+
+
 def _job_link() -> None:
     """Discover cross-memory connections over the last 48h of activity."""
     from cairn.bridge import discover_connections
@@ -175,6 +196,7 @@ class MaintenanceJob:
 
 JOBS: List[MaintenanceJob] = [
     MaintenanceJob("rollup", "last-rollup", 1, "_job_rollup"),
+    MaintenanceJob("enrich", "last-enrich", 1, "_job_enrich"),
     MaintenanceJob("link", "last-link", 1, "_job_link"),
     MaintenanceJob("gc", "last-gc", 7, "_job_gc", requires_idle=True),
     MaintenanceJob("consolidate", "last-consolidate", 3, "_job_consolidate"),

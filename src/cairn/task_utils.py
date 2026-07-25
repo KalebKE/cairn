@@ -2,8 +2,6 @@
 import logging
 import re
 
-from cairn.llm import llm_complete
-
 logger = logging.getLogger(__name__)
 
 # System-generated prefixes that aren't real tasks
@@ -67,63 +65,7 @@ def clean_task_text(prompt: str) -> str:
     return text if len(text) >= 8 else ""
 
 
-def _basic_clean(prompt: str) -> str:
-    """Strip XML tags and system prefixes, but don't truncate.
-
-    Returns the full cleaned text for Haiku to summarize from.
-    Returns empty string if the prompt isn't a real task.
-    """
-    text = prompt.strip()
-    if not text:
-        return ""
-
-    # Strip XML-like tags
-    text = re.sub(r"<[a-zA-Z_-]+>[^<]*</[a-zA-Z_-]+>", "", text)
-    text = re.sub(r"</?[a-zA-Z_-]+>", "", text)
-    text = text.strip()
-
-    for pfx in _SKIP_PREFIXES:
-        if text.startswith(pfx):
-            return ""
-    if text.lower() in _SKIP_EXACT:
-        return ""
-
-    text = re.sub(r"^#{1,4}\s*", "", text)
-    text = re.sub(r"^[Rr]esume\s*:\s*", "", text)
-
-    return text.strip()
-
-
-def summarize_task_text(prompt: str) -> str:
-    """Summarize a user prompt into a concise 3-8 word task title using Haiku.
-
-    Falls back to clean_task_text() if the API call fails or the key is missing.
-    """
-    full_text = _basic_clean(prompt)
-    if not full_text or len(full_text) < 8:
-        return ""
-
-    # Short prompts are already concise enough
-    if len(full_text) <= 30:
-        return clean_task_text(prompt)
-
-    try:
-        summary = llm_complete(
-            full_text[:500],
-            (
-                "Summarize this developer task/question into a concise 3-8 word "
-                "status bar title. Output ONLY the title, no quotes, no punctuation, "
-                "lowercase. Focus on the ACTION and TARGET, not filler words. "
-                "Examples: 'fix auth token refresh bug', 'add dark mode toggle', "
-                "'refactor statusline task display', 'debug failing CI pipeline'."
-            ),
-            max_tokens=30,
-            timeout=2.0,
-        )
-        summary = summary.strip().rstrip(".")
-        if 5 <= len(summary) <= 60:
-            return summary
-        return clean_task_text(prompt)
-    except Exception as e:
-        logger.debug("Haiku summarization failed: %s", e)
-        return clean_task_text(prompt)
+# summarize_task_text (LLM-backed title summarizer) and its _basic_clean
+# feeder were removed 2026-07-25: no callers anywhere in the repo or in the
+# installed hooks, and removing them keeps this module free of LLM imports —
+# all remote-LLM usage lives on the async maintenance paths.

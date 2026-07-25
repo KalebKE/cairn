@@ -1,9 +1,12 @@
-"""Tests for cairn.task_utils text cleaning and summarization."""
+"""Tests for cairn.task_utils text cleaning.
 
-import pytest
-from unittest.mock import patch
+summarize_task_text (LLM-backed) and _basic_clean were removed 2026-07-25 —
+no callers, and their removal keeps this module LLM-import-free. This test
+module also asserts that property so a future re-introduction of a remote
+call here fails loudly.
+"""
 
-from cairn.task_utils import _basic_clean, clean_task_text, summarize_task_text
+from cairn.task_utils import clean_task_text
 
 
 class TestCleanTaskText:
@@ -60,49 +63,10 @@ class TestCleanTaskText:
         assert "logout" in result.lower()
 
 
-class TestBasicClean:
-    def test_preserves_full_text(self):
-        text = "Fix the auth bug in login flow and update tests"
-        result = _basic_clean(text)
-        assert "update tests" in result
+class TestNoLLMImports:
+    def test_module_has_no_llm_dependency(self):
+        """task_utils must stay free of remote-LLM imports (status-bar path)."""
+        import cairn.task_utils as tu
 
-    def test_strips_tags(self):
-        result = _basic_clean("<tag>content</tag>Real task here")
-        assert "<" not in result
-        assert "Real task" in result
-
-    def test_skip_prefixes_apply(self):
-        assert _basic_clean("MEMORY HANDOFF data") == ""
-
-    def test_empty(self):
-        assert _basic_clean("") == ""
-
-
-class TestSummarizeTaskText:
-    def test_fallback_no_api_key(self):
-        """Without ANTHROPIC_API_KEY, should fall back to clean_task_text."""
-        result = summarize_task_text("Add a logout button to the navigation bar")
-        assert result != ""
-        assert "logout" in result.lower()
-
-    def test_short_text_uses_clean(self):
-        result = summarize_task_text("Fix the auth bug")
-        assert result == clean_task_text("Fix the auth bug")
-
-    def test_empty_returns_empty(self):
-        assert summarize_task_text("") == ""
-
-    def test_skip_prefix_returns_empty(self):
-        assert summarize_task_text("MEMORY HANDOFF data here with enough chars") == ""
-
-    def test_uses_llm_complete(self, monkeypatch):
-        """summarize_task_text uses cairn.llm.llm_complete under the hood."""
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-
-        with patch("cairn.task_utils.llm_complete", return_value="fix auth token refresh") as mock_llm:
-            result = summarize_task_text(
-                "We need to fix the authentication token refresh bug that causes users to be logged out"
-            )
-
-        mock_llm.assert_called_once()
-        assert result == "fix auth token refresh"
+        assert not hasattr(tu, "llm_complete")
+        assert not hasattr(tu, "summarize_task_text")
