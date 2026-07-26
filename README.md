@@ -131,31 +131,46 @@ doesn't return.
 LongMemEval, full 500 questions, session granularity (each question buries
 the answer in ~53 conversation sessions):
 
-| | Their retriever | Cairn | Cairn (relaxed) |
-|---|---|---|---|
-| Recall@1 | 0.806 | 0.878 | **0.882** |
-| Recall@3 | 0.926 | 0.938 | **0.942** |
-| Recall@5 | **0.966** | 0.950 | 0.956 |
-| NDCG@10 | 0.889 | 0.911 | **0.916** |
+| | Their retriever | Cairn |
+|---|---|---|
+| Recall@1 | 0.806 | **0.880** |
+| Recall@3 | 0.926 | **0.958** |
+| Recall@5 | 0.966 | **0.968** |
+| NDCG@10 | 0.889 | **0.923** |
 
 Cairn puts the right memory at rank 1 about 7 points more often, and that
 is the number I actually care about. The ambient loop surfaces a small
 handful of memories into a working agent's context, so what sits at rank 1
 matters a lot more than what sits at rank 40.
 
-They do edge Cairn on deeper recall, and the reason is kind of interesting:
-Cairn abstains. Ask it for 50 results and it hands back the two or three it
-actually believes in, and the benchmark's fill rule ranks everything
-unreturned by corpus order, which costs recall points. I'll take that trade
-— an agent that gets fed a plausible-looking wrong memory has no way to
-know it's wrong.
+One structural note on deeper recall: Cairn abstains. Ask it for 50 results
+and it hands back the two or three it actually believes in, and the
+benchmark's fill rule ranks everything unreturned by corpus order, which
+costs recall points at large K. I'll take that trade — an agent that gets
+fed a plausible-looking wrong memory has no way to know it's wrong.
 
-And the honest caveat, because I always leave one in: there is one question
-category where plain cosine similarity beats Cairn's whole pipeline —
-indirect preference questions like "what should I serve for dinner with my
-homegrown ingredients?", where the session you need (the one where the user
-talked about their garden) shares almost no wording with the question.
-Cairn scores 0.733 there against their 0.967. Something to fix.
+These numbers are hermetic: the harness pins off every nondeterministic
+knob, makes zero network calls, and a keyless clone reproduces the same
+digits run after run.
+
+And the honest caveat, because I always leave one in: the weakest category
+is still indirect preference questions like "what should I serve for dinner
+with my homegrown ingredients?", where the session you need (the one where
+the user talked about their garden) shares almost no wording with the
+question. Cairn scored 0.733 there for a long time against their 0.967.
+Chasing it taught us more than fixing it would have: the fix wasn't the
+embedder (five models all scored within one question of each other), wasn't
+more semantic weighting (measurably worse), and wasn't an LLM rewriting
+queries at retrieval time (indistinguishable from noise, and it made
+retrieval nondeterministic — we ripped it out). What actually moved it was
+noticing the vector and text channels fail on *different* questions: a
+one-line fusion guard that keeps the vector channel's top pick in the final
+top-3 took the category to 0.833 and, because the channels disagree
+everywhere, lifted every headline number above at zero cost — +10/-0 across
+500 paired questions and a 113-probe live-store eval (p≈0.002). Write-time
+doc2query enrichment (async, local at query time) takes the category to
+0.867 on an enriched store. The remaining gap to their 0.967 is real, and
+it's three questions out of thirty.
 
 The harness is `benchmarks/longmemeval_cairn.py` — one command, no API key,
 about 14 minutes on Apple Silicon for the full 500.
