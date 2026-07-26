@@ -1316,7 +1316,28 @@ class QueryMixin:
         # +5/-0 on the 113-probe set (MRR 0.870 -> 0.888, hit rate 0.965
         # -> 0.991, 2026-07-25); CAIRN_VEC_TOP_GUARD=0 to disable.
         if os.environ.get("CAIRN_VEC_TOP_GUARD", "1") == "1":
-            self._apply_vec_top_guard(sorted_ids, raw_vec_sims, node_scores)
+            try:
+                _depth = max(1, int(os.environ.get("CAIRN_VEC_GUARD_DEPTH", "1")))
+            except ValueError:
+                _depth = 1
+            _vec_best = [n for n, _ in sorted(
+                raw_vec_sims.items(), key=lambda kv: -kv[1])[:_depth]]
+            self._apply_channel_top_guard(sorted_ids, node_scores, _vec_best, insert_at=2)
+        # Text-top guard (experiment knob, default OFF — measured): symmetric
+        # case where the text channel's #1 is right but fusion buries it.
+        # Together with CAIRN_VEC_GUARD_DEPTH=2 this hits the LongMemEval
+        # preference oracle exactly (0.867 -> 0.933), but the 113-probe
+        # live-store eval vetoed both as defaults: +0/-2, hit rate 0.991 ->
+        # 0.982 (2026-07-25). Long-document corpora can opt in via env;
+        # short keyword-dense stores lose. Benchmark wins that cost real
+        # retrieval quality don't ship.
+        if os.environ.get("CAIRN_TEXT_TOP_GUARD", "0") == "1" and ctx.text_ranked:
+            _seen_t: Dict[str, float] = {}
+            for n, s in ctx.text_ranked:
+                if n not in _seen_t or s > _seen_t[n]:
+                    _seen_t[n] = s
+            _text_best = [max(_seen_t, key=lambda n: _seen_t[n])]
+            self._apply_channel_top_guard(sorted_ids, node_scores, _text_best, insert_at=3)
 
         seen_content: Set[str] = set()
         deduped: List[MemoryResult] = []
@@ -1906,24 +1927,36 @@ class QueryMixin:
     # changed outcome (+0/-0). Kept as-is — no evidence either way.
 
     @staticmethod
+    def _apply_channel_top_guard(
+        sorted_ids: List[str],
+        node_scores: Dict[str, float],
+        channel_best: List[str],
+        insert_at: int,
+    ) -> None:
+        """Splice a channel's best candidate(s) into the fused ranking at
+        ``insert_at`` (best-first, consecutive slots) if fusion buried them
+        deeper. In-place; skips candidates that didn't survive scoring or
+        already sit at/above their target slot."""
+        for offset, cand in enumerate(channel_best):
+            if cand not in node_scores or cand not in sorted_ids:
+                continue
+            target = insert_at + offset
+            pos = sorted_ids.index(cand)
+            if pos > target:
+                sorted_ids.remove(cand)
+                sorted_ids.insert(target, cand)
+
     def _apply_vec_top_guard(
+        self,
         sorted_ids: List[str],
         raw_vec_sims: Dict[str, float],
         node_scores: Dict[str, float],
     ) -> None:
-        """Splice the vector channel's top candidate into position 3 (index 2)
-        of the fused ranking if fusion buried it deeper. In-place; no-op when
-        the vec channel is empty, the candidate didn't survive scoring, or it
-        already sits in the top 3."""
+        """Back-compat wrapper: vec channel's single top into index 2."""
         if not raw_vec_sims:
             return
         vec_top = max(raw_vec_sims, key=lambda n: raw_vec_sims[n])
-        if vec_top not in node_scores or vec_top not in sorted_ids:
-            return
-        pos = sorted_ids.index(vec_top)
-        if pos > 2:
-            sorted_ids.remove(vec_top)
-            sorted_ids.insert(2, vec_top)
+        self._apply_channel_top_guard(sorted_ids, node_scores, [vec_top], insert_at=2)
 
     def _classify_query_intent(self, query_text: str) -> Optional[QueryIntent]:
         """Classify query intent for adaptive retrieval budget (#3)."""
