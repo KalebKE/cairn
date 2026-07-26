@@ -114,7 +114,9 @@ never the live one, because queries bump access counts and access counts feed
 decay. Any config knob can be A/B tested on the same probes with a paired
 sign test, and a running MRR history feeds the doctor command so a silent
 regression shows up in the numbers before you notice it behaviorally. The
-current baseline on a store of about 2,300 memories is 0.84 MRR at top-5.
+current baseline on a store of about 2,300 memories is 0.888 MRR at top-5
+(0.84 before the 2.1.0 tuning cycle: doc2query enrichment + the vec-top
+fusion guard).
 
 ## Benchmarks
 
@@ -176,7 +178,9 @@ doc2query enrichment (async, local at query time) takes the category to
 it's three questions out of thirty.
 
 The harness is `benchmarks/longmemeval_cairn.py` — one command, no API key,
-about 14 minutes on Apple Silicon for the full 500.
+about 45 minutes on Apple Silicon for the full 500. The run header and the
+results JSON both record the hermeticity-relevant settings, so a number
+produced with anything nondeterministic switched on identifies itself.
 
 ## Quick start
 
@@ -207,7 +211,7 @@ Per-session stdio servers over one WAL-mode SQLite store: N sessions across N re
 
 ## LLM provider (optional)
 
-Retrieval, embeddings, and reranking are fully local — with a key present, LLM usage is async and eventual (write/maintenance time), never in the query path. A few *optional* features (episodic rollup, trajectory distillation, LLM-judged eval probes, and opt-in LLM query expansion via `CAIRN_QUERY_EXPANSION=1`) call a text LLM, and you can bring a key from any major provider — set `CAIRN_LLM_PROVIDER` and that provider's key:
+Retrieval, embeddings, and reranking are fully local — with a key present, LLM usage is async and eventual (write/maintenance time), never in the query path. A few *optional* features (episodic rollup, doc2query enrichment, trajectory distillation, LLM-judged eval probes, and opt-in LLM query expansion via `CAIRN_QUERY_EXPANSION=1`) call a text LLM, and you can bring a key from any major provider — set `CAIRN_LLM_PROVIDER` and that provider's key:
 
 ```bash
 CAIRN_LLM_PROVIDER=gemini    GEMINI_API_KEY=...

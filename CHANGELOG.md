@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-07-25
+
+Retrieval tuning cycle: every change below was decided by a paired A/B on a
+frozen 113-probe live-store eval and validated on LongMemEval (full 500,
+hermetic). Headline: LongMemEval R@1 0.876 → 0.880, R@5 0.958 → 0.968,
+NDCG@10 0.915 → 0.923; live-store MRR 0.842 → 0.888; preference category
+0.733 → 0.833 (0.867 on an enriched store).
+
+### Added
+- **doc2query write-time enrichment** (`cairn.enrichment`, daily `enrich`
+  maintenance job): an LLM generates the anticipated queries a memory
+  answers, phrased in different vocabulary; stored in `extracted_keywords`
+  (FTS-indexed) and folded into the embedding. Vocabulary bridging happens
+  once per memory on the async path — retrieval stays local and
+  deterministic. Keyless installs no-op. Live-store hard-probe MRR
+  0.34 → 0.55.
+- **Vec-top fusion guard, default ON** (`CAIRN_VEC_TOP_GUARD=0` to disable):
+  if fusion buries the vector channel's top candidate below rank 3, it is
+  spliced back in at rank 3 (never above the fused top-2; abstention still
+  applies). +10/-0 paired across LongMemEval-500 and the probe set
+  (p ≈ 0.002). Experiment knobs `CAIRN_VEC_GUARD_DEPTH` and
+  `CAIRN_TEXT_TOP_GUARD` exist but stay off: they add +0.10 on the
+  LongMemEval preference category and lose 2 probes on the live store.
+- **`CAIRN_FTS_KW_WEIGHT`**: bm25 column weight for the keywords column.
+  Default 1.0 (measured: every down-weight tested lost more on hard probes
+  than it saved on rank-1 collisions).
+
+### Changed
+- **LLM query expansion is now opt-in** (`CAIRN_QUERY_EXPANSION=1`; was
+  default-on whenever a provider key existed). It is a synchronous cloud
+  call at temperature 0.3 inside `query()`: with a key present it made
+  retrieval nondeterministic (±1-3 questions per 30, run to run) and sent
+  query text off-machine. Paired A/B measured its recall benefit as
+  indistinguishable from noise (R@5 0.966 vs 0.958, p=0.29). The
+  LongMemEval harness pins it off and records the setting in its results.
+- **Schema v16**: `memories_fts` is now two columns
+  (`content`, `extracted_keywords`) so anticipated-query terms carry their
+  own bm25 weight; the update trigger fires on keyword changes (enrichment
+  needs no manual FTS resync). Existing stores migrate automatically with a
+  full FTS reindex.
+- FACTUAL query-intent signals match whole words only (substring matching
+  classified "the whole pipeline broke" as FACTUAL via "who", nearly
+  disabling semantic retrieval for such queries).
+
+### Removed
+- Dead LLM-backed task-title summarizer (`task_utils.summarize_task_text`) —
+  no callers; keeps that module free of LLM imports.
+
+### Measured, declined
+- FTS keyword-column down-weighting (worse at every weight tested).
+- Deeper channel-top guards as defaults (benchmark +0.10, live store -2
+  probes — benchmark wins that cost real retrieval quality don't ship).
+- Stricter intent signals without bare `which`/`who`/`where` (zero probes
+  changed outcome).
+
 ## [2.0.0] - 2026-07-23
 
 First public release on PyPI + GitHub Releases. The default embedding model
