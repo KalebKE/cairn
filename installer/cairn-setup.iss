@@ -67,7 +67,7 @@ Filename: "{app}\python\python.exe"; \
 
 ; Step 3: Install cairn with server dependencies
 Filename: "{app}\python\python.exe"; \
-  Parameters: "-m pip install cairn[server]==1.5.4 --no-warn-script-location"; \
+  Parameters: "-m pip install cairn-memory[server]==1.5.4 --no-warn-script-location"; \
   StatusMsg: "Installing Cairn (this may take a minute)..."; \
   Flags: runhidden waituntilterminated
 

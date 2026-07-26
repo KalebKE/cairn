@@ -7,12 +7,12 @@
     "url": "https://github.com/TracqiTechnology/cairn",
     "source": "github"
   },
-  "version": "1.4.6",
+  "version": "2.1.0",
   "packages": [
     {
       "registryType": "pypi",
-      "identifier": "cairn",
-      "version": "1.4.6",
+      "identifier": "cairn-memory",
+      "version": "2.1.0",
       "transport": {
         "type": "stdio"
       }

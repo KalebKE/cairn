@@ -11,7 +11,7 @@ One-click installers for non-technical Claude Desktop users.
 
 ## What it does
 
-1. Installs bundled Python 3.12 (python-build-standalone) + a pinned `cairn[server]` release to `~/Library/Cairn`
+1. Installs bundled Python 3.12 (python-build-standalone) + a pinned `cairn-memory[server]` release to `~/Library/Cairn`
 2. Configures Claude Desktop to use Cairn as an MCP server
 3. No admin privileges required (per-user install)
 
@@ -44,7 +44,7 @@ Output: `build/macos/dist/Cairn-Memory.pkg`
 Push a release tag or trigger the `Build macOS Installer` workflow manually in GitHub Actions. The workflow runs on `macos-latest`, builds `Cairn-Memory.pkg`, verifies the packaged `cairn.__version__`, uploads an artifact, and attaches it to `v*` GitHub releases.
 
 The installer is intentionally version-pinned. A `v1.5.4` installer should
-install `cairn[server]==1.5.4`, not whatever PyPI latest is later.
+install `cairn-memory[server]==1.5.4`, not whatever PyPI latest is later.
 
 ## Testing checklist
 
@@ -85,7 +85,7 @@ One-click installer (.exe) for non-technical Claude Desktop users on Windows.
 
 ## What it does
 
-1. Installs a bundled Python 3.12 + pinned `cairn[server]` to `%LOCALAPPDATA%\Cairn`
+1. Installs a bundled Python 3.12 + pinned `cairn-memory[server]` to `%LOCALAPPDATA%\Cairn`
 2. Configures Claude Desktop to use Cairn as an MCP server
 3. No admin privileges required
 
@@ -148,7 +148,7 @@ The Inno script pins the package version in its `pip install` step. Update
 2. Update installer pins and metadata:
    - `installer/build-macos-pkg.sh` default version
    - `installer/cairn-setup.iss` `MyAppVersion`
-   - `installer/cairn-setup.iss` pinned `pip install cairn[server]==...`
+   - `installer/cairn-setup.iss` pinned `pip install cairn-memory[server]==...`
 3. Build macOS and Windows installers from a `v*` tag or manual workflow.
 4. Smoke test both installers on clean machines or VMs.
 5. Attach artifacts to the matching GitHub release:

@@ -17,10 +17,10 @@ Install Cairn as an MCP server so the AI coding agent has persistent memory acro
 Requires Python 3.11+.
 
 ```bash
-pip install cairn[server]
+pip install cairn-memory[server]
 ```
 
-If `pip install` fails with a Python version error, try `pip3.11 install cairn[server]` or `python3.11 -m pip install cairn[server]`.
+If `pip install` fails with a Python version error, try `pip3.11 install cairn-memory[server]` or `python3.11 -m pip install cairn-memory[server]`.
 
 ## Step 2: Setup
 

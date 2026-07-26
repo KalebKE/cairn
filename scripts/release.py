@@ -115,9 +115,9 @@ def build() -> tuple[Path, Path]:
         for f in dist.iterdir():
             f.unlink()
     run([sys.executable, "-m", "build", "--wheel", "--sdist"])
-    # Package builds as cairn-*, not cairn_memory-* (a former name).
-    wheels = list(dist.glob("cairn-*.whl"))
-    sdists = list(dist.glob("cairn-*.tar.gz"))
+    # Distribution name is cairn-memory (PyPI name "cairn" is owned by an unrelated 2019 project); import + CLI stay `cairn`.
+    wheels = list(dist.glob("cairn_memory-*.whl"))
+    sdists = list(dist.glob("cairn_memory-*.tar.gz"))
     if len(wheels) != 1 or len(sdists) != 1:
         sys.exit(f"Expected 1 wheel + 1 sdist, got {wheels=} {sdists=}")
     return wheels[0], sdists[0]
@@ -189,7 +189,7 @@ def main() -> int:
     print(f"cairn {args.version} tagged + pushed. The release workflow now builds,")
     print("publishes to PyPI, and creates the GitHub release.")
     print("  Actions: https://github.com/KalebKE/cairn/actions")
-    print(f"  PyPI:    https://pypi.org/project/cairn/{args.version}/ (after the workflow)")
+    print(f"  PyPI:    https://pypi.org/project/cairn-memory/{args.version}/ (after the workflow)")
     return 0
 
 

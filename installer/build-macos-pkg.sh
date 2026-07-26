@@ -49,8 +49,8 @@ rm "$TARBALL"
 echo "  Extracted to $PAYLOAD_DIR/python/"
 
 # --- Step 3: Install cairn[server] ---
-echo "Step 3: Installing cairn[server]==$CAIRN_VERSION..."
-"$PAYLOAD_DIR/python/bin/python3" -m pip install --quiet --no-cache-dir "cairn[server]==$CAIRN_VERSION"
+echo "Step 3: Installing cairn-memory[server]==$CAIRN_VERSION..."
+"$PAYLOAD_DIR/python/bin/python3" -m pip install --quiet --no-cache-dir "cairn-memory[server]==$CAIRN_VERSION"
 echo "  Installed cairn==$CAIRN_VERSION"
 
 # --- Step 4: Copy support files ---

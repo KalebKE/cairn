@@ -185,8 +185,9 @@ produced with anything nondeterministic switched on identifies itself.
 ## Quick start
 
 ```bash
-git clone git@github.com:KalebKE/cairn.git && cd cairn
-pip install -e .
+pip install cairn-memory                       # PyPI name; import + CLI are `cairn`
+# or from source:
+git clone git@github.com:KalebKE/cairn.git && cd cairn && pip install -e .
 cairn doctor                                   # model / db / embeddings health
 claude mcp add -s user cairn -- cairn serve    # register (stdio, per-session)
 ```

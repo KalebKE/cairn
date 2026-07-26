@@ -5,8 +5,8 @@ name: Release
 # GitHub Release. The installer workflows (build-macos/windows-installer.yml)
 # also fire on v* and attach their .pkg/.exe to the SAME release.
 #
-# One-time PyPI setup (owner): pypi.org/manage/project/cairn → Publishing →
-# add a GitHub trusted publisher: repo KalebKE/cairn, workflow release.yml,
+# One-time PyPI setup (owner): pypi.org/manage/project/cairn-memory → Publishing →
+# add a GitHub trusted publisher: repo KalebKE/cairn, workflow release.yml, project cairn-memory,
 # environment "pypi". Until that exists, the publish step will fail (nothing
 # leaks). To use an API token instead, replace the publish step with
 # `password: ${{ secrets.PYPI_API_TOKEN }}` and drop the id-token permission.
@@ -41,6 +41,9 @@ jobs:
       - name: Verify package version matches the tag
         run: |
           TAG="${GITHUB_REF_NAME#v}"
+          # src layout: the package must be installed before it can be
+          # imported — verify the actual built wheel, not the checkout.
+          python -m pip install --quiet dist/*.whl
           PKG=$(python -c "import cairn, sys; sys.stdout.write(cairn.__version__)")
           echo "tag=$TAG package=$PKG"
           if [ "$TAG" != "$PKG" ]; then

@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.1.0] - 2026-07-25
 
+**First release actually published to PyPI, as `cairn-memory`** — the PyPI
+name `cairn` belongs to an unrelated dormant project, which also means
+2.0.0's "first public release on PyPI" never happened (the tag was never
+pushed and the release workflow had never run; its first run was this
+release). Import name and CLI remain `cairn`; only the install command is
+`pip install cairn-memory`.
+
 Retrieval tuning cycle: every change below was decided by a paired A/B on a
 frozen 113-probe live-store eval and validated on LongMemEval (full 500,
 hermetic). Headline: LongMemEval R@1 0.876 → 0.880, R@5 0.958 → 0.968,
@@ -64,8 +71,10 @@ NDCG@10 0.915 → 0.923; live-store MRR 0.842 → 0.888; preference category
 
 ## [2.0.0] - 2026-07-23
 
-First public release on PyPI + GitHub Releases. The default embedding model
-changed dimension (384 → 768), which is why this is a major version.
+Intended as the first public release on PyPI + GitHub Releases; in practice
+the tag was never pushed and nothing was published (see 2.1.0). The default
+embedding model changed dimension (384 → 768), which is why this is a major
+version.
 
 ### Changed (breaking)
 - **Default embedder is now `gte-modernbert-base` (768-dim), replacing
