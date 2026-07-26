@@ -145,9 +145,12 @@ matters a lot more than what sits at rank 40.
 
 One structural note on deeper recall: Cairn abstains. Ask it for 50 results
 and it hands back the two or three it actually believes in, and the
-benchmark's fill rule ranks everything unreturned by corpus order, which
-costs recall points at large K. I'll take that trade — an agent that gets
-fed a plausible-looking wrong memory has no way to know it's wrong.
+benchmark's fill rule ranks everything unreturned by corpus order. I used
+to think that cost real recall; measured under the current pipeline, the
+entire concession is one question out of 500 at Recall@5 (0.968 strict vs
+0.970 with relaxed thresholds, identical NDCG). I'll take that trade at
+that price forever — an agent that gets fed a plausible-looking wrong
+memory has no way to know it's wrong.
 
 These numbers are hermetic: the harness pins off every nondeterministic
 knob, makes zero network calls, and a keyless clone reproduces the same
