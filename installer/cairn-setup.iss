@@ -7,7 +7,10 @@
 ; Requires: build\python\ (embeddable Python), build\get-pip.py
 
 #define MyAppName "Cairn"
-#define MyAppVersion "1.5.4"
+; Version comes from the build: ISCC /DMyAppVersion=X.Y.Z (workflow passes the tag).
+#ifndef MyAppVersion
+#define MyAppVersion "0.0.0-dev"
+#endif
 #define MyAppPublisher "Tracqi Technology"
 #define MyAppURL "https://tracqi.com"
 
@@ -67,7 +70,7 @@ Filename: "{app}\python\python.exe"; \
 
 ; Step 3: Install cairn with server dependencies
 Filename: "{app}\python\python.exe"; \
-  Parameters: "-m pip install cairn-memory[server]==1.5.4 --no-warn-script-location"; \
+  Parameters: "-m pip install cairn-memory[server]=={#MyAppVersion} --no-warn-script-location"; \
   StatusMsg: "Installing Cairn (this may take a minute)..."; \
   Flags: runhidden waituntilterminated
 

@@ -2,6 +2,10 @@ name: Build Windows Installer
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "cairn-memory version the installer pins (X.Y.Z)"
+        required: true
   push:
     tags:
       - "v*"
@@ -29,15 +33,28 @@ jobs:
           Remove-Item build\python.zip
           Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile build\get-pip.py
 
+      - name: Resolve version
+        id: ver
+        shell: powershell
+        run: |
+          if ("${{ github.ref }}".StartsWith("refs/tags/v")) {
+            $v = "${{ github.ref_name }}".TrimStart("v")
+          } else {
+            $v = "${{ inputs.version }}"
+          }
+          if (-not $v) { Write-Error "No version resolved"; exit 1 }
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Installer will pin cairn-memory[server]==$v"
+
       - name: Build installer
         working-directory: installer
         shell: powershell
-        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" cairn-setup.iss'
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=${{ steps.ver.outputs.version }} cairn-setup.iss'
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Cairn-Memory-1.5.4-Windows
+          name: Cairn-Memory-${{ steps.ver.outputs.version }}-Windows
           path: installer/dist/cairn-setup.exe
 
       - name: Attach to GitHub release
