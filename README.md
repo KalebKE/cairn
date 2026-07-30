@@ -1,6 +1,6 @@
 # Cairn
 
-**Self-hosted, local-first memory for AI coding agents.** One SQLite store, shared across every repo, worktree, and session — served over MCP to Claude Code or any MCP client. Your agent's memory lives on your machine, not someone else's server.
+**Self-hosted, local-first memory for AI coding agents.** One SQLite store, shared across every repo, worktree, and session, served over MCP to Claude Code or any MCP client. Your agent's memory lives on your machine, not someone else's server.
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
@@ -8,10 +8,10 @@
 
 ## What it does
 
-- **Capture**: decisions, lessons, errors, and preferences — stored explicitly (`cairn_store`) or auto-captured by session hooks, with Jaccard dedup, Zettelkasten-style memory *evolution*, contradiction supersession, and noise blocklists.
-- **Retrieve**: hybrid search fusing four channels (vector · BM25/FTS5 · temporal · entity) with canonical Reciprocal Rank Fusion, then a confidence-gated cross-encoder rerank (`ms-marco-MiniLM-L-6-v2` — measured against `bge-reranker-v2-m3`, which added zero MRR at 5-6x the latency). Embeddings are local ONNX (`gte-modernbert-base`, 768-d, CLS-pooled, cosine; chosen over bge-small, arctic-embed, and EmbeddingGemma in a full benchmark sweep).
-- **Forget**: per-type exponential decay (ACT-R style, access-aware), TTLs, strength floors, and an audited `forgetting_log` — protected types (decisions, preferences, constraints) never decay.
-- **Measure**: a built-in eval harness with **non-self-referential judged probe sets**, paired A/B on any config knob, sign tests, and an MRR trend that `cairn doctor` watches for silent degradation. Current baseline on a 2,300-memory live store: **MRR 0.842, nDCG@5 0.71, hit-rate 0.92**. On public LongMemEval (500 questions): **Recall@1 0.88, NDCG@10 0.92**.
+- **Capture**: decisions, lessons, errors, and preferences, stored explicitly (`cairn_store`) or auto-captured by session hooks, with Jaccard dedup, Zettelkasten-style memory *evolution*, contradiction supersession, and noise blocklists.
+- **Retrieve**: hybrid search fusing four channels (vector · BM25/FTS5 · temporal · entity) with canonical Reciprocal Rank Fusion, then a confidence-gated cross-encoder rerank (`ms-marco-MiniLM-L-6-v2`; measured against `bge-reranker-v2-m3`, which added zero MRR at 5-6x the latency). Embeddings are local ONNX (`gte-modernbert-base`, 768-d, CLS-pooled, cosine; chosen over bge-small, arctic-embed, and EmbeddingGemma in a full benchmark sweep).
+- **Forget**: per-type exponential decay (ACT-R style, access-aware), TTLs, strength floors, and an audited `forgetting_log`. Protected types (decisions, preferences, constraints) never decay.
+- **Measure**: a built-in eval harness with **non-self-referential judged probe sets**, paired A/B on any config knob, sign tests, and an MRR trend that `cairn doctor` watches for silent degradation. The current numbers are in [Benchmarks](#benchmarks).
 
 Every scoring change in this fork was either proven equivalent or measured on judged probes before it shipped.
 
@@ -21,12 +21,11 @@ Every scoring change in this fork was either proven equivalent or measured on ju
 
 Cairn is one SQLite database sitting in ~/.cairn (with sqlite-vec and FTS5
 loaded), and every coding session spawns its own little MCP server that talks
-to it. There is no daemon to keep alive and nothing goes to a cloud — the
+to it. There is no daemon to keep alive and nothing goes to a cloud. The
 embeddings are computed locally with an ONNX model (gte-modernbert-base,
-768 dimensions), so the whole thing runs on whatever machine you're already
-sitting at. All your sessions across all your repos and worktrees share the
-one store, which is the point — a lesson learned in one project is available
-in the next one.
+768 dimensions), so the whole thing runs on your local machine. All your
+sessions across all your repos and worktrees share the one store, so a
+lesson learned in one project is available in the next one.
 
 Memories are typed: decisions, lessons learned, error patterns, preferences,
 task completions, session summaries. The type ends up driving most of the
@@ -36,9 +35,9 @@ weight it carries in search, and how fast (or whether) it gets forgotten.
 
 ### Writing a memory
 
-Nothing goes straight into the store. A write first has to get past the noise
+A write first has to get past the noise
 gates (system junk, too-short hook captures, raw JSON pretending to be a
-"decision" — all blocked), and then it gets compared against similar existing
+"decision", all blocked), and then it gets compared against similar existing
 memories using word-overlap similarity with per-type thresholds. If you
 restate a decision you already made, Cairn doesn't store it twice, it just
 bumps the original. And if the new content is similar-but-not-identical to
@@ -61,16 +60,15 @@ dismissed.
 A query fans out over four channels: vector similarity, keyword search (BM25
 via FTS5), temporal proximity when the query implies a time range ("last
 week", "back in March"), and a match against the structured tags and entities.
-The four ranked lists get fused with Reciprocal Rank Fusion, which combines
-ranks instead of raw scores — BM25 scores and cosine similarities live on
-completely different scales and fusing them directly is a known mess, so
-ranks it is.
+The four ranked lists get fused with Reciprocal Rank Fusion. Ranks are
+preferred because BM25 scores and cosine similarities live on completely
+different scales, and fusing them directly is a known mess.
 
 The fused list then gets reweighted by what Cairn knows about each memory: a
 constraint outranks a session summary, memories you've rated helpful rise and
 unhelpful ones sink, and old unused memories fade. After that a local
 cross-encoder reranker (ms-marco-MiniLM-L-6-v2) reads the top 20 candidates
-against the actual query and its favorite takes the top slot — but only when
+against the actual query and its favorite takes the top slot, but only when
 it's confident. An indifferent reranker doesn't get to overrule the metadata
 ordering (we measured this one; letting it always win looked great on one
 metric and quietly made the rest of the results worse).
@@ -81,7 +79,7 @@ is more useful than a plausible-looking wrong one.
 
 ### Forgetting
 
-Memory strength decays exponentially with a per-type half-life — session
+Memory strength decays exponentially with a per-type half-life. Session
 summaries fade in a couple of weeks, task completions in about a month,
 lessons hang around for months. Memories that keep getting accessed decay
 slower, and some types (preferences, constraints, decisions, error patterns)
@@ -95,7 +93,7 @@ forgetting log, so you can always go look at what was forgotten and why.
 Most of the time you don't ask Cairn for anything — session hooks do it. When
 the agent edits or reads a file, relevant memories get surfaced automatically
 as a short score-filtered context block (truncated previews with ids, and the
-agent pulls the full memory only if it actually wants it). Failed commands
+agent pulls the full memory only if it wants it). Failed commands
 get captured as error patterns, decisions get captured from prompts, and each
 session opens with a briefing of recent context and closes with a summary of
 what got captured. The MCP tools are there for explicit store/query whenever
@@ -104,11 +102,9 @@ the agent wants them, but the hooks make the common case free.
 
 ### Measuring itself
 
-Retrieval quality is measured, not assumed. Cairn ships an eval harness that
-builds frozen probe sets: an LLM writes realistic queries in words that
-deliberately don't match the stored memory's wording (the earlier version of
-this eval generated queries from the memory itself, which made the scores
-look better than they were), and every candidate result gets relevance-judged
+Retrieval quality is measured and benchmarked. Cairn ships an eval harness
+that builds frozen probe sets: an LLM writes realistic queries in words that
+deliberately don't match the stored memory's wording, and every candidate result gets relevance-judged
 0-3 to form an answer key. Evals run against a snapshot copy of the store,
 never the live one, because queries bump access counts and access counts feed
 decay. Any config knob can be A/B tested on the same probes with a paired
@@ -124,7 +120,7 @@ There is a popular open-source memory project whose whole pitch is being the
 best-benchmarked memory system out there, and to their credit they publish
 the harness and the raw results so you can actually check. So I checked. I
 ran their LongMemEval harness on my machine and reproduced their headline
-number exactly (96.6% Recall@5 on the full 500 questions — same digit they
+number exactly (96.6% Recall@5 on the full 500 questions, the same digit they
 publish, which honestly earned them some respect). Then I swapped Cairn in
 as the retrieval backend and ran the exact same protocol: same corpus
 construction, same metrics, same fill rule for documents the retriever
@@ -133,28 +129,23 @@ doesn't return.
 LongMemEval, full 500 questions, session granularity (each question buries
 the answer in ~53 conversation sessions):
 
-| | Their retriever | Cairn |
-|---|---|---|
-| Recall@1 | 0.806 | **0.880** |
-| Recall@3 | 0.926 | **0.958** |
-| Recall@5 | 0.966 | **0.968** |
-| NDCG@10 | 0.889 | **0.923** |
+<img src="assets/cairn-longmemeval.svg" alt="Grouped column chart comparing retrieval on LongMemEval: Cairn leads on all four metrics. Recall@1 0.806 vs 0.880, Recall@3 0.926 vs 0.958, Recall@5 0.966 vs 0.968, NDCG@10 0.889 vs 0.923." width="680">
 
 Cairn puts the right memory at rank 1 about 7 points more often, and that
-is the number I actually care about. The ambient loop surfaces a small
+is the number I care about. The ambient loop surfaces a small
 handful of memories into a working agent's context, so what sits at rank 1
 matters a lot more than what sits at rank 40.
 
 One structural note on deeper recall: Cairn abstains. Ask it for 50 results
-and it hands back the two or three it actually believes in, and the
+and it hands back the two or three it believes in, and the
 benchmark's fill rule ranks everything unreturned by corpus order. I used
 to think that cost real recall; measured under the current pipeline, the
 entire concession is one question out of 500 at Recall@5 (0.968 strict vs
 0.970 with relaxed thresholds, identical NDCG). I'll take that trade at
-that price forever — an agent that gets fed a plausible-looking wrong
+that price forever. An agent that gets fed a plausible-looking wrong
 memory has no way to know it's wrong.
 
-These numbers are hermetic: the harness pins off every nondeterministic
+These numbers are hermetic. The harness pins off every nondeterministic
 knob, makes zero network calls, and a keyless clone reproduces the same
 digits run after run.
 
@@ -167,17 +158,19 @@ Chasing it taught us more than fixing it would have: the fix wasn't the
 embedder (five models all scored within one question of each other), wasn't
 more semantic weighting (measurably worse), and wasn't an LLM rewriting
 queries at retrieval time (indistinguishable from noise, and it made
-retrieval nondeterministic — we ripped it out). What actually moved it was
+retrieval nondeterministic, so we ripped it out). What moved it was
 noticing the vector and text channels fail on *different* questions: a
 one-line fusion guard that keeps the vector channel's top pick in the final
 top-3 took the category to 0.833 and, because the channels disagree
-everywhere, lifted every headline number above at zero cost — +10/-0 across
-500 paired questions and a 113-probe live-store eval (p≈0.002). Write-time
+everywhere, lifted every headline number above at zero cost (+10/-0 across
+500 paired questions and a 113-probe live-store eval, p≈0.002). Write-time
 doc2query enrichment (async, local at query time) takes the category to
 0.867 on an enriched store. The remaining gap to their 0.967 is real, and
 it's three questions out of thirty.
 
-The harness is `benchmarks/longmemeval_cairn.py` — one command, no API key,
+<img src="assets/cairn-retrieval-fixes.svg" alt="Before-and-after pairs for the two retrieval changes: the LongMemEval preference category went from 0.733 to 0.833 with the fusion guard, live-store probe MRR went from 0.842 to 0.870 with write-time anticipated queries, and LongMemEval Recall@5 went from 0.958 to 0.968." width="680">
+
+The harness is `benchmarks/longmemeval_cairn.py`. One command, no API key,
 about 45 minutes on Apple Silicon for the full 500. The run header and the
 results JSON both record the hermeticity-relevant settings, so a number
 produced with anything nondeterministic switched on identifies itself.
@@ -208,11 +201,11 @@ Evals always run against a snapshot copy — never the live store (queries mutat
 
 ## Concurrency model
 
-Per-session stdio servers over one WAL-mode SQLite store: N sessions across N repos/worktrees share memory safely (single-writer with busy-timeout retries; cross-session dedup keeps parallel sessions from storing the same fact twice). There is deliberately **no** inter-agent coordination layer — one agent per worktree is the intended pattern; git is the isolation.
+Per-session stdio servers over one WAL-mode SQLite store: N sessions across N repos/worktrees share memory safely (single-writer with busy-timeout retries; cross-session dedup keeps parallel sessions from storing the same fact twice). There is **no** inter-agent coordination layer. One agent per worktree is the intended pattern; git is the isolation.
 
 ## LLM provider (optional)
 
-Retrieval, embeddings, and reranking are fully local — with a key present, LLM usage is async and eventual (write/maintenance time), never in the query path. A few *optional* features (episodic rollup, doc2query enrichment, trajectory distillation, LLM-judged eval probes, and opt-in LLM query expansion via `CAIRN_QUERY_EXPANSION=1`) call a text LLM, and you can bring a key from any major provider — set `CAIRN_LLM_PROVIDER` and that provider's key:
+Retrieval, embeddings, and reranking are fully local. With a key present, LLM usage is async and eventual (write/maintenance time), never in the query path. A few *optional* features (episodic rollup, doc2query enrichment, trajectory distillation, LLM-judged eval probes, and opt-in LLM query expansion via `CAIRN_QUERY_EXPANSION=1`) call a text LLM, and you can bring a key from any major provider — set `CAIRN_LLM_PROVIDER` and that provider's key:
 
 ```bash
 CAIRN_LLM_PROVIDER=gemini    GEMINI_API_KEY=...

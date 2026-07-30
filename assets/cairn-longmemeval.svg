@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 474" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif">
+  <rect x="0" y="0" width="680" height="474" rx="16" fill="#16161e" />
+  <text x="24" y="30" font-size="14" font-weight="600" fill="#e8eaf0" text-anchor="start">LongMemEval, full 500 questions</text>
+  <text x="24" y="50" font-size="11" font-weight="400" fill="#b0b4c0" text-anchor="start">Session granularity, identical protocol and metrics, run on the same machine.</text>
+  <text x="24" y="65" font-size="11" font-weight="400" fill="#b0b4c0" text-anchor="start">Cairn on default settings.</text>
+  <rect x="24" y="79" width="10" height="10" rx="3" fill="#7e8494" />
+  <text x="40" y="88" font-size="11" font-weight="400" fill="#b0b4c0" text-anchor="start">Their retriever</text>
+  <rect x="171" y="79" width="10" height="10" rx="3" fill="#1f9bb8" />
+  <text x="187" y="88" font-size="11" font-weight="400" fill="#b0b4c0" text-anchor="start">Cairn</text>
+  <line x1="44" x2="664" y1="414" y2="414" stroke="#2a2a3a" stroke-width="1" />
+  <text x="36" y="418" font-size="11" font-weight="400" fill="#7e8494" text-anchor="end">0.0</text>
+  <line x1="44" x2="664" y1="270.0" y2="270.0" stroke="#2a2a3a" stroke-width="1" />
+  <text x="36" y="274.0" font-size="11" font-weight="400" fill="#7e8494" text-anchor="end">0.5</text>
+  <line x1="44" x2="664" y1="126.0" y2="126.0" stroke="#2a2a3a" stroke-width="1" />
+  <text x="36" y="130.0" font-size="11" font-weight="400" fill="#7e8494" text-anchor="end">1.0</text>
+  <path d="M83.5,414.0 L83.5,185.87199999999999 Q83.5,181.87199999999999 87.5,181.87199999999999 L113.5,181.87199999999999 Q117.5,181.87199999999999 117.5,185.87199999999999 L117.5,414.0 Z" fill="#7e8494" />
+  <text x="100.5" y="173.87199999999999" font-size="12" font-weight="600" fill="#b0b4c0" text-anchor="middle">0.806</text>
+  <path d="M125.5,414.0 L125.5,164.56 Q125.5,160.56 129.5,160.56 L155.5,160.56 Q159.5,160.56 159.5,164.56 L159.5,414.0 Z" fill="#1f9bb8" />
+  <text x="142.5" y="152.56" font-size="12" font-weight="600" fill="#e8eaf0" text-anchor="middle">0.880</text>
+  <text x="121.5" y="434" font-size="12" font-weight="400" fill="#b0b4c0" text-anchor="middle">Recall@1</text>
+  <path d="M238.5,414.0 L238.5,151.312 Q238.5,147.312 242.5,147.312 L268.5,147.312 Q272.5,147.312 272.5,151.312 L272.5,414.0 Z" fill="#7e8494" />
+  <text x="255.5" y="139.312" font-size="12" font-weight="600" fill="#b0b4c0" text-anchor="middle">0.926</text>
+  <path d="M280.5,414.0 L280.5,142.096 Q280.5,138.096 284.5,138.096 L310.5,138.096 Q314.5,138.096 314.5,142.096 L314.5,414.0 Z" fill="#1f9bb8" />
+  <text x="297.5" y="130.096" font-size="12" font-weight="600" fill="#e8eaf0" text-anchor="middle">0.958</text>
+  <text x="276.5" y="434" font-size="12" font-weight="400" fill="#b0b4c0" text-anchor="middle">Recall@3</text>
+  <path d="M393.5,414.0 L393.5,139.79200000000003 Q393.5,135.79200000000003 397.5,135.79200000000003 L423.5,135.79200000000003 Q427.5,135.79200000000003 427.5,139.79200000000003 L427.5,414.0 Z" fill="#7e8494" />
+  <text x="410.5" y="127.79200000000003" font-size="12" font-weight="600" fill="#b0b4c0" text-anchor="middle">0.966</text>
+  <path d="M435.5,414.0 L435.5,139.216 Q435.5,135.216 439.5,135.216 L465.5,135.216 Q469.5,135.216 469.5,139.216 L469.5,414.0 Z" fill="#1f9bb8" />
+  <text x="452.5" y="127.21600000000001" font-size="12" font-weight="600" fill="#e8eaf0" text-anchor="middle">0.968</text>
+  <text x="431.5" y="434" font-size="12" font-weight="400" fill="#b0b4c0" text-anchor="middle">Recall@5</text>
+  <path d="M548.5,414.0 L548.5,161.96800000000002 Q548.5,157.96800000000002 552.5,157.96800000000002 L578.5,157.96800000000002 Q582.5,157.96800000000002 582.5,161.96800000000002 L582.5,414.0 Z" fill="#7e8494" />
+  <text x="565.5" y="149.96800000000002" font-size="12" font-weight="600" fill="#b0b4c0" text-anchor="middle">0.889</text>
+  <path d="M590.5,414.0 L590.5,152.176 Q590.5,148.176 594.5,148.176 L620.5,148.176 Q624.5,148.176 624.5,152.176 L624.5,414.0 Z" fill="#1f9bb8" />
+  <text x="607.5" y="140.176" font-size="12" font-weight="600" fill="#e8eaf0" text-anchor="middle">0.923</text>
+  <text x="586.5" y="434" font-size="12" font-weight="400" fill="#b0b4c0" text-anchor="middle">NDCG@10</text>
+  <text x="24" y="460" font-size="10" font-weight="400" fill="#7e8494" text-anchor="start">Their published headline (96.6% Recall@5) reproduced exactly before swapping Cairn in as the backend.</text>
+</svg>
