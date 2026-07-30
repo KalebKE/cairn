@@ -122,15 +122,18 @@ published LongMemEval harness. MemPalace publishes the harness and their raw
 results, and `benchmarks/longmemeval_cairn.py` here is a faithful port of its
 raw mode. I ran their harness on my machine and reproduced their headline
 number first (96.6% Recall@5 on the full 500 questions, the same digit they
-publish). Then I swapped Cairn in as the retrieval backend and ran the exact
-same protocol: same corpus construction, same metrics, same fill rule for
-documents the retriever doesn't return. The numbers below are both systems
-on that protocol.
+publish, re-verified against their current release on 2026-07-29). Then I
+swapped Cairn in as the retrieval backend and ran the exact same protocol:
+same corpus construction, same metrics, same fill rule for documents the
+retriever doesn't return. omega-memory 1.5.5, the project Cairn was forked
+from, runs under the same protocol via `benchmarks/longmemeval_omega.py` on
+its shipped defaults. The numbers below are all three systems on that
+protocol, measured on the same machine, with no LLM in any query path.
 
 LongMemEval, full 500 questions, session granularity (each question buries
 the answer in ~53 conversation sessions):
 
-<img src="assets/cairn-longmemeval.svg" alt="Grouped column chart of both systems on LongMemEval. MemPalace then Cairn: Recall@1 0.806 and 0.880, Recall@3 0.926 and 0.958, Recall@5 0.966 and 0.968, NDCG@10 0.889 and 0.923." width="680">
+<img src="assets/cairn-longmemeval.svg" alt="Grouped column chart of three systems on LongMemEval. omega-memory, MemPalace, Cairn: Recall@1 0.854, 0.806, 0.880; Recall@3 0.930, 0.926, 0.958; Recall@5 0.944, 0.966, 0.968; NDCG@10 0.900, 0.889, 0.923." width="680">
 
 The ambient loop surfaces a small handful of memories into a working agent's
 context, so what sits at rank 1 matters a lot more than what sits at rank 40.
@@ -153,7 +156,8 @@ is still indirect preference questions like "what should I serve for dinner
 with my homegrown ingredients?", where the session you need (the one where
 the user talked about their garden) shares almost no wording with the
 question. Cairn scored 0.733 there for a long time against MemPalace's
-0.967.
+0.967 (omega-memory, where Cairn's pipeline started, scores 0.667 on the
+same category).
 Chasing it taught us more than fixing it would have: the fix wasn't the
 embedder (five models all scored within one question of each other), wasn't
 more semantic weighting (measurably worse), and wasn't an LLM rewriting
