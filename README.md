@@ -117,25 +117,23 @@ fusion guard).
 
 ## Benchmarks
 
-There is a popular open-source memory project whose whole pitch is being the
-best-benchmarked memory system out there, and to their credit they publish
-the harness and the raw results so you can actually check. So I checked. I
-ran their LongMemEval harness on my machine and reproduced their headline
-number exactly (96.6% Recall@5 on the full 500 questions, the same digit they
-publish, which honestly earned them some respect). Then I swapped Cairn in
-as the retrieval backend and ran the exact same protocol: same corpus
-construction, same metrics, same fill rule for documents the retriever
-doesn't return.
+Cairn is measured with [omega-memory](https://github.com/omega-memory/omega-memory)'s
+own published LongMemEval harness. omega-memory is the project Cairn was
+forked from, and they publish the harness and their raw results. I ran their
+harness on my machine and reproduced their headline number first (96.6%
+Recall@5 on the full 500 questions, the same digit they publish). Then I
+swapped Cairn in as the retrieval backend and ran the exact same protocol:
+same corpus construction, same metrics, same fill rule for documents the
+retriever doesn't return. The numbers below are both systems on that
+protocol.
 
 LongMemEval, full 500 questions, session granularity (each question buries
 the answer in ~53 conversation sessions):
 
-<img src="assets/cairn-longmemeval.svg" alt="Grouped column chart comparing retrieval on LongMemEval: Cairn leads on all four metrics. Recall@1 0.806 vs 0.880, Recall@3 0.926 vs 0.958, Recall@5 0.966 vs 0.968, NDCG@10 0.889 vs 0.923." width="680">
+<img src="assets/cairn-longmemeval.svg" alt="Grouped column chart of both systems on LongMemEval. omega-memory then Cairn: Recall@1 0.806 and 0.880, Recall@3 0.926 and 0.958, Recall@5 0.966 and 0.968, NDCG@10 0.889 and 0.923." width="680">
 
-Cairn puts the right memory at rank 1 about 7 points more often, and that
-is the number I care about. The ambient loop surfaces a small
-handful of memories into a working agent's context, so what sits at rank 1
-matters a lot more than what sits at rank 40.
+The ambient loop surfaces a small handful of memories into a working agent's
+context, so what sits at rank 1 matters a lot more than what sits at rank 40.
 
 One structural note on deeper recall: Cairn abstains. Ask it for 50 results
 and it hands back the two or three it believes in, and the
@@ -154,7 +152,8 @@ And the honest caveat, because I always leave one in: the weakest category
 is still indirect preference questions like "what should I serve for dinner
 with my homegrown ingredients?", where the session you need (the one where
 the user talked about their garden) shares almost no wording with the
-question. Cairn scored 0.733 there for a long time against their 0.967.
+question. Cairn scored 0.733 there for a long time against omega-memory's
+0.967.
 Chasing it taught us more than fixing it would have: the fix wasn't the
 embedder (five models all scored within one question of each other), wasn't
 more semantic weighting (measurably worse), and wasn't an LLM rewriting
@@ -166,8 +165,8 @@ top-3 took the category to 0.833 and, because the channels disagree
 everywhere, lifted every headline number above at zero cost (+10/-0 across
 500 paired questions and a 113-probe live-store eval, p≈0.002). Write-time
 doc2query enrichment (async, local at query time) takes the category to
-0.867 on an enriched store. The remaining gap to their 0.967 is real, and
-it's three questions out of thirty.
+0.867 on an enriched store. The remaining gap to omega-memory's 0.967 is
+real, and it's three questions out of thirty.
 
 <img src="assets/cairn-retrieval-fixes.svg" alt="Before-and-after pairs for the two retrieval changes: the LongMemEval preference category went from 0.733 to 0.833 with the fusion guard, live-store probe MRR went from 0.842 to 0.870 with write-time anticipated queries, and LongMemEval Recall@5 went from 0.958 to 0.968." width="680">
 
