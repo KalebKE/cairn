@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 424" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif">
   <rect x="0" y="0" width="680" height="424" rx="16" fill="#16161e" />
   <text x="24" y="30" font-size="14" font-weight="600" fill="#e8eaf0" text-anchor="start">Before and after the two retrieval changes</text>
-  <text x="24" y="50" font-size="11" font-weight="400" fill="#b0b4c0" text-anchor="start">Gray is before, teal is after. Axis starts at 0.70. omega-memory scores</text>
+  <text x="24" y="50" font-size="11" font-weight="400" fill="#b0b4c0" text-anchor="start">Gray is before, teal is after. Axis starts at 0.70. MemPalace scores</text>
   <text x="24" y="65" font-size="11" font-weight="400" fill="#b0b4c0" text-anchor="start">0.967 on the preference category.</text>
   <path d="M34.33333333333333,360.0 L34.33333333333333,337.38 Q34.33333333333333,333.38 38.33333333333333,333.38 L104.33333333333333,333.38 Q108.33333333333333,333.38 108.33333333333333,337.38 L108.33333333333333,360.0 Z" fill="#7e8494" />
   <text x="71.33333333333333" y="325.38" font-size="13" font-weight="600" fill="#e8eaf0" text-anchor="middle">0.733</text>
