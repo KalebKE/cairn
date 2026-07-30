@@ -29,8 +29,9 @@ lesson learned in one project is available in the next one.
 
 Memories are typed: decisions, lessons learned, error patterns, preferences,
 task completions, session summaries. The type ends up driving most of the
-behavior downstream — how aggressively a memory gets deduplicated, how much
-weight it carries in search, and how fast (or whether) it gets forgotten.
+behavior downstream. It decides how aggressively a memory gets deduplicated,
+how much weight it carries in search, and how fast (or whether) it gets
+forgotten.
 
 
 ### Writing a memory
@@ -90,7 +91,7 @@ forgetting log, so you can always go look at what was forgotten and why.
 
 ### The ambient loop
 
-Most of the time you don't ask Cairn for anything — session hooks do it. When
+Most of the time you don't ask Cairn for anything. Session hooks do it. When
 the agent edits or reads a file, relevant memories get surfaced automatically
 as a short score-filtered context block (truncated previews with ids, and the
 agent pulls the full memory only if it wants it). Failed commands
@@ -197,7 +198,7 @@ cairn eval-retrieval --build-probes --from-query-log   # replay real logged quer
 python benchmarks/longmemeval_cairn.py <longmemeval_s_cleaned.json>  # public LongMemEval benchmark
 ```
 
-Evals always run against a snapshot copy — never the live store (queries mutate access counts, which feed decay).
+Evals always run against a snapshot copy, never the live store (queries mutate access counts, which feed decay).
 
 ## Concurrency model
 
@@ -205,7 +206,7 @@ Per-session stdio servers over one WAL-mode SQLite store: N sessions across N re
 
 ## LLM provider (optional)
 
-Retrieval, embeddings, and reranking are fully local. With a key present, LLM usage is async and eventual (write/maintenance time), never in the query path. A few *optional* features (episodic rollup, doc2query enrichment, trajectory distillation, LLM-judged eval probes, and opt-in LLM query expansion via `CAIRN_QUERY_EXPANSION=1`) call a text LLM, and you can bring a key from any major provider — set `CAIRN_LLM_PROVIDER` and that provider's key:
+Retrieval, embeddings, and reranking are fully local. With a key present, LLM usage is async and eventual (write/maintenance time), never in the query path. A few *optional* features (episodic rollup, doc2query enrichment, trajectory distillation, LLM-judged eval probes, and opt-in LLM query expansion via `CAIRN_QUERY_EXPANSION=1`) call a text LLM, and you can bring a key from any major provider. Set `CAIRN_LLM_PROVIDER` and that provider's key:
 
 ```bash
 CAIRN_LLM_PROVIDER=gemini    GEMINI_API_KEY=...
@@ -213,11 +214,11 @@ CAIRN_LLM_PROVIDER=groq      GROQ_API_KEY=...        # or the generic CAIRN_LLM_
 CAIRN_LLM_PROVIDER=deepinfra DEEPINFRA_API_KEY=...
 ```
 
-Built-in: `anthropic` (default), `openai`, `gemini`, `mistral`, `deepinfra`, `groq`, `together`, `fireworks`, `openrouter`, `xai`, `ollama` (local), plus `openai_compat` (set `CAIRN_LLM_BASE_URL`) for anything else. Pick a specific model with `CAIRN_LLM_MODEL_FAST`/`_STANDARD`. With no key these features simply no-op — core memory is unaffected, and nothing about your store leaves the machine. `cairn doctor` shows the resolved provider and whether a key is set.
+Built-in: `anthropic` (default), `openai`, `gemini`, `mistral`, `deepinfra`, `groq`, `together`, `fireworks`, `openrouter`, `xai`, `ollama` (local), plus `openai_compat` (set `CAIRN_LLM_BASE_URL`) for anything else. Pick a specific model with `CAIRN_LLM_MODEL_FAST`/`_STANDARD`. With no key these features simply no-op. Core memory is unaffected, and nothing about your store leaves the machine. `cairn doctor` shows the resolved provider and whether a key is set.
 
 ## Provenance
 
-Cairn began as a fork of [omega-memory](https://github.com/omega-memory/omega-memory) v1.5.5 (Apache-2.0 — see `LICENSE` and `NOTICE`, both retained). It is independently maintained and has diverged substantially.
+Cairn began as a fork of [omega-memory](https://github.com/omega-memory/omega-memory) v1.5.5 (Apache-2.0; see `LICENSE` and `NOTICE`, both retained). It is independently maintained and has diverged substantially.
 
 ## License
 
