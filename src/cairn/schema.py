@@ -432,6 +432,18 @@ def init_schema(
         logger.debug(f"FTS5 not available: {e}")
         fts_available = False
 
+    # Canonical embedding storage — a plain table, readable on ANY SQLite.
+    # memories_vec (vec0) is an index over these bytes: fast KNN when the
+    # extension loads, and when it cannot (extension-less CPython builds),
+    # retrieval falls back to a brute-force scan of this table instead of
+    # silently losing the vector channel.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS memory_embeddings (
+            memory_id INTEGER PRIMARY KEY REFERENCES memories(id) ON DELETE CASCADE,
+            embedding BLOB NOT NULL
+        )
+    """)
+
     # Edges table (temporal, causal)
     c.execute("""
         CREATE TABLE IF NOT EXISTS edges (

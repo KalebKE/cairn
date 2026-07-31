@@ -526,7 +526,10 @@ async def test_cairn_similar_embeddingless_node_regenerates():
     ).fetchone()
     assert row
     with store._lock:
-        store._conn.execute("DELETE FROM memories_vec WHERE rowid = ?", (row[0],))
+        # memory_embeddings is canonical; memories_vec is an index over it
+        store._conn.execute("DELETE FROM memory_embeddings WHERE memory_id = ?", (row[0],))
+        if store._vec_available:
+            store._conn.execute("DELETE FROM memories_vec WHERE rowid = ?", (row[0],))
         store._conn.commit()
     assert store.get_embedding(node_id) is None  # precondition: no embedding
 

@@ -442,7 +442,7 @@ class QueryMixin:
         raw_vec_sims = ctx.raw_vec_sims
         query_embedding = ctx.query_embedding
         query_emb: Optional[List[float]] = None
-        if self._vec_available and not skip_vec:
+        if self._vector_search_enabled and not skip_vec:
             try:
                 from cairn.embedding import generate_embedding, is_embedding_degraded
 
@@ -680,7 +680,7 @@ class QueryMixin:
 
             # Run vector search for each vec variant + HyDE passage
             # Uses batch embedding to generate all variant embeddings in one call
-            if self._vec_available and not skip_vec:
+            if self._vector_search_enabled and not skip_vec:
                 from cairn.embedding import generate_embeddings_batch
 
                 search_texts = [v for v in vec_variants if v and v.strip() != query_text.strip()]
@@ -1353,7 +1353,7 @@ class QueryMixin:
                 break
 
         # Semantic dedup — catch near-duplicates missed by exact string match
-        if self._vec_available and len(deduped) > 1:
+        if self._vector_search_enabled and len(deduped) > 1:
             _sem_threshold = float(os.environ.get("CAIRN_SEMANTIC_DEDUP_THRESHOLD", "0.92"))
             if _sem_threshold < 1.0:
                 deduped = self._semantic_dedup(deduped, node_scores, _sem_threshold)
@@ -1701,14 +1701,14 @@ class QueryMixin:
 
         # Batch-fetch embeddings (single query instead of N+1)
         embeddings: Dict[str, List[float]] = {}
-        if self._vec_available:
+        if True:  # canonical memory_embeddings table is always present
             node_ids = [r.id for r in results]
             ph = ",".join("?" * len(node_ids))
             try:
                 rows = self._conn.execute(
                     f"""SELECT m.node_id, v.embedding
                         FROM memories m
-                        JOIN memories_vec v ON v.rowid = m.id
+                        JOIN memory_embeddings v ON v.memory_id = m.id
                         WHERE m.node_id IN ({ph})""",
                     node_ids,
                 ).fetchall()

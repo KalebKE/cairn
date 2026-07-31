@@ -586,8 +586,8 @@ class SQLiteStoreBase:
             self._vec_available = True
         except (ImportError, Exception) as e:
             logger.warning(
-                "sqlite-vec not available — vector search is DISABLED and retrieval "
-                f"falls back to text/temporal/entity channels only: {e}"
+                "sqlite-vec not available — vector search uses the brute-force "
+                f"memory_embeddings scan (fine at thousands of memories): {e}"
             )
             self._vec_available = False
 
@@ -600,6 +600,55 @@ class SQLiteStoreBase:
         self._vec_available, self._fts_available = _init_schema_fn(
             self._conn, self._vec_available, EMBEDDING_DIM
         )
+        self._backfill_embedding_tables()
+
+    # ------------------------------------------------------------------
+    # Canonical embedding storage (memory_embeddings) — vec0 is an index
+    # ------------------------------------------------------------------
+
+    @property
+    def _vector_search_enabled(self) -> bool:
+        """Vector retrieval is always available: vec0 KNN when the extension
+        loads, the brute-force scan of memory_embeddings when it does not.
+        Kept as a property so a kill-switch has one obvious home."""
+        return True
+
+    def _backfill_embedding_tables(self) -> None:
+        """Keep memories_vec and memory_embeddings mutually complete.
+
+        A store written by an older Cairn has embeddings only in vec0; a
+        store written on an extension-less SQLite has them only in the side
+        table. Both directions are one idempotent statement, so a database
+        keeps full vector retrieval when it moves between environments.
+        """
+        try:
+            if self._vec_available:
+                self._conn.execute(
+                    "INSERT OR IGNORE INTO memory_embeddings (memory_id, embedding) "
+                    "SELECT rowid, embedding FROM memories_vec"
+                )
+                self._conn.execute(
+                    "INSERT INTO memories_vec (rowid, embedding) "
+                    "SELECT memory_id, embedding FROM memory_embeddings "
+                    "WHERE memory_id NOT IN (SELECT rowid FROM memories_vec)"
+                )
+                self._conn.commit()
+        except Exception as e:
+            logger.warning("Embedding table backfill failed: %s", e)
+
+    def _embedding_upsert(self, rowid: int, serialized: bytes) -> None:
+        """Write an embedding to canonical storage and, when present, vec0."""
+        self._exec(
+            "INSERT OR REPLACE INTO memory_embeddings (memory_id, embedding) VALUES (?, ?)",
+            (rowid, serialized),
+        )
+        if self._vec_available:
+            self._exec("DELETE FROM memories_vec WHERE rowid = ?", (rowid,))
+            self._exec(
+                "INSERT INTO memories_vec (rowid, embedding) VALUES (?, ?)",
+                (rowid, serialized),
+            )
+        self._embedding_generation = getattr(self, "_embedding_generation", 0) + 1
 
     def _check_vec_dimension(self) -> None:
         """Refuse to open a store whose vec table dimension mismatches EMBEDDING_DIM.

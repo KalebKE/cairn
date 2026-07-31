@@ -286,14 +286,12 @@ class StoreMixin:
             # thread's transaction hasn't been seen yet by this connection.
             rowid = _insert_cur.lastrowid
 
-            # Insert embedding into vec table
-            if embedding and self._vec_available:
+            # Persist the embedding (canonical side table + vec0 index)
+            if embedding:
                 try:
-                    self._exec(
-                        "INSERT INTO memories_vec (rowid, embedding) VALUES (?, ?)", (rowid, _serialize_f32(embedding))
-                    )
+                    self._embedding_upsert(rowid, _serialize_f32(embedding))
                 except Exception as e:
-                    logger.debug(f"Vec insert failed: {e}")
+                    logger.debug(f"Embedding insert failed: {e}")
 
             # Add causal edges if dependencies provided
             if dependencies:
@@ -529,18 +527,14 @@ class StoreMixin:
         with self._lock:
             params.append(node_id)
             self._exec(f"UPDATE memories SET {', '.join(sets)} WHERE node_id = ?", params)
-            # Update vec embedding if content changed
+            # Update the stored embedding if content changed
             if new_embedding is not None:
                 row = self._exec("SELECT id FROM memories WHERE node_id = ?", (node_id,)).fetchone()
                 if row:
                     try:
-                        self._exec("DELETE FROM memories_vec WHERE rowid = ?", (row[0],))
-                        self._exec(
-                            "INSERT INTO memories_vec (rowid, embedding) VALUES (?, ?)",
-                            (row[0], _serialize_f32(new_embedding)),
-                        )
+                        self._embedding_upsert(row[0], _serialize_f32(new_embedding))
                     except Exception as e:
-                        logger.debug("update_node: vec update failed: %s", e)
+                        logger.debug("update_node: embedding update failed: %s", e)
             self._commit()
         return True
 

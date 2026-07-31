@@ -10,7 +10,7 @@ For full Claude Code integration (MCP tools, auto-capture, coordination),
 install with: ``pip install cairn[server]``
 """
 
-__version__ = "2.2.0"
+__version__ = "2.2.1"
 
 # Back-compat: honor pre-rename OMEGA_* env vars before any module reads config.
 from cairn import _compat as _compat  # noqa: E402

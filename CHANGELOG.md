@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-07-31
+
+### Fixed
+- Vector search no longer dies silently on an extension-less SQLite.
+  Embeddings now live canonically in a plain `memory_embeddings` table
+  (vec0 is an index over it): when sqlite-vec cannot load, retrieval falls
+  back to a brute-force cosine scan with the same contract, and a store
+  moving between environments backfills in both directions at open. This
+  was found when GitHub's macOS runners shipped a CPython that cannot load
+  SQLite extensions and retrieval quietly degraded to text-only.
+
 ## [2.2.0] - 2026-07-31
 
 ### Added

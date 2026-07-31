@@ -527,11 +527,7 @@ class MaintenanceMixin:
                 with self._lock:
                     for mem_id, emb in zip(ids, embeddings):
                         try:
-                            self._conn.execute("DELETE FROM memories_vec WHERE rowid = ?", (mem_id,))
-                            self._conn.execute(
-                                "INSERT INTO memories_vec (rowid, embedding) VALUES (?, ?)",
-                                (mem_id, _serialize_f32(emb)),
-                            )
+                            self._embedding_upsert(mem_id, _serialize_f32(emb))
                             updated += 1
                         except Exception as e:
                             logger.warning(f"reembed failed for id={mem_id}: {e}")
@@ -557,8 +553,8 @@ class MaintenanceMixin:
         missing = self._conn.execute(
             """SELECT m.id, m.node_id, m.content
                FROM memories m
-               LEFT JOIN memories_vec v ON m.id = v.rowid
-               WHERE v.rowid IS NULL
+               LEFT JOIN memory_embeddings v ON m.id = v.memory_id
+               WHERE v.memory_id IS NULL
                LIMIT ?""",
             (batch_size,),
         ).fetchall()
@@ -592,20 +588,17 @@ class MaintenanceMixin:
             with self._lock:
                 for rowid, emb_bytes in to_insert:
                     try:
-                        self._conn.execute(
-                            "INSERT OR IGNORE INTO memories_vec (rowid, embedding) VALUES (?, ?)",
-                            (rowid, emb_bytes),
-                        )
+                        self._embedding_upsert(rowid, emb_bytes)
                     except Exception as e:
-                        logger.debug("backfill vec insert failed for rowid %s: %s", rowid, e)
+                        logger.debug("backfill embedding insert failed for rowid %s: %s", rowid, e)
                         failed += 1
                 self._commit()
 
         # Check if more remain
         remaining = self._conn.execute(
             """SELECT COUNT(*) FROM memories m
-               LEFT JOIN memories_vec v ON m.id = v.rowid
-               WHERE v.rowid IS NULL""",
+               LEFT JOIN memory_embeddings v ON m.id = v.memory_id
+               WHERE v.memory_id IS NULL""",
         ).fetchone()[0]
 
         return {
@@ -649,14 +642,8 @@ class MaintenanceMixin:
                 meta = json.loads(meta_json) if meta_json else {}
                 meta.pop("_embedding_backend", None)
                 with self._lock:
-                    if self._vec_available and emb:
-                        self._conn.execute(
-                            "DELETE FROM memories_vec WHERE rowid = ?", (rowid,)
-                        )
-                        self._conn.execute(
-                            "INSERT INTO memories_vec (rowid, embedding) VALUES (?, ?)",
-                            (rowid, _serialize_f32(emb)),
-                        )
+                    if emb:
+                        self._embedding_upsert(rowid, _serialize_f32(emb))
                     self._conn.execute(
                         "UPDATE memories SET metadata = ? WHERE id = ?",
                         (json.dumps(meta), rowid),
@@ -1366,6 +1353,7 @@ class MaintenanceMixin:
                 script = ["BEGIN;", "DELETE FROM memories;"]
                 if self._vec_available:
                     script.append("DELETE FROM memories_vec;")
+                    script.append("DELETE FROM memory_embeddings;")
                 script.extend(["DELETE FROM edges;", "COMMIT;"])
                 try:
                     self._conn.executescript(" ".join(script))

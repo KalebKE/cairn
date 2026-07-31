@@ -45,7 +45,7 @@ class SearchMixin:
         ``store()``).
         """
         if not self._vec_available:
-            return []
+            return self._brute_force_vec_query(embedding, limit)
         try:
             with self._lock:
                 rows = self._conn.execute(
@@ -55,6 +55,58 @@ class SearchMixin:
             return rows
         except Exception as e:
             logger.debug(f"Vec query failed: {e}")
+            return []
+
+    def _brute_force_vec_query(self, embedding, limit: int):
+        """KNN over the canonical memory_embeddings table, no extension needed.
+
+        Same contract as the vec0 path: [(rowid, cosine_distance), ...],
+        ascending distance. The store-side matrix is cached per embedding
+        generation (any upsert/delete bumps it); a few thousand memories at
+        768 dims is a couple of milliseconds with numpy and still fine in
+        pure Python.
+        """
+        try:
+            gen = getattr(self, "_embedding_generation", 0)
+            cache = getattr(self, "_brute_cache", None)
+            if cache is None or cache[0] != gen:
+                with self._lock:
+                    rows = self._conn.execute(
+                        "SELECT memory_id, embedding FROM memory_embeddings"
+                    ).fetchall()
+                ids = [r[0] for r in rows]
+                vecs = [_deserialize_f32(r[1]) for r in rows]
+                cache = (gen, ids, vecs)
+                self._brute_cache = cache
+            _, ids, vecs = cache
+            if not ids:
+                return []
+            import math
+
+            def _cos_dist(a, b):
+                dot = sum(x * y for x, y in zip(a, b))
+                na = math.sqrt(sum(x * x for x in a)) or 1.0
+                nb = math.sqrt(sum(x * x for x in b)) or 1.0
+                return 1.0 - dot / (na * nb)
+
+            try:
+                import numpy as np
+
+                m = np.asarray(vecs, dtype=np.float32)
+                q = np.asarray(embedding, dtype=np.float32)
+                norms = np.linalg.norm(m, axis=1) * (np.linalg.norm(q) or 1.0)
+                norms[norms == 0] = 1.0
+                dists = 1.0 - (m @ q) / norms
+                order = np.argsort(dists)[:limit]
+                return [(ids[i], float(dists[i])) for i in order]
+            except ImportError:
+                scored = sorted(
+                    ((mid, _cos_dist(vec, embedding)) for mid, vec in zip(ids, vecs)),
+                    key=lambda t: t[1],
+                )
+                return scored[:limit]
+        except Exception as e:
+            logger.debug(f"Brute-force vec query failed: {e}")
             return []
 
     @staticmethod
@@ -477,7 +529,7 @@ class SearchMixin:
     ) -> List[MemoryResult]:
         """Search within a specific event type using embeddings or text."""
         # Try vector search first
-        if self._vec_available:
+        if self._vector_search_enabled:
             try:
                 from cairn.embedding import generate_embedding
 
@@ -715,7 +767,7 @@ class SearchMixin:
         without the lock races concurrent writers on ``memories`` /
         ``memories_vec`` and SIGSEGVs in sqlite-vec C code on macOS.
         """
-        if not self._vec_available or not embedding:
+        if not embedding:
             return []
 
         with self._lock:
@@ -915,14 +967,13 @@ class SearchMixin:
         return [self._row_to_result(row) for row in rows]
 
     def get_embedding(self, node_id: str) -> Optional[List[float]]:
-        """Retrieve the stored embedding for a node."""
-        if not self._vec_available:
-            return None
+        """Retrieve the stored embedding for a node (canonical table)."""
         row = self._conn.execute("SELECT id FROM memories WHERE node_id = ?", (node_id,)).fetchone()
         if not row:
             return None
-        rowid = row[0]
-        vec_row = self._conn.execute("SELECT embedding FROM memories_vec WHERE rowid = ?", (rowid,)).fetchone()
+        vec_row = self._conn.execute(
+            "SELECT embedding FROM memory_embeddings WHERE memory_id = ?", (row[0],)
+        ).fetchone()
         if not vec_row:
             return None
         return _deserialize_f32(vec_row[0])
@@ -937,14 +988,11 @@ class SearchMixin:
         Returns list of (node_id, content, metadata_json, session_id,
         event_type, extracted_keywords, embedding_bytes) tuples.
         """
-        if not self._vec_available:
-            return []
-
         query = """
             SELECT m.node_id, m.content, m.metadata, m.session_id,
                    m.event_type, m.extracted_keywords, v.embedding
             FROM memories m
-            JOIN memories_vec v ON v.rowid = m.id
+            JOIN memory_embeddings v ON v.memory_id = m.id
         """
         params: list = []
         if event_types:
