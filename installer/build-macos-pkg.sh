@@ -50,19 +50,19 @@ echo "  Extracted to $PAYLOAD_DIR/python/"
 
 # --- Step 3: Install cairn[server] ---
 echo "Step 3: Installing cairn-memory[server]==$CAIRN_VERSION..."
-# The tag triggers this build and the PyPI publish in parallel, and this
-# runner can reach pip before the release lands (v2.1.1 and v2.1.2 both
-# lost that race). Wait for the pinned version to be visible, bounded, and
-# fail loud after the deadline.
-for attempt in $(seq 1 20); do
+# The tag triggers this build and the PyPI publish in parallel, and the
+# publish now sits behind a ~15-minute test gate (release.yml), so the
+# deadline must comfortably outlast the gate (v2.2.0 hit a 10-minute
+# deadline while the gate was still running). Bounded, loud on failure.
+for attempt in $(seq 1 60); do
   if "$PAYLOAD_DIR/python/bin/python3" -m pip index versions cairn-memory 2>/dev/null | grep -q "$CAIRN_VERSION"; then
     break
   fi
-  if [ "$attempt" -eq 20 ]; then
-    echo "ERROR: cairn-memory==$CAIRN_VERSION not on PyPI after 10 minutes" >&2
+  if [ "$attempt" -eq 60 ]; then
+    echo "ERROR: cairn-memory==$CAIRN_VERSION not on PyPI after 30 minutes" >&2
     exit 1
   fi
-  echo "  cairn-memory==$CAIRN_VERSION not on PyPI yet (attempt $attempt/20), waiting 30s..."
+  echo "  cairn-memory==$CAIRN_VERSION not on PyPI yet (attempt $attempt/60), waiting 30s..."
   sleep 30
 done
 "$PAYLOAD_DIR/python/bin/python3" -m pip install --quiet --no-cache-dir "cairn-memory[server]==$CAIRN_VERSION"
