@@ -7,6 +7,12 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  # Never fall back to the runner's discovered interpreters: the macOS
+  # toolcache CPython lacks loadable-sqlite-extension support, which is
+  # the whole reason this workflow manages its own Python.
+  UV_PYTHON_PREFERENCE: only-managed
+
 jobs:
   test:
     runs-on: ${{ matrix.os }}
