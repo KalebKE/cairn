@@ -1,6 +1,6 @@
 [project]
 name = "cairn-memory"
-version = "2.1.0"
+version = "2.1.1"
 description = "Cross-model memory for AI agents. Local-first, works with Claude, GPT, Gemini, Cursor, Claw Code, and any MCP client"
 readme = "README.md"
 requires-python = ">=3.11"
