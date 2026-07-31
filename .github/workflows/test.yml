@@ -30,7 +30,6 @@ jobs:
 
       - name: Verify sqlite extension loading is available
         run: |
-          uv venv --python ${{ matrix.python-version }}
           uv run python -c "import sqlite3; c = sqlite3.connect(':memory:'); c.enable_load_extension(True); print('sqlite extension loading OK')"
 
       - name: Install dependencies
