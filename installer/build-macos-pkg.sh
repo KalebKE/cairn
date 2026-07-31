@@ -54,8 +54,13 @@ echo "Step 3: Installing cairn-memory[server]==$CAIRN_VERSION..."
 # publish now sits behind a ~15-minute test gate (release.yml), so the
 # deadline must comfortably outlast the gate (v2.2.0 hit a 10-minute
 # deadline while the gate was still running). Bounded, loud on failure.
+# Probe the versioned JSON endpoint directly: 404 until the release
+# exists, 200 after, purged on upload. The previous check went through
+# `pip index versions` on the bundled pip 24.3.1, which kept reporting the
+# old version list for 19 minutes after v2.2.1 was live.
 for attempt in $(seq 1 60); do
-  if "$PAYLOAD_DIR/python/bin/python3" -m pip index versions cairn-memory 2>/dev/null | grep -q "$CAIRN_VERSION"; then
+  if curl -fsSL -H "Cache-Control: no-cache" \
+      "https://pypi.org/pypi/cairn-memory/$CAIRN_VERSION/json" -o /dev/null; then
     break
   fi
   if [ "$attempt" -eq 60 ]; then
