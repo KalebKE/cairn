@@ -34,7 +34,7 @@ def test_migrates_user_scope_entry(monkeypatch, tmp_path, capsys):
 
     entry = _read_config(tmp_path)["mcpServers"]["cairn"]
     assert entry["type"] == "http"
-    assert entry["url"].endswith("/mcp")
+    assert entry["url"].endswith("/mcp/")
     assert "Migrated" in capsys.readouterr().out
 
 
@@ -60,7 +60,7 @@ def test_migrates_project_scope_and_implied_stdio(monkeypatch, tmp_path):
 
 def test_leaves_http_entries_alone(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("HOME", str(tmp_path))
-    original = {"mcpServers": {"cairn": {"type": "http", "url": "http://127.0.0.1:8377/mcp"}}}
+    original = {"mcpServers": {"cairn": {"type": "http", "url": "http://127.0.0.1:8377/mcp/"}}}
     _write_config(tmp_path, original)
 
     _serve_migrate_config(None)

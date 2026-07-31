@@ -1960,7 +1960,9 @@ def _serve_migrate_config(args):
     backup.write_text(content)
     print(f"Backup saved to {backup}")
 
-    url = f"http://{_DEFAULT_HTTP_HOST}:{_DEFAULT_HTTP_PORT}/mcp"
+    # Trailing slash on purpose: the Starlette mount 307-redirects /mcp
+    # to /mcp/, and not every MCP client re-POSTs through a redirect.
+    url = f"http://{_DEFAULT_HTTP_HOST}:{_DEFAULT_HTTP_PORT}/mcp/"
     changed = 0
 
     def _migrate_entry(servers):
