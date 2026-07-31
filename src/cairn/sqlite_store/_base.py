@@ -585,7 +585,10 @@ class SQLiteStoreBase:
             conn.enable_load_extension(False)
             self._vec_available = True
         except (ImportError, Exception) as e:
-            logger.warning(f"sqlite-vec not available, falling back to brute-force: {e}")
+            logger.warning(
+                "sqlite-vec not available — vector search is DISABLED and retrieval "
+                f"falls back to text/temporal/entity channels only: {e}"
+            )
             self._vec_available = False
 
         # Wrap AFTER raw-connection setup (extension loading needs the real

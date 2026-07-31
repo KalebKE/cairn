@@ -19,15 +19,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      # uv-managed python-build-standalone interpreters: setup-python's
+      # recent macOS builds ship CPython without loadable-sqlite-extension
+      # support, which silently disables sqlite-vec (vector search) and
+      # fails retrieval tests. PBS builds enable it on every platform.
+      - name: Set up uv + Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies
+      - name: Verify sqlite extension loading is available
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev,server]"
+          uv venv --python ${{ matrix.python-version }}
+          uv run python -c "import sqlite3; c = sqlite3.connect(':memory:'); c.enable_load_extension(True); print('sqlite extension loading OK')"
+
+      - name: Install dependencies
+        run: uv pip install -e ".[dev,server]"
 
       - name: Cache embedding model
         uses: actions/cache@v4
@@ -51,14 +58,14 @@ jobs:
           printf '%s' '{"model_name": "gte-modernbert-base", "model_version": "v1", "dim": 768, "pooling": "cls", "output_name": null, "query_prefix": "", "doc_prefix": "", "max_length": 512, "pad_id": 50283, "pad_token": "[PAD]"}' > "$MODEL_DIR/cairn.json"
 
       - name: Lint
-        run: ruff check src/
+        run: uv run ruff check src/
 
       - name: Test
         # No -x: run the whole suite so one failure doesn't mask others.
         # Coverage is reported (not gated yet) to establish a baseline.
         env:
           CAIRN_EMBED_IDLE_TIMEOUT_S: "86400"
-        run: pytest tests/ --tb=short --cov=cairn --cov-report=term-missing
+        run: uv run pytest tests/ --tb=short --cov=cairn --cov-report=term-missing
 
       - name: Test (randomized order)
         # Surfaces order-dependencies / leaky global state (e.g. the bridge
