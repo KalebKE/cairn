@@ -178,8 +178,12 @@ class TestEnrichPending:
             "embedding backend degraded to hash fallback — a runner memory or "
             "environment problem, not a retrieval regression"
         )
+        ranking = [
+            (r.id, getattr(r, "relevance", None), (r.content or "")[:40]) for r in results
+        ]
         assert any(r.id == nid for r in results), (
-            "enriched memory not retrieved for indirect preference query"
+            f"enriched memory {nid} not retrieved for indirect preference query; "
+            f"top-{len(results)} was: {ranking}"
         )
 
     def test_eligible_types_constant(self):
