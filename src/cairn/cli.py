@@ -1963,17 +1963,22 @@ def _serve_migrate_config(args):
     url = f"http://{_DEFAULT_HTTP_HOST}:{_DEFAULT_HTTP_PORT}/mcp"
     changed = 0
 
-    projects = config.get("projects", {})
-    for proj_path, proj_config in projects.items():
-        servers = proj_config.get("mcpServers", {})
-        if "cairn" in servers:
-            entry = servers["cairn"]
-            if entry.get("type") == "stdio":
-                servers["cairn"] = {
-                    "type": "http",
-                    "url": url,
-                }
-                changed += 1
+    def _migrate_entry(servers):
+        nonlocal changed
+        entry = servers.get("cairn")
+        if not isinstance(entry, dict):
+            return
+        # No "type" key means stdio: it is the implied default for
+        # command-based entries.
+        if entry.get("type", "stdio") == "stdio":
+            servers["cairn"] = {"type": "http", "url": url}
+            changed += 1
+
+    # User scope (`claude mcp add -s user`) lives at the top level, not
+    # under projects — the fleet's registration is usually here.
+    _migrate_entry(config.get("mcpServers", {}))
+    for proj_config in config.get("projects", {}).values():
+        _migrate_entry(proj_config.get("mcpServers", {}))
 
     if changed > 0:
         claude_json.write_text(json.dumps(config, indent=2) + "\n")
