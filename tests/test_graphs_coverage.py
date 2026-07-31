@@ -135,6 +135,9 @@ class TestMaybeUnloadModel:
     def test_unloads_after_idle_timeout(self, monkeypatch):
         """Should unload model when idle exceeds timeout."""
         now = time.monotonic()
+        # The suite pins the idle window high (conftest) so real runs never
+        # unload mid-suite; this test owns the window it is testing.
+        monkeypatch.setattr(graphs, "_IDLE_TIMEOUT_S", 600)
         monkeypatch.setattr(graphs, "_EMBEDDING_MODEL", "fake-model")
         monkeypatch.setattr(graphs, "_EMBEDDING_BACKEND", "onnx")
         monkeypatch.setattr(graphs, "_LAST_EMBED_TIME", now - 700)  # > 600s idle
@@ -355,6 +358,8 @@ class TestGetOnnxModelDir:
         model_dir = tmp_path / "bge-small-en-v1.5-onnx"
         model_dir.mkdir()
         (model_dir / "model.onnx").write_text("fake")
+        # A developer shell exporting the model override must not win here.
+        monkeypatch.delenv("CAIRN_ONNX_MODEL_DIR", raising=False)
         monkeypatch.setattr(graphs, "_ONNX_MODEL_DIR", None)
         monkeypatch.setattr(graphs, "_ONNX_DEFAULT_DIR", str(model_dir))
         result = _get_onnx_model_dir()

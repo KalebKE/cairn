@@ -2,6 +2,11 @@
 import os
 import sys
 import pytest
+
+# A slow CI runner can idle-unload the embedding model mid-suite; a failed
+# reload under memory pressure degrades to hash embeddings and fails
+# retrieval tests confusingly. Pin the idle window past any suite runtime.
+os.environ.setdefault("CAIRN_EMBED_IDLE_TIMEOUT_S", "86400")
 from pathlib import Path
 
 # Ensure cairn package and hooks are importable

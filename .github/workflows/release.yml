@@ -20,7 +20,49 @@ permissions:
   contents: read
 
 jobs:
+  # The release used to publish without running anything — v2.1.1 shipped
+  # straight through a red main. One gate cell (ubuntu, 3.12, the calibrated
+  # embedder) so a broken build can't reach PyPI.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,server]"
+
+      - name: Cache embedding model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/cairn/models/gte-modernbert-base-onnx
+          key: gte-modernbert-base-onnx
+
+      - name: Download embedding model
+        run: |
+          MODEL_DIR=~/.cache/cairn/models/gte-modernbert-base-onnx
+          if [ ! -f "$MODEL_DIR/model.onnx" ]; then
+            mkdir -p "$MODEL_DIR"
+            HF=https://huggingface.co/Alibaba-NLP/gte-modernbert-base/resolve/main
+            curl -fsSL "$HF/onnx/model.onnx" -o "$MODEL_DIR/model.onnx"
+            curl -fsSL "$HF/tokenizer.json" -o "$MODEL_DIR/tokenizer.json"
+            curl -fsSL "$HF/tokenizer_config.json" -o "$MODEL_DIR/tokenizer_config.json"
+            curl -fsSL "$HF/config.json" -o "$MODEL_DIR/config.json"
+          fi
+          printf '%s' '{"model_name": "gte-modernbert-base", "model_version": "v1", "dim": 768, "pooling": "cls", "output_name": null, "query_prefix": "", "doc_prefix": "", "max_length": 512, "pad_id": 50283, "pad_token": "[PAD]"}' > "$MODEL_DIR/cairn.json"
+
+      - name: Test
+        env:
+          CAIRN_EMBED_IDLE_TIMEOUT_S: "86400"
+        run: pytest tests/ --tb=short
+
   release:
+    needs: test
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

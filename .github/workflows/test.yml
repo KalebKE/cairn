@@ -56,6 +56,8 @@ jobs:
       - name: Test
         # No -x: run the whole suite so one failure doesn't mask others.
         # Coverage is reported (not gated yet) to establish a baseline.
+        env:
+          CAIRN_EMBED_IDLE_TIMEOUT_S: "86400"
         run: pytest tests/ --tb=short --cov=cairn --cov-report=term-missing
 
       - name: Test (randomized order)

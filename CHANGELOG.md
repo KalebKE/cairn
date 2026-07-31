@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-07-31
+
+### Added
+- MCP SDK 2.0 support (the 2026-07-28 spec revision). The server detects the
+  installed SDK line by capability and registers handlers accordingly: 1.x
+  keeps the decorator path, 2.x uses constructor handlers with the same
+  result and error semantics. The `server` extra pin relaxes back to
+  `mcp>=1.0.0`.
+- A test gate in the release workflow: publishing now requires a green suite
+  (v2.1.1 shipped through a red main; that path is closed).
+
+### Fixed
+- CI retrieval-test flakes on slow runners: the embedding idle-unload window
+  is env-configurable (`CAIRN_EMBED_IDLE_TIMEOUT_S`) and pinned high for test
+  suites, and the vocabulary-bridging test now names a degraded embedding
+  backend instead of failing as a retrieval regression.
+
 ## [2.1.2] - 2026-07-31
 
 ### Fixed

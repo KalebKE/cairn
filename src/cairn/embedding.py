@@ -68,7 +68,10 @@ import time as _time_module
 
 _LAST_EMBED_TIME: float = 0.0  # monotonic timestamp of last embedding call
 _LAST_UNLOAD_CHECK: float = 0.0  # monotonic timestamp of last idle check
-_IDLE_TIMEOUT_S = 600  # 10 minutes
+# Env-overridable: CI test suites pin this high so a slow runner can't
+# idle-unload the model mid-suite (a failed reload under memory pressure
+# degrades to hash embeddings and fails retrieval tests confusingly).
+_IDLE_TIMEOUT_S = int(os.environ.get("CAIRN_EMBED_IDLE_TIMEOUT_S", "600"))  # 10 minutes
 _UNLOAD_CHECK_INTERVAL_S = 60  # check at most once per 60s
 
 # Circuit breaker cooldown — allow retry after transient failures

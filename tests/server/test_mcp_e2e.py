@@ -19,6 +19,11 @@ import tempfile
 import pytest
 
 
+def _is_error(result) -> bool:
+    """SDK-line compat: mcp 1.x exposes isError, mcp 2.x renamed it is_error."""
+    return bool(getattr(result, "isError", None) or getattr(result, "is_error", False))
+
+
 async def _drive(tmp_home):
     from mcp.client.stdio import stdio_client, StdioServerParameters
     from mcp.client.session import ClientSession
@@ -52,14 +57,14 @@ async def _drive(tmp_home):
                 {"content": f"Decision: {marker} is the canary for the MCP e2e test",
                  "event_type": "decision"},
             )
-            assert not store_res.isError, store_res.content
+            assert not _is_error(store_res), store_res.content
             store_text = "".join(getattr(c, "text", "") for c in store_res.content)
             assert "mem-" in store_text or "Stored" in store_text
 
             query_res = await session.call_tool(
                 "cairn_query", {"query": marker, "limit": 5},
             )
-            assert not query_res.isError, query_res.content
+            assert not _is_error(query_res), query_res.content
             query_text = "".join(getattr(c, "text", "") for c in query_res.content)
             assert marker.split()[0] in query_text or "ferret" in query_text
 

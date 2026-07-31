@@ -172,6 +172,12 @@ class TestEnrichPending:
             "what should I serve for dinner with my homegrown ingredients?",
             limit=5, use_cache=False,
         )
+        from cairn.embedding import is_embedding_degraded
+
+        assert not is_embedding_degraded(), (
+            "embedding backend degraded to hash fallback — a runner memory or "
+            "environment problem, not a retrieval regression"
+        )
         assert any(r.id == nid for r in results), (
             "enriched memory not retrieved for indirect preference query"
         )

@@ -175,7 +175,9 @@ def test_prune_forgetting_log():
     store._conn.commit()
 
     removed = store.prune_forgetting_log(max_age_days=90)
-    assert removed == 1
+    # The shared bridge store can carry log entries from earlier tests, and
+    # the backdate above touches every row, so prune removes all of them.
+    assert removed >= 1
 
     entries = store.get_forgetting_log(limit=10)
     assert len(entries) == 0

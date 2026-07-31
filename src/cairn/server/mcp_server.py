@@ -23,7 +23,6 @@ from concurrent.futures import ThreadPoolExecutor
 try:
     from mcp.server import Server
     from mcp.server.stdio import stdio_server
-    from mcp.types import Tool, TextContent
 except ImportError:
     print(
         "Error: MCP server requires the 'mcp' package.\n"
@@ -32,6 +31,14 @@ except ImportError:
         file=sys.stderr,
     )
     sys.exit(1)
+
+from mcp.types import Tool, TextContent  # shimmed to mcp_types on mcp 2.x
+
+# mcp 2.x (the 2026-07-28 spec SDK) replaced Server's decorator registration
+# with constructor handlers; mcp.types survives as a re-export shim, so the
+# SDK line is detected by capability, not import. Both lines are supported;
+# see _build_server() for the registration split.
+_MCP_V2 = not hasattr(Server, "list_tools")
 
 # --- Transport configuration ---
 _TRANSPORT = os.environ.get("CAIRN_TRANSPORT", "stdio").lower()
@@ -183,10 +190,11 @@ These tools are your memory. Use them proactively without being asked.\
 """
 
 
-server = Server(
-    "cairn",
-    instructions=_MCP_INSTRUCTIONS_CONDENSED if _CONDENSED_MODE else _MCP_INSTRUCTIONS,
-)
+# Constructed by _build_server() below, after the handler functions are
+# defined: mcp 2.x takes handlers as constructor arguments, so construction
+# has to follow their definitions. Module-level name preserved for existing
+# importers (http_server, tests).
+_SERVER_INSTRUCTIONS = _MCP_INSTRUCTIONS_CONDENSED if _CONDENSED_MODE else _MCP_INSTRUCTIONS
 
 # ---------------------------------------------------------------------------
 # Rate limiting — sliding-window counters (no new deps)
@@ -234,7 +242,6 @@ def _check_rate_limit(tool_name: str) -> str | None:
     return None
 
 
-@server.list_tools()
 async def list_tools() -> list[Tool]:
     """Return all Cairn tools (or condensed set if CAIRN_CONDENSED=1)."""
     schemas = get_condensed_schemas(TOOL_SCHEMAS) if _CONDENSED_MODE else TOOL_SCHEMAS
@@ -248,7 +255,6 @@ async def list_tools() -> list[Tool]:
     ]
 
 
-@server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     """Dispatch tool call to the appropriate handler."""
     global _last_activity
@@ -316,6 +322,49 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     "Check `ps aux | grep cairn` for stale processes."
                 )
         return [TextContent(type="text", text=f"Error in {name}: {error_msg}")]
+
+
+def _build_server() -> Server:
+    """Construct the Server with handlers wired for the installed SDK line.
+
+    mcp 1.x registers via the list_tools()/call_tool() decorator methods and
+    wraps handler exceptions into isError results itself. mcp 2.x takes
+    (ctx, params) handlers as constructor arguments and leaves result and
+    error wrapping to the handler, so the adapters below reproduce the 1.x
+    behavior: content lists become CallToolResult, exceptions become
+    isError results with an "Error: ..." text.
+    """
+    if _MCP_V2:
+        import mcp_types as _types
+
+        async def _on_list_tools(_ctx, _params):
+            return _types.ListToolsResult(tools=await list_tools())
+
+        async def _on_call_tool(_ctx, params):
+            try:
+                content = await call_tool(params.name, dict(params.arguments or {}))
+            except Exception as exc:  # mirror the 1.x decorator's wrapping
+                logger.exception("Tool call failed: %s", getattr(params, "name", "?"))
+                return _types.CallToolResult(
+                    content=[TextContent(type="text", text=f"Error: {exc}")],
+                    isError=True,
+                )
+            return _types.CallToolResult(content=content, isError=False)
+
+        return Server(
+            "cairn",
+            instructions=_SERVER_INSTRUCTIONS,
+            on_list_tools=_on_list_tools,
+            on_call_tool=_on_call_tool,
+        )
+
+    srv = Server("cairn", instructions=_SERVER_INSTRUCTIONS)
+    srv.list_tools()(list_tools)
+    srv.call_tool()(call_tool)
+    return srv
+
+
+server = _build_server()
 
 
 async def _idle_watchdog():

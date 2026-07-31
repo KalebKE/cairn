@@ -1,6 +1,6 @@
 [project]
 name = "cairn-memory"
-version = "2.1.2"
+version = "2.2.0"
 description = "Cross-model memory for AI agents. Local-first, works with Claude, GPT, Gemini, Cursor, Claw Code, and any MCP client"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -36,7 +36,7 @@ Changelog = "https://github.com/KalebKE/cairn/blob/main/CHANGELOG.md"
 Issues = "https://github.com/KalebKE/cairn/issues"
 
 [project.optional-dependencies]
-server = ["mcp>=1.0.0,<2", "starlette>=0.36.0", "uvicorn>=0.27.0"]
+server = ["mcp>=1.0.0", "starlette>=0.36.0", "uvicorn>=0.27.0"]
 encrypt = ["cryptography>=41.0.0", "keyring>=25.0.0"]
 full = [
     "cairn-memory[server]",
