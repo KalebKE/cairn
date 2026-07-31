@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-07-31
+
+### Fixed
+- Pin the `server` extra to `mcp>=1.0.0,<2`: the mcp 2.0.0 SDK (MCP spec
+  2026-07-28) removed the 1.x `Server` API the daemon is built on, so fresh
+  installs broke at runtime and CI has been red since it shipped. Porting to
+  SDK 2.0 is tracked separately.
+
+## [2.1.1] - 2026-07-31
+
+### Fixed
+- `cairn serve migrate-config` now migrates the user-scope registration
+  (top-level `mcpServers` in `~/.claude.json`), not only per-project entries,
+  and handles implied-stdio entries with no `type` key.
+- The migrated URL ends in `/mcp/` so MCP clients never depend on following
+  the Starlette mount's 307 redirect.
+
 ## [2.1.0] - 2026-07-25
 
 **First release actually published to PyPI, as `cairn-memory`** — the PyPI
