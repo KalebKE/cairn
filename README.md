@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/cairn-icon-400x400.png" alt="Cairn mark" width="140">
+</p>
+
 # Cairn
 
 **Self-hosted, local-first memory for AI coding agents.** One SQLite store, shared across every repo, worktree, and session, served over MCP to Claude Code or any MCP client. Your agent's memory lives on your machine, not someone else's server.
